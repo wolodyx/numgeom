@@ -1,0 +1,9 @@
+#ifndef blockmesh_unittests_configure_h
+#define blockmesh_unittests_configure_h
+
+#cmakedefine TEST_DATA_DIR "@TEST_DATA_DIR@"
+
+#cmakedefine EXTERNAL_TEST_DATA_DIR "@EXTERNAL_TEST_DATA_DIR@"
+
+#endif // blockmesh_unittests_configure_h
+

@@ -2,6 +2,8 @@
 #define numgeom_numgeom_quadtree_h
 
 #include <filesystem>
+#include <functional>
+#include <list>
 #include <memory>
 
 #include <Bnd_Box2d.hxx>
@@ -10,7 +12,6 @@
 #include "numgeom/numgeom_export.h"
 
 class Bnd_Box2d;
-class gp_Pnt2d;
 
 
 class NUMGEOM_EXPORT QuadTree
@@ -98,6 +99,20 @@ public:
         Standard_Real& yMax
     ) const;
 
+
+    //! Наименьшее и наибольшее расстояния от точки `q` до ячейки `cell`.
+    //! Если точка попадает внутрь ячейки, то расстояния нулевые.
+    void GetMinMaxDistances(
+        const gp_Pnt2d& q,
+        const Cell& cell,
+        Standard_Real& minDistance,
+        Standard_Real& maxDistance
+    ) const;
+
+
+    gp_Pnt2d GetCenter(const Cell& cell) const;
+
+
     Standard_Boolean Equals(QuadTree::CPtr) const;
 
     void Split(const Cell&);
@@ -129,19 +144,33 @@ struct QuadTree::Cell
 {
     Standard_Integer level;
     Standard_Integer index;
+
     Cell() : level(-1), index(0) {}
+
     Cell(Standard_Integer lvl, Standard_Integer idx)
         : level(lvl), index(idx) {}
+
     Standard_Boolean operator!() const { return level < 0;}
+
     Standard_Boolean operator==(const Cell& other) const
     {
         return other.level == this->level
             && other.index == this->index;
     }
+
     Standard_Boolean operator!=(const Cell& other) const
     {
         return other.level != this->level
             || other.index != this->index;
+    }
+
+    Standard_Boolean operator<(const Cell& other) const
+    {
+        if(level < other.level)
+            return Standard_True;
+        if(level > other.level)
+            return Standard_False;
+        return index < other.index;
     }
 };
 
@@ -150,19 +179,52 @@ struct QuadTree::Node
 {
     Standard_Integer level;
     Standard_Integer index;
+
     Node() : level(-1), index(0) {}
+
     Node(Standard_Integer lvl, Standard_Integer idx)
         : level(lvl), index(idx) {}
+
     Standard_Boolean operator!() const { return level < 0;}
+
     Standard_Boolean operator==(const Node& other) const
     {
         if(other.level == this->level)
             return other.index == this->index;
         return Standard_False;
     }
+
     Standard_Boolean operator!=(const Node& other) const
     {
         return !this->operator==(other);
     }
+
+    Standard_Boolean operator<(const Cell& other) const
+    {
+        if(level < other.level)
+            return Standard_True;
+        if(level > other.level)
+            return Standard_False;
+        return index < other.index;
+    }
 };
+
+
+/**
+\brief Поиск в квадродереве ячеек (входящих в список отмеченных), которые
+       наиболее близко расположены к точке.
+\param qTree Квадродерево.
+\param Q Искомая точка.
+\param isTaggedCell Функция, возвращающая признак отмеченности ячейки.
+\param maximumDistance Радиус, вокруг которого происходит поиск.
+\param nearestCells Ближайшие к точке терминальные отмеченные ячейки.
+*/
+void NUMGEOM_EXPORT SearchNearestCells(
+    QuadTree::CPtr qTree,
+    const gp_Pnt2d& Q,
+    const std::function<Standard_Boolean(QuadTree::CPtr, const QuadTree::Cell&)>& isTaggedCell,
+    Standard_Real maximumDistance,
+    std::list<QuadTree::Cell>& nearestCells
+);
+
 #endif // !numgeom_numgeom_quadtree_h

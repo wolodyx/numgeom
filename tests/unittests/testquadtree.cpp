@@ -1,8 +1,18 @@
-#include "gtest/gtest.h"
+﻿#include "gtest/gtest.h"
 
 #include "numgeom/quadtree.h"
 
 #include "utilities.h"
+
+
+namespace {;
+
+QuadTree::Ptr LoadQuadTree(const std::filesystem::path& fileName)
+{
+    std::ifstream file(fileName);
+    return QuadTree::Deserialize(file);
+}
+}
 
 
 TEST(QuadTree, Example)
@@ -61,11 +71,7 @@ TEST(QuadTest, CreateQuadTree0)
 
 TEST(QuadTree, SaveLoad)
 {
-    QuadTree::CPtr qTree;
-    {
-        std::ifstream file(TestData("quadtree-0.json"));
-        qTree = QuadTree::Deserialize(file);
-    }
+    QuadTree::CPtr qTree = LoadQuadTree(TestData("quadtree-0.json"));
     ASSERT_TRUE(qTree != QuadTree::Ptr());
 
     std::string fileName = GetTestName();
@@ -104,5 +110,75 @@ TEST(QuadTree, IterateConnectedCells)
             ++count;
         }
         ASSERT_TRUE(count != 0);
+    }
+}
+
+
+namespace {;
+//! Поиск перебором наименьшего расстояния до отмеченных ячеек.
+Standard_Real BruteForceCalcOfNearestDistance(
+    QuadTree::CPtr qTree,
+    const gp_Pnt2d& Q,
+    const std::function<Standard_Boolean(QuadTree::CPtr,const QuadTree::Cell&)>& isTaggedCell
+)
+{
+    Standard_Real minDistance = std::numeric_limits<double>::max();
+    QuadTree::Cell nearestCell;
+    for(QuadTree::Cell cell : qTree->TerminalCells())
+    {
+        if(!isTaggedCell(qTree,cell))
+            continue;
+
+        Standard_Real dMin, dMax;
+        qTree->GetMinMaxDistances(Q, cell, dMin, dMax);
+        if(minDistance > dMin)
+        {
+            minDistance = dMin;
+            nearestCell = cell;
+        }
+    }
+    return minDistance;
+}
+}
+
+
+//! Ищем наименьшие расстояния от точки до ячеек наивысшего уровня.
+TEST(QuadTree, SearchNearestCells)
+{
+    auto IsTaggedCell = [](QuadTree::CPtr qTree, const QuadTree::Cell& cell)
+    {
+        return cell.level == qTree->Levels() - 1;
+    };
+
+    QuadTree::Ptr qTree = LoadQuadTree(TestData("quadtree-0.json"));
+    ASSERT_TRUE(qTree != QuadTree::Ptr());
+
+    for(QuadTree::Cell cell : qTree->TerminalCells())
+    {
+        gp_Pnt2d q = qTree->GetCenter(cell);
+
+        std::list<QuadTree::Cell> nearestCells;
+        SearchNearestCells(
+            qTree, q,
+            IsTaggedCell,
+            std::numeric_limits<double>::max(),
+            nearestCells
+        );
+
+        ASSERT_FALSE(nearestCells.empty());
+        Standard_Real distance = 0.0;
+        for(QuadTree::Cell cell : nearestCells)
+        {
+            ASSERT_TRUE(IsTaggedCell(qTree,cell));
+            Standard_Real dMin, dMax;
+            qTree->GetMinMaxDistances(q, cell, dMin, dMax);
+            ASSERT_GE(dMin, distance);
+            distance = dMin;
+        }
+
+        Standard_Real nearestDistance = BruteForceCalcOfNearestDistance(qTree, q, IsTaggedCell);
+        Standard_Real dMin, dMax;
+        qTree->GetMinMaxDistances(q, nearestCells.front(), dMin, dMax);
+        ASSERT_EQ(nearestDistance, dMin);
     }
 }

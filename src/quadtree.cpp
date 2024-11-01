@@ -1,7 +1,8 @@
-#include "numgeom/quadtree.h"
+п»ї#include "numgeom/quadtree.h"
 
 #include <array>
 #include <cassert>
+#include <queue>
 #include <map>
 #include <stack>
 #include <vector>
@@ -14,9 +15,9 @@ struct QuadTree::Internal
 {
     Bnd_Box2d boundBox;
     Standard_Integer nbByI, nbByJ;
-    //! Номера нетерминальных ячеек на уровне.
+    //! РќРѕРјРµСЂР° РЅРµС‚РµСЂРјРёРЅР°Р»СЊРЅС‹С… СЏС‡РµРµРє РЅР° СѓСЂРѕРІРЅРµ.
     std::vector<std::vector<uint32_t>> nonTerminalCells;
-    //! Атрибуты ячеек.
+    //! РђС‚СЂРёР±СѓС‚С‹ СЏС‡РµРµРє.
     std::vector<std::map<Standard_Integer,size_t>> attrs;
 
 
@@ -24,7 +25,7 @@ struct QuadTree::Internal
 
     Standard_Boolean IsTerminal(const Cell&) const;
 
-    //! Ячейка существует в терминальном или нетреминальном виде?
+    //! РЇС‡РµР№РєР° СЃСѓС‰РµСЃС‚РІСѓРµС‚ РІ С‚РµСЂРјРёРЅР°Р»СЊРЅРѕРј РёР»Рё РЅРµС‚СЂРµРјРёРЅР°Р»СЊРЅРѕРј РІРёРґРµ?
     Standard_Boolean IsExists(const Cell&) const;
 
     Standard_Integer GetOrder(const Cell&) const;
@@ -39,7 +40,7 @@ struct QuadTree::Internal
         std::array<Standard_Integer,4>& cells
     ) const;
 
-    //! Размерность подложки уровня `level`.
+    //! Р Р°Р·РјРµСЂРЅРѕСЃС‚СЊ РїРѕРґР»РѕР¶РєРё СѓСЂРѕРІРЅСЏ `level`.
     void LevelSize(
         Standard_Integer level,
         Standard_Integer& ni,
@@ -152,7 +153,7 @@ void QuadTree::Internal::GetCellsOfNextLevel(
 
     Standard_Integer nc = ni * nj;
 
-    // От порядкового номера ячейки переходим к координатам.
+    // РћС‚ РїРѕСЂСЏРґРєРѕРІРѕРіРѕ РЅРѕРјРµСЂР° СЏС‡РµР№РєРё РїРµСЂРµС…РѕРґРёРј Рє РєРѕРѕСЂРґРёРЅР°С‚Р°Рј.
     Standard_Integer i = parentCell.index % ni;
     Standard_Integer j = parentCell.index / ni;
 
@@ -164,7 +165,7 @@ void QuadTree::Internal::GetCellsOfNextLevel(
 }
 
 
-//! Размерность подложки уровня `level`.
+//! Р Р°Р·РјРµСЂРЅРѕСЃС‚СЊ РїРѕРґР»РѕР¶РєРё СѓСЂРѕРІРЅСЏ `level`.
 void QuadTree::Internal::LevelSize(
     Standard_Integer level,
     Standard_Integer& ni,
@@ -234,9 +235,9 @@ Standard_Boolean QuadTree::Internal::IsExists(
     if(cell.level >= nbLevels)
         return Standard_False;
 
-    // Ячейка существует тогда, когда в подложке есть ячейка с таким номером и
-    // ячейка входит в нулевой уровень или если нет, то ее родитель в списке
-    // нетерминальных.
+    // РЇС‡РµР№РєР° СЃСѓС‰РµСЃС‚РІСѓРµС‚ С‚РѕРіРґР°, РєРѕРіРґР° РІ РїРѕРґР»РѕР¶РєРµ РµСЃС‚СЊ СЏС‡РµР№РєР° СЃ С‚Р°РєРёРј РЅРѕРјРµСЂРѕРј Рё
+    // СЏС‡РµР№РєР° РІС…РѕРґРёС‚ РІ РЅСѓР»РµРІРѕР№ СѓСЂРѕРІРµРЅСЊ РёР»Рё РµСЃР»Рё РЅРµС‚, С‚Рѕ РµРµ СЂРѕРґРёС‚РµР»СЊ РІ СЃРїРёСЃРєРµ
+    // РЅРµС‚РµСЂРјРёРЅР°Р»СЊРЅС‹С….
 
     Standard_Integer nc = this->GetNbCellsOnLevel(cell.level);
     if(cell.index >= nc)
@@ -269,8 +270,8 @@ QuadTree::Cell QuadTree::Internal::GetFirstTerminalCell(
     Standard_Integer j = startCell.index / ni;
     if(beNonTerminal)
     {
-        // Если ячейка попадает в список нетерминальных,
-        // то поднимаемся выше пока она оттуда не исключится.
+        // Р•СЃР»Рё СЏС‡РµР№РєР° РїРѕРїР°РґР°РµС‚ РІ СЃРїРёСЃРѕРє РЅРµС‚РµСЂРјРёРЅР°Р»СЊРЅС‹С…,
+        // С‚Рѕ РїРѕРґРЅРёРјР°РµРјСЃСЏ РІС‹С€Рµ РїРѕРєР° РѕРЅР° РѕС‚С‚СѓРґР° РЅРµ РёСЃРєР»СЋС‡РёС‚СЃСЏ.
         do
         {
             i *= 2, j *= 2, ni *= 2;
@@ -286,8 +287,8 @@ QuadTree::Cell QuadTree::Internal::GetFirstTerminalCell(
     }
     else
     {
-        // Если ячейки нет в списках нетерминальных ячеек, то спускаемся
-        // пока родительская ячейка не окажется в списках нетерминальных.
+        // Р•СЃР»Рё СЏС‡РµР№РєРё РЅРµС‚ РІ СЃРїРёСЃРєР°С… РЅРµС‚РµСЂРјРёРЅР°Р»СЊРЅС‹С… СЏС‡РµРµРє, С‚Рѕ СЃРїСѓСЃРєР°РµРјСЃСЏ
+        // РїРѕРєР° СЂРѕРґРёС‚РµР»СЊСЃРєР°СЏ СЏС‡РµР№РєР° РЅРµ РѕРєР°Р¶РµС‚СЃСЏ РІ СЃРїРёСЃРєР°С… РЅРµС‚РµСЂРјРёРЅР°Р»СЊРЅС‹С….
         while(true)
         {
             if(level == 0)
@@ -485,7 +486,7 @@ namespace {;
 class IteratorImpl_QuadTreeCells : public IteratorImpl<QuadTree::Cell>
 {
     const QuadTree::Internal* myQTreeInternal;
-    QuadTree::Cell myCurrentCell; //!< Текущая терминальная ячейка.
+    QuadTree::Cell myCurrentCell; //!< РўРµРєСѓС‰Р°СЏ С‚РµСЂРјРёРЅР°Р»СЊРЅР°СЏ СЏС‡РµР№РєР°.
 public:
 
     IteratorImpl_QuadTreeCells(
@@ -577,7 +578,7 @@ public:
             itNtCellsEnd = ntCells.end();
         }
 
-        // Настройка itNtCells
+        // РќР°СЃС‚СЂРѕР№РєР° itNtCells
         while(itNtCells != itNtCellsEnd && myCurrentIndex > (*itNtCells))
             ++itNtCells;
 
@@ -661,16 +662,16 @@ Iterator<QuadTree::Cell> QuadTree::TerminalCellsOfLevel(
 
 namespace {;
 
-//!\brief Итератор для обхода ячеек сетки уровня выше вокруг ячейки уровня ниже.
+//!\brief РС‚РµСЂР°С‚РѕСЂ РґР»СЏ РѕР±С…РѕРґР° СЏС‡РµРµРє СЃРµС‚РєРё СѓСЂРѕРІРЅСЏ РІС‹С€Рµ РІРѕРєСЂСѓРі СЏС‡РµР№РєРё СѓСЂРѕРІРЅСЏ РЅРёР¶Рµ.
 class IndexIterator
 {
-    //! Координаты базовой ячейки.
+    //! РљРѕРѕСЂРґРёРЅР°С‚С‹ Р±Р°Р·РѕРІРѕР№ СЏС‡РµР№РєРё.
     Standard_Integer myICell, myJCell;
-    //! Признак, что нижняя, правая, верхняя и левая сторона упираются в границу.
+    //! РџСЂРёР·РЅР°Рє, С‡С‚Рѕ РЅРёР¶РЅСЏСЏ, РїСЂР°РІР°СЏ, РІРµСЂС…РЅСЏСЏ Рё Р»РµРІР°СЏ СЃС‚РѕСЂРѕРЅР° СѓРїРёСЂР°СЋС‚СЃСЏ РІ РіСЂР°РЅРёС†Сѓ.
     Standard_Boolean myBlockedSize[4];
-    //! Координаты текущей ячейки итератора.
+    //! РљРѕРѕСЂРґРёРЅР°С‚С‹ С‚РµРєСѓС‰РµР№ СЏС‡РµР№РєРё РёС‚РµСЂР°С‚РѕСЂР°.
     Standard_Integer myCurrentI,myCurrentJ;
-    //! Уровень сетки, ячейки которой обходит итератор.
+    //! РЈСЂРѕРІРµРЅСЊ СЃРµС‚РєРё, СЏС‡РµР№РєРё РєРѕС‚РѕСЂРѕР№ РѕР±С…РѕРґРёС‚ РёС‚РµСЂР°С‚РѕСЂ.
     Standard_Integer myUpLevel;
 
     Standard_Integer myQMultiple;
@@ -757,8 +758,8 @@ public:
             }
             else
             {
-                ++myCurrentI; //< Перемещаемся вправо.
-                // Уперлись в правую сторону?
+                ++myCurrentI; //< РџРµСЂРµРјРµС‰Р°РµРјСЃСЏ РІРїСЂР°РІРѕ.
+                // РЈРїРµСЂР»РёСЃСЊ РІ РїСЂР°РІСѓСЋ СЃС‚РѕСЂРѕРЅСѓ?
                 if(myCurrentI == iIndexMax)
                 {
                     if(myBlockedSize[1])
@@ -789,7 +790,7 @@ public:
             else
             {
                 ++myCurrentJ;
-                // Уперлись в верхнюю сторону?
+                // РЈРїРµСЂР»РёСЃСЊ РІ РІРµСЂС…РЅСЋСЋ СЃС‚РѕСЂРѕРЅСѓ?
                 if(myCurrentJ == jIndexMax)
                 {
                     if(myBlockedSize[2])
@@ -815,7 +816,7 @@ public:
             else
             {
                 --myCurrentI;
-                // Уперлись в левую сторону?
+                // РЈРїРµСЂР»РёСЃСЊ РІ Р»РµРІСѓСЋ СЃС‚РѕСЂРѕРЅСѓ?
                 if(myCurrentI == iIndexMin)
                 {
                     if(myBlockedSize[3])
@@ -829,7 +830,7 @@ public:
         else if(beOnSide[3])
         {
             --myCurrentJ;
-            // Уперлись в нижнюю сторону?
+            // РЈРїРµСЂР»РёСЃСЊ РІ РЅРёР¶РЅСЋСЋ СЃС‚РѕСЂРѕРЅСѓ?
             if(myCurrentJ == jIndexMin)
             {
                 if(myBlockedSize[0])
@@ -1076,11 +1077,12 @@ void QuadTree::GetCellCoords(
 
 QuadTree::Cell QuadTree::GetCell(const gp_Pnt2d& Q) const
 {
-    Standard_Real xQ = Q.X(), yQ = Q.Y();
     Standard_Real xMin, yMin, xMax, yMax;
     pimpl->boundBox.Get(xMin, yMin, xMax, yMax);
 
-    // Точка расположена за пределами габаритной коробки дерева.
+    Standard_Real xQ = Q.X(), yQ = Q.Y();
+
+    // РўРѕС‡РєР° СЂР°СЃРїРѕР»РѕР¶РµРЅР° Р·Р° РїСЂРµРґРµР»Р°РјРё РіР°Р±Р°СЂРёС‚РЅРѕР№ РєРѕСЂРѕР±РєРё РґРµСЂРµРІР°.
     if(xQ < xMin || xQ > xMax || yQ < yMin || yQ > yMax)
         return Cell();
 
@@ -1185,8 +1187,8 @@ QuadTree::Ptr QuadTree::Deserialize(std::istream& stream)
         yMin = jBoundBox[1].get<Standard_Real>();
         xMax = jBoundBox[2].get<Standard_Real>();
         yMax = jBoundBox[3].get<Standard_Real>();
-        boundBox.Set(gp_Pnt2d(xMin,yMin));
-        boundBox.Set(gp_Pnt2d(xMax,yMax));
+        boundBox.Add(gp_Pnt2d(xMin,yMin));
+        boundBox.Add(gp_Pnt2d(xMax,yMax));
     }
 
     Standard_Integer in, jn;
@@ -1260,8 +1262,8 @@ QuadTree::CellConnection QuadTree::GetConnectionType(
     const Cell& bCell
 ) const
 {
-    // Если ячейки расположены на разных уровнях,
-    // то приводим их к одному -- меньшему уровню.
+    // Р•СЃР»Рё СЏС‡РµР№РєРё СЂР°СЃРїРѕР»РѕР¶РµРЅС‹ РЅР° СЂР°Р·РЅС‹С… СѓСЂРѕРІРЅСЏС…,
+    // С‚Рѕ РїСЂРёРІРѕРґРёРј РёС… Рє РѕРґРЅРѕРјСѓ -- РјРµРЅСЊС€РµРјСѓ СѓСЂРѕРІРЅСЋ.
     Standard_Integer oneLevel = std::min(aCell.level, bCell.level);
     Cell aCellNorm = GetParentCell(pimpl, aCell, oneLevel);
     Cell bCellNorm = GetParentCell(pimpl, bCell, oneLevel);
@@ -1301,4 +1303,147 @@ QuadTree::CellConnection QuadTree::GetConnectionType(
         return CellConnection::Outer;
     }
     return CellConnection::Outer;
+}
+
+
+void QuadTree::GetMinMaxDistances(
+    const gp_Pnt2d& q,
+    const Cell& cell,
+    Standard_Real& minDistance,
+    Standard_Real& maxDistance
+) const
+{
+    Standard_Real xMin, yMin, xMax, yMax;
+    this->GetCellBox(cell, xMin, yMin, xMax, yMax);
+
+    Standard_Real xQ = q.X(), yQ = q.Y();
+    if(xQ >= xMin && xQ <= xMax && yQ >= yMin && yQ <= yMax)
+    {
+        minDistance = 0.0;
+        maxDistance = 0.0;
+        return ;
+    }
+
+    Standard_Real dxMin =
+        std::min(std::abs(xQ - xMin),
+                 std::abs(xQ - xMax));
+    Standard_Real dxMax =
+        std::max(std::abs(xQ - xMin),
+                 std::abs(xQ - xMax));
+    Standard_Real dyMin =
+        std::min(std::abs(yQ - yMin),
+                 std::abs(yQ - yMax));
+    Standard_Real dyMax =
+        std::max(std::abs(yQ - yMin),
+                 std::abs(yQ - yMax));
+
+    minDistance = std::sqrt(dxMin*dxMin + dyMin*dyMin);
+    maxDistance = std::sqrt(dxMax*dxMax + dyMax*dyMax);
+}
+
+
+gp_Pnt2d QuadTree::GetCenter(const Cell& cell) const
+{
+    Standard_Real xMin, yMin, xMax, yMax;
+    this->GetCellBox(cell, xMin, yMin, xMax, yMax);
+    return gp_Pnt2d(0.5 * (xMin + xMax),
+                    0.5 * (yMin + yMax));
+}
+
+
+namespace {;
+
+struct CellWithDistances
+{
+    QuadTree::Cell cell;
+    Standard_Real mn;
+    Standard_Real mx;
+
+    CellWithDistances(
+        QuadTree::CPtr qTree,
+        const QuadTree::Cell& c,
+        const gp_Pnt2d& q
+    )
+        : cell(c)
+    {
+        qTree->GetMinMaxDistances(q, cell, mn, mx);
+    }
+
+    Standard_Boolean operator<(const CellWithDistances& other) const
+    {
+        assert(cell != other.cell);
+        return mn < other.mn;
+    }
+};
+
+
+void PushNonVisitedCellsToQueue(
+    QuadTree::CPtr qTree,
+    const QuadTree::Cell& startCell,
+    const gp_Pnt2d& Q,
+    std::set<QuadTree::Cell>& visited,
+    std::priority_queue<CellWithDistances>& queue
+)
+{
+    for(QuadTree::Cell cell : qTree->ConnectedCells(startCell))
+    {
+        if(!visited.insert(cell).second)
+            continue;
+
+        gp_Pnt2d C = qTree->GetCenter(cell);
+        Standard_Real d = C.Distance(Q);
+        queue.push(CellWithDistances(qTree,cell,Q));
+    }
+}
+}
+
+
+void SearchNearestCells(
+    QuadTree::CPtr qTree,
+    const gp_Pnt2d& Q,
+    const std::function<Standard_Boolean(QuadTree::CPtr,const QuadTree::Cell&)>& isTaggedCell,
+    Standard_Real maximumDistance,
+    std::list<QuadTree::Cell>& nearestCells
+)
+{
+    nearestCells.clear();
+
+    if(!qTree)
+        return;
+
+    QuadTree::Cell initCell = qTree->GetCell(Q);
+    if(isTaggedCell(qTree,initCell))
+    {
+        nearestCells.push_back(initCell);
+        return;
+    }
+
+    std::vector<CellWithDistances> result;
+    std::set<QuadTree::Cell> visited;
+    std::priority_queue<CellWithDistances> queue;
+    visited.insert(initCell);
+    PushNonVisitedCellsToQueue(qTree, initCell, Q, visited, queue);
+
+    while(!queue.empty())
+    {
+        CellWithDistances cwd = queue.top();
+        queue.pop();
+
+        QuadTree::Cell cell = cwd.cell;
+
+        if(!isTaggedCell(qTree,cell))
+        {
+            PushNonVisitedCellsToQueue(qTree, cell, Q, visited, queue);
+            continue;
+        }
+
+        if(cwd.mn > maximumDistance)
+            continue;
+
+        result.push_back(cwd);
+    }
+
+    std::sort(result.begin(), result.end());
+    for(const auto& r : result)
+        nearestCells.push_back(r.cell);
 }

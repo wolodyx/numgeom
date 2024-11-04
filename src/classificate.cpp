@@ -4,6 +4,7 @@
 
 #include <Bnd_Box2d.hxx>
 #include <BRepTools.hxx>
+#include <Geom2d_Curve.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Iterator.hxx>
@@ -27,6 +28,12 @@ enum PositionType
 };
 
 
+struct ContourPoint
+{
+    gp_Pnt2d p;
+};
+
+
 class FaceContours
 {
 public:
@@ -37,7 +44,7 @@ public:
 
 public:
     TopoDS_Face myFace;
-    std::vector<CircularList<gp_Pnt2d>> myWires;
+    std::vector<CircularList<ContourPoint>> myWires;
     std::vector<
         std::tuple<
             Standard_Real,
@@ -58,7 +65,7 @@ public:
         //! Координата точки пересечения сеточной линии с контуром.
         Standard_Real u;
         //! Начало сегмента контура, пересекающего сеточную линию.
-        const CircularList<gp_Pnt2d>::Node* seg;
+        const CircularList<ContourPoint>::Node* seg;
     };
 
     mutable std::map<size_t,std::vector<Cross>> vInts, hInts;
@@ -134,7 +141,7 @@ PositionType ClassificateCell(
     const QuadTree::Cell& cell,
     const FaceContours& fContours,
     const MeshLinesAndContoursIntersections& mlacInts,
-    const CircularList<gp_Pnt2d>::Node** attr
+    const CircularList<ContourPoint>::Node** attr
 );
 }
 
@@ -143,17 +150,126 @@ class AuxClassificateData
 {
 public:
 
-    AuxClassificateData(const TopoDS_Face&);
+    AuxClassificateData(const TopoDS_Face&, Standard_Real tol);
     ~AuxClassificateData();
 
     const TopoDS_Face face;
     QuadTree::Ptr qTree;
     FaceContours fContours;
+    Standard_Real tolerance;
 
 private:
     AuxClassificateData(const AuxClassificateData&) = delete;
     void operator=(const AuxClassificateData&) = delete;
 };
+
+
+Standard_Boolean IsBoundaryCell(
+    QuadTree::CPtr qTree,
+    const QuadTree::Cell& cell
+)
+{
+    size_t attr = qTree->GetAttr(cell);
+    return attr != 0 && attr != 1;
+}
+
+
+/**
+\brief Наименьшее расстояние от точки до участка контура.
+\warning НЕ РЕАЛИЗОВАНО! В описании контура не хватает указателя на кривую и
+         параметров в точках дискретизации.
+
+Голованов Н.Н., Геометрическое моделирование / 2002.
+Раздел 4.5 "Проекция точки на линию".
+*/
+Standard_Real NearestDistance(
+    const gp_Pnt2d& p,
+    const CircularList<ContourPoint>::Node* cptr
+)
+{
+    // Ищем начальное приближение для вычисления проекции.
+    const CircularList<ContourPoint>::Node* c1ptr = nullptr;
+    const CircularList<ContourPoint>::Node* c2ptr = nullptr;
+    Handle(Geom2d_Curve) curve;
+    Standard_Real tA = 0.0, tB = 0.0;
+    for(Standard_Integer i = 0; i < 6; ++i)
+    {
+        Standard_Integer i1 = (i % 2 == 0 ? i/2 : -i/2-1);
+        Standard_Integer i2 = (i % 2 == 0 ? i/2+1 : -i/2);
+        auto n1 = CircularList<ContourPoint>::Offset(cptr, i1);
+        auto n2 = CircularList<ContourPoint>::Offset(cptr, i2);
+        //tA = n1->data.t;
+        //tB = n2->data.t;
+        gp_Pnt2d pA, pB;
+        gp_Vec2d dA, dB;
+        curve->D1(tA, pA, dA);
+        curve->D1(tB, pB, dB);
+        Standard_Real a = gp_Vec2d(pA,p) * dA;
+        Standard_Real b = gp_Vec2d(pA,p) * dB;
+        if(a <= 0.0 && b >= 0.0 || a >= 0.0 && b <= 0.0)
+        {
+            c1ptr = n1;
+            c2ptr = n2;
+            break;
+        }
+    }
+
+    assert(c1ptr != nullptr && c2ptr != nullptr);
+    if(!c1ptr || !c2ptr)
+        return std::numeric_limits<Standard_Real>::max();
+
+    // Отрезок контура, который задает начальное приближение для
+    // вычисления проекции, задают указатели `c1ptr` и `c2ptr`.
+    Standard_Real t = 0.5 * (tA + tB);
+    gp_Pnt2d c;
+    gp_Vec2d dc, d2c;
+    const Standard_Integer maxIters = 10;
+    for(Standard_Integer iter = 0; iter < maxIters; ++iter)
+    {
+        curve->D2(t, c, dc, d2c);
+        gp_Vec2d cp(c, p);
+        Standard_Real dt = cp*dc / (-cp * d2c - dc*dc);
+        t = t + dt;
+        if(std::abs(dt) <= 1.e-7)
+            break;
+    }
+
+    gp_Vec2d pc(p, c);
+    Standard_Real distance = pc.Magnitude();
+    if(pc.Crossed(dc) >= 0.0) //< Точка `p` слева от контура?
+        distance = -distance;
+    return distance;
+}
+
+
+/**
+\brief Наименьшее знаковое расстояние от точки до участка контура.
+Если точка слева от контура, то расстояние отрицательно.
+*/
+Standard_Real NearestDistance2(
+    const gp_Pnt2d& p,
+    const CircularList<ContourPoint>::Node* cptr
+)
+{
+    static const Standard_Real tol = 1.e-7;
+    Standard_Real minDistance = std::numeric_limits<Standard_Real>::max();
+    for(Standard_Integer i = 0; i < 2; ++i)
+    {
+        //Standard_Integer i1 = (i % 2 == 0 ? i/2 : -i/2-1);
+        //Standard_Integer i2 = (i % 2 == 0 ? i/2+1 : -i/2);
+        gp_Pnt2d pA = CircularList<ContourPoint>::Offset(cptr, i)->data.p;
+        gp_Pnt2d pB = CircularList<ContourPoint>::Offset(cptr, i+1)->data.p;
+        gp_Vec2d w(pA, pB);
+        gp_Vec2d ap(pA, p);
+        Standard_Real t = (ap * w) / w.SquareMagnitude();
+        if(t < 0.0 - tol || t > 1.0 + tol)
+            continue;
+        Standard_Real dist = ap.Crossed(w) / w.Magnitude();
+        if(std::abs(dist) < std::abs(minDistance))
+            minDistance = dist;
+    }
+    return minDistance;
+}
 
 
 TopAbs_State Classificate(
@@ -168,67 +284,76 @@ TopAbs_State Classificate(
     if(pAux != nullptr && (*pAux) != nullptr && (*pAux)->face != F)
         return TopAbs_UNKNOWN;
 
+    static const Standard_Real Tol = 1.e-7;
     static const AuxClassificateData* s_aux = nullptr;
-
     if(pAux)
     {
         if(!(*pAux))
-            (*pAux) = new AuxClassificateData(F);
+            (*pAux) = new AuxClassificateData(F, Tol);
     }
     else
     {
         if(!s_aux || s_aux->face != F)
-            s_aux = new AuxClassificateData(F);
+            s_aux = new AuxClassificateData(F, Tol);
     }
 
     const AuxClassificateData* aux = pAux? *pAux : s_aux;
     assert(aux && aux->face == F);
+
+#if 0
+    aux->qTree->Dump("quadtree.vtk");
+    aux->fContours.Dump("contours.vtk");
+    Dumper dumper;
+    dumper.AddPoints({Q});
+    dumper.Save("point.vtk");
+#endif
 
     QuadTree::Cell cell = aux->qTree->GetCell(Q);
     if(!cell)
         return TopAbs_OUT;
 
     size_t attr = aux->qTree->GetAttr(cell);
-    if(attr == 0)
-        return TopAbs_IN;
-    if(attr == 1)
-        return TopAbs_OUT;
-
-    auto nodePointer = reinterpret_cast<const CircularList<gp_Pnt2d>::Node*>(attr);
-    gp_Pnt2d pA = nodePointer->data;
-    gp_Pnt2d pB = nodePointer->next->data;
-    Standard_Real a, b, c;
-    CalcLineCoefficients(pA, pB, a, b, c);
-    Standard_Real f1 = a * Q.X() + b * Q.Y() + c;
-    Standard_Real f2 = -std::numeric_limits<Standard_Real>::max();
-
-    Standard_Real xMin, yMin, xMax, yMax;
-    aux->qTree->GetCellBox(cell, xMin, yMin, xMax, yMax);
-    if(PointInsideBox(Q,xMin,yMin,xMax,yMax))
+    std::list<QuadTree::Cell> boundaryCells;
+    TopAbs_State qPointState = TopAbs_UNKNOWN;
+    if(attr == 0 || attr == 1)
     {
-        gp_Pnt2d pC = nodePointer->next->next->data;
-        Standard_Real a, b, c;
-        CalcLineCoefficients(pB, pC, a, b, c);
-        f2 = a * Q.X() + b * Q.Y() + c;
+        SearchNearestCells(aux->qTree,
+                           Q,
+                           IsBoundaryCell,
+                           aux->tolerance,
+                           boundaryCells);
+        qPointState = (attr == 0 ? TopAbs_IN : TopAbs_OUT);
+        if(boundaryCells.empty())
+            return qPointState;
+    }
+    else
+        boundaryCells.push_back(cell);
+
+    for(const QuadTree::Cell& cell : boundaryCells)
+    {
+        size_t attr = aux->qTree->GetAttr(cell);
+        assert(attr != 0 && attr != 1);
+        // Превращаем атрибут в указатель на участок контура.
+        auto cptr = reinterpret_cast<const CircularList<ContourPoint>::Node*>(attr);
+        // Вычисляем расстояние от точки до контура,
+        // используя `cptr` как начальное приближение.
+        Standard_Real qcDistance = NearestDistance2(Q, cptr);
+        if(std::abs(qcDistance) <= aux->tolerance)
+            return TopAbs_ON;
+
+        if(qcDistance < 0.0 )
+        {
+            assert(qPointState == TopAbs_UNKNOWN || qPointState == TopAbs_IN);
+            qPointState = TopAbs_IN;
+        }
+        else
+        {
+            assert(qPointState == TopAbs_UNKNOWN || qPointState == TopAbs_OUT);
+            qPointState = TopAbs_OUT;
+        }
     }
 
-    //\warning Учесть случай с невыпуклой вершиной.
-
-    Standard_Real Tol = 1.e-7;
-    if(f1 <= -Tol || f1 <= +Tol)
-    {
-        if(f2 <= -Tol)
-            return TopAbs_IN;
-        if(f2 >= +Tol )
-            return TopAbs_OUT;
-        return TopAbs_ON;
-    }
-    else if(f1 >= +Tol)
-    {
-        return TopAbs_OUT;
-    }
-
-    return TopAbs_UNKNOWN;
+    return qPointState;
 }
 
 
@@ -276,18 +401,22 @@ FaceContours::FaceContours(const TopoDS_Face& F)
     for(TopoDS_Iterator itw(F); itw.More(); itw.Next())
     {
         const TopoDS_Wire& W = TopoDS::Wire(itw.Value());
-        auto* polyline = &myWires.front();
+        auto* contour = &myWires.front();
         auto* bbox = &myBoundBoxes.front();
         if(W != wOuter)
         {
             myWires.push_back({});
             myBoundBoxes.push_back({});
-            polyline = &myWires.back();
+            contour = &myWires.back();
             bbox = &myBoundBoxes.back();
         }
         std::vector<gp_Pnt2d> pl;
         Tesselate(F, W, pl);
-        polyline->assign(pl.begin(), --pl.end());
+        for(auto it = pl.begin(); it != std::prev(pl.end()); ++it)
+        {
+            const gp_Pnt2d& p = (*it);
+            contour->push_back(ContourPoint{p});
+        }
 
         Standard_Real xMin = +std::numeric_limits<Standard_Real>::max(),
                       yMin = +std::numeric_limits<Standard_Real>::max(),
@@ -316,8 +445,8 @@ Standard_Boolean FaceContours::Dump(
     for(const auto& pl : myWires)
     {
         std::vector<gp_Pnt2d> polyline;
-        for(const auto& pt : pl)
-            polyline.push_back(pt);
+        for(const auto& cp : pl)
+            polyline.push_back(cp.p);
         polyline.push_back(polyline.front());
         dumper.AddPolyline(polyline);
     }
@@ -399,12 +528,12 @@ void MeshLinesAndContoursIntersections::IntersectVertical(
 ) const
 {
     gp_Pnt2d vSegP1(xConst,yMin), vSegP2(xConst,yMax);
-    for(const CircularList<gp_Pnt2d>& polyline : myContours.myWires)
+    for(const CircularList<ContourPoint>& contour : myContours.myWires)
     {
-        for(auto it = polyline.begin(); it != polyline.end(); ++it)
+        for(auto it = contour.begin(); it != contour.end(); ++it)
         {
-            gp_Pnt2d p0 = (*it);
-            gp_Pnt2d p1 = *std::next(it);
+            gp_Pnt2d p0 = (*it).p;
+            gp_Pnt2d p1 = (*std::next(it)).p;
             // Пересекается ли отрезок (p0,p1) с вертикальной прямой?
             Standard_Real x0 = p0.X(), x1 = p1.X();
             Standard_Real y0 = p0.Y(), y1 = p1.Y();
@@ -440,8 +569,8 @@ void MeshLinesAndContoursIntersections::IntersectHorizontal(
     {
         for(auto it = polyline.begin(); it != polyline.end(); ++it)
         {
-            gp_Pnt2d p0 = (*it);
-            gp_Pnt2d p1 = *std::next(it);
+            gp_Pnt2d p0 = (*it).p;
+            gp_Pnt2d p1 = (*std::next(it)).p;
             // Пересекается ли отрезок (p0,p1) с горизонтальной прямой?
             Standard_Real x0 = p0.X(), x1 = p1.X();
             Standard_Real y0 = p0.Y(), y1 = p1.Y();
@@ -483,8 +612,8 @@ void GetEdgeInfo(
     Standard_Real uEnd,
     PositionType& t1,
     PositionType& t2,
-    const CircularList<gp_Pnt2d>::Node** seg1,
-    const CircularList<gp_Pnt2d>::Node** seg2
+    const CircularList<ContourPoint>::Node** seg1,
+    const CircularList<ContourPoint>::Node** seg2
 )
 {
     (*seg1) = (*seg2) = nullptr;
@@ -578,7 +707,7 @@ PositionType ClassificateCell(
     const QuadTree::Cell& cell,
     const FaceContours& fContours,
     const MeshLinesAndContoursIntersections& mlacInts,
-    const CircularList<gp_Pnt2d>::Node** attr
+    const CircularList<ContourPoint>::Node** attr
 )
 {
     Standard_Real xMin, yMin, xMax, yMax;
@@ -593,8 +722,8 @@ PositionType ClassificateCell(
     // Признак положения вершин ячейки относительно контуров грани.
     PositionType avType, bvType, cvType, dvType;
     // Указатель на начало сегмента контура, который пересекает ячейку.
-    const CircularList<gp_Pnt2d>::Node* intSegment1 = nullptr;
-    const CircularList<gp_Pnt2d>::Node* intSegment2 = nullptr;
+    const CircularList<ContourPoint>::Node* intSegment1 = nullptr;
+    const CircularList<ContourPoint>::Node* intSegment2 = nullptr;
 
     // Запросы на пересечение сторон ячейки с контурами грани.
     Standard_Integer i1Line, j1Line, i2Line, j2Line;
@@ -605,7 +734,7 @@ PositionType ClassificateCell(
     const auto& cdli = mlacInts.GetHInts(j2Line);
     const auto& acli = mlacInts.GetVInts(i1Line);
     PositionType a1Type, a2Type, b1Type, b2Type, c1Type, c2Type, d1Type, d2Type;
-    const CircularList<gp_Pnt2d>::Node* segments[8];
+    const CircularList<ContourPoint>::Node* segments[8];
     GetEdgeInfo(abli, xMin, xMax, a1Type, b1Type, &segments[0], &segments[1]);
     GetEdgeInfo(cdli, xMin, xMax, c1Type, d1Type, &segments[2], &segments[3]);
     GetEdgeInfo(acli, yMin, yMax, a2Type, c2Type, &segments[4], &segments[5]);
@@ -628,9 +757,15 @@ PositionType ClassificateCell(
         }
 
         if(  intSegment1 == seg
-          || intSegment1 == seg->next
           || intSegment1 == seg->prev)
             continue;
+
+
+        if(intSegment1 == seg->next)
+        {
+            intSegment1 = seg;
+            continue;
+        }
 
         if(!intSegment2)
         {
@@ -788,7 +923,7 @@ Standard_Boolean GetCellEdge(
 
 
 Standard_Real Distance(
-    const CircularList<gp_Pnt2d>::Node* cntrSection,
+    const CircularList<ContourPoint>::Node* cntrSection,
     const gp_Pnt2d& segFirstPoint,
     const gp_Pnt2d& segLastPoint
 )
@@ -800,8 +935,10 @@ Standard_Real Distance(
 }
 
 
-AuxClassificateData::AuxClassificateData(const TopoDS_Face& F)
-    : face(F), fContours(F)
+AuxClassificateData::AuxClassificateData(
+    const TopoDS_Face& F,
+    Standard_Real tol
+) : face(F), fContours(F), tolerance(tol)
 {
     Bnd_Box2d box = ComputePCurvesBox(F);
     Enlarge(box, 1.1);
@@ -818,7 +955,7 @@ AuxClassificateData::AuxClassificateData(const TopoDS_Face& F)
         splitCells.clear();
         for(QuadTree::Cell cell : qTree->TerminalCellsOfLevel(level))
         {
-            const CircularList<gp_Pnt2d>::Node* node = nullptr;
+            const CircularList<ContourPoint>::Node* node = nullptr;
             PositionType type = ClassificateCell(*qTree,
                                                  cell,
                                                  fContours,
@@ -862,15 +999,15 @@ AuxClassificateData::AuxClassificateData(const TopoDS_Face& F)
             continue;
 
         // Указатели на участок контура, который близко расположен к ячейке.
-        const CircularList<gp_Pnt2d>::Node* sect1 = nullptr;
-        const CircularList<gp_Pnt2d>::Node* sect2 = nullptr;
+        const CircularList<ContourPoint>::Node* sect1 = nullptr;
+        const CircularList<ContourPoint>::Node* sect2 = nullptr;
         for(QuadTree::Cell boundCell : qTree->ConnectedCells(nonBoundCell))
         {
             size_t attr = qTree->GetAttr(boundCell);
             if(!IsBoundaryAttr(attr))
                 continue;
 
-            auto sect = reinterpret_cast<const CircularList<gp_Pnt2d>::Node*>(attr);
+            auto sect = reinterpret_cast<const CircularList<ContourPoint>::Node*>(attr);
 
             auto ct = qTree->GetConnectionType(nonBoundCell, boundCell);
             assert(ct != QuadTree::CellConnection::Inner

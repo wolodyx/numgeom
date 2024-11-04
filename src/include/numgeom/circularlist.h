@@ -14,6 +14,11 @@ public:
 
 public:
 
+    static const Node* Offset(const Node*, int);
+
+
+public:
+
     CircularList();
     CircularList(const CircularList&);
     //CircularList(const std::vector<T>&);
@@ -41,7 +46,6 @@ public:
 
     template<typename Iter>
     void assign(const Iter& first, const Iter& last);
-
 
 private:
 
@@ -307,6 +311,33 @@ template<typename T>
 const typename CircularList<T>::Node* CircularList<T>::const_iterator::current_node() const
 {
     return myCurrentNode;
+}
+
+
+template<typename T>
+const typename CircularList<T>::Node* CircularList<T>::Offset(
+    const Node* startNode,
+    int offset
+)
+{
+    if(!startNode)
+        return nullptr;
+
+    if(offset == 0)
+        return startNode;
+
+    const Node* node = startNode;
+    if(offset > 0)
+    {
+        for(int i = 0; i < offset; ++i)
+            node = node->next;
+    }
+    else
+    {
+        for(int i = 0; i > offset; --i)
+            node = node->prev;
+    }
+    return node;
 }
 
 #endif // !numgeom_numgeom_circularlist_h

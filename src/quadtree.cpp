@@ -439,7 +439,7 @@ Standard_Integer CellsCount(
     stack.push(parentCell);
     while(!stack.empty())
     {
-        auto cell = stack.top();
+        Cell cell = stack.top();
         stack.pop();
 
         Standard_Boolean isTerminalCell = Standard_True;

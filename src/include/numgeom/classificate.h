@@ -6,7 +6,7 @@
 
 #include "numgeom/numgeom_export.h"
 
-class AuxClassificateData;
+class AuxClassificateData2d;
 class gp_Pnt2d;
 class TopoDS_Face;
 
@@ -21,7 +21,7 @@ class TopoDS_Face;
 NUMGEOM_EXPORT TopAbs_State Classificate(
     const TopoDS_Face& face,
     const gp_Pnt2d& point,
-    const AuxClassificateData** aux = nullptr
+    const AuxClassificateData2d** aux = nullptr
 );
 
 #endif // !numgeom_numgeom_classificate_h

@@ -146,12 +146,12 @@ PositionType ClassificateCell(
 }
 
 
-class AuxClassificateData
+class AuxClassificateData2d
 {
 public:
 
-    AuxClassificateData(const TopoDS_Face&, Standard_Real tol);
-    ~AuxClassificateData();
+    AuxClassificateData2d(const TopoDS_Face&, Standard_Real tol);
+    ~AuxClassificateData2d();
 
     const TopoDS_Face face;
     QuadTree::Ptr qTree;
@@ -159,8 +159,8 @@ public:
     Standard_Real tolerance;
 
 private:
-    AuxClassificateData(const AuxClassificateData&) = delete;
-    void operator=(const AuxClassificateData&) = delete;
+    AuxClassificateData2d(const AuxClassificateData2d&) = delete;
+    void operator=(const AuxClassificateData2d&) = delete;
 };
 
 
@@ -275,7 +275,7 @@ Standard_Real NearestDistance2(
 TopAbs_State Classificate(
     const TopoDS_Face& F,
     const gp_Pnt2d& Q,
-    const AuxClassificateData** pAux
+    const AuxClassificateData2d** pAux
 )
 {
     if(F.IsNull())
@@ -285,19 +285,19 @@ TopAbs_State Classificate(
         return TopAbs_UNKNOWN;
 
     static const Standard_Real Tol = 1.e-7;
-    static const AuxClassificateData* s_aux = nullptr;
+    static const AuxClassificateData2d* s_aux = nullptr;
     if(pAux)
     {
         if(!(*pAux))
-            (*pAux) = new AuxClassificateData(F, Tol);
+            (*pAux) = new AuxClassificateData2d(F, Tol);
     }
     else
     {
         if(!s_aux || s_aux->face != F)
-            s_aux = new AuxClassificateData(F, Tol);
+            s_aux = new AuxClassificateData2d(F, Tol);
     }
 
-    const AuxClassificateData* aux = pAux? *pAux : s_aux;
+    const AuxClassificateData2d* aux = pAux? *pAux : s_aux;
     assert(aux && aux->face == F);
 
 #if 0
@@ -867,7 +867,7 @@ MeshLinesAndContoursIntersections::MeshLinesAndContoursIntersections(
 }
 
 
-AuxClassificateData::AuxClassificateData(
+AuxClassificateData2d::AuxClassificateData2d(
     const TopoDS_Face& F,
     Standard_Real tol
 ) : face(F), fContours(F), tolerance(tol)
@@ -918,6 +918,6 @@ AuxClassificateData::AuxClassificateData(
 }
 
 
-AuxClassificateData::~AuxClassificateData()
+AuxClassificateData2d::~AuxClassificateData2d()
 {
 }

@@ -69,7 +69,7 @@ TEST(Classificate, Example)
 {
     TopoDS_Shape model = LoadFromFile(TestData("rounded-cube.step"));
     ASSERT_FALSE(model.IsNull());
-    const AuxClassificateData* aux = nullptr;
+    const AuxClassificateData2d* aux = nullptr;
     for(TopExp_Explorer it(model,TopAbs_FACE); it.More(); it.Next())
     {
         TopoDS_Face face = TopoDS::Face(it.Current());

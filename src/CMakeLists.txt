@@ -6,7 +6,9 @@ set(PUBLIC_HEADERS
   include/numgeom/iterator.h
   include/numgeom/octree.h
   include/numgeom/quadtree.h
+  include/numgeom/staticjaggedarray.h
   include/numgeom/tesselate.h
+  include/numgeom/trimesh.h
   include/numgeom/utilities.h
 )
 
@@ -17,7 +19,9 @@ set(SOURCE_FILES
   iterator_ijk.cpp          iterator_ijk.h
   octree.cpp
   quadtree.cpp
+  staticjaggedarray.cpp
   tesselate.cpp
+  trimesh.cpp
   utilities.cpp
   writevtk.cpp              writevtk.h
 )

@@ -2,6 +2,7 @@
 
 #include <BndLib_Add2dCurve.hxx>
 #include <BRep_Tool.hxx>
+#include <BRepBndLib.hxx>
 #include <Precision.hxx>
 #include <TopoDS.hxx>
 #include <TopoDS_Edge.hxx>
@@ -26,5 +27,16 @@ Bnd_Box2d ComputePCurvesBox(const TopoDS_Face& F)
             boxComputer.Add(PC, uFirst, uLast, tol, box);
         }
     }
+    return box;
+}
+
+
+Bnd_Box ComputeBoundBox(const TopoDS_Shape& shape)
+{
+    if(shape.IsNull())
+        return Bnd_Box();
+
+    Bnd_Box box;
+    BRepBndLib().Add(shape, box);
     return box;
 }

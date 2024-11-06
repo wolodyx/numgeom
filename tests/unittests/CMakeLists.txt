@@ -2,6 +2,7 @@ set(SOURCE_FILES
   main.cpp
   testcircularlist.cpp
   testclassificate.cpp
+  testoctree.cpp
   testquadtree.cpp
   utilities.cpp             utilities.h
 )

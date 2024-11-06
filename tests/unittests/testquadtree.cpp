@@ -29,6 +29,8 @@ TEST(QuadTree, Example)
     qTree->Split(QuadTree::Cell(1,3));
     qTree->Split(QuadTree::Cell(1,9));
     qTree->Split(QuadTree::Cell(1,10));
+
+    ASSERT_EQ(qTree->NbCells(), 27);
 }
 
 

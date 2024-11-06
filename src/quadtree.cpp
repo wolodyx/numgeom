@@ -139,7 +139,7 @@ QuadTree::Cell QuadTree::Internal::GetChildCell(
     case 2: return Cell{parentCell.level+1, (j+1)*ni+i+1};
     case 3: return Cell{parentCell.level+1, (j+1)*ni+i};
     }
-    return Cell{-1, -1};
+    return Cell();
 }
 
 
@@ -1027,7 +1027,7 @@ Standard_Boolean QuadTree::Dump(
 
     file << "CELL_TYPES " << nbCells << std::endl;
     for(size_t i = 0; i < nbCells; ++i)
-        file << "9 ";
+        file << "9 "; //< VTK_QUAD
     file << std::endl;
     return Standard_True;
 }
@@ -1049,6 +1049,12 @@ void QuadTree::Split(const Cell& cell)
     assert(cell.level <= N);
     if(cell.level > N)
         return;
+
+    if(!pimpl->IsExists(cell))
+    {
+        assert(false);
+        return;
+    }
 
     if(cell.level == N)
     {

@@ -1,7 +1,10 @@
 set(PUBLIC_HEADERS
   include/numgeom/circularlist.h
   include/numgeom/classificate.h
+  include/numgeom/enums.h
+  include/numgeom/ijk.h
   include/numgeom/iterator.h
+  include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/tesselate.h
   include/numgeom/utilities.h
@@ -11,6 +14,8 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   classificate.cpp
   curvemetriclength.cpp     curvemetriclength.h
+  iterator_ijk.cpp          iterator_ijk.h
+  octree.cpp
   quadtree.cpp
   tesselate.cpp
   utilities.cpp

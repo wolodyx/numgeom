@@ -1,34 +1,56 @@
-﻿#ifndef numgeom_numgeom_quadtree_h
-#define numgeom_numgeom_quadtree_h
+﻿#ifndef numgeom_numgeom_octree_h
+#define numgeom_numgeom_octree_h
 
 #include <filesystem>
-#include <functional>
 #include <list>
 #include <memory>
 
-#include <Bnd_Box2d.hxx>
+#include <Bnd_Box.hxx>
 
+#include "numgeom/ijk.h"
 #include "numgeom/iterator.h"
 #include "numgeom/numgeom_export.h"
 
 
-class NUMGEOM_EXPORT QuadTree
+class NUMGEOM_EXPORT OcTree
 {
 public:
 
-    typedef std::shared_ptr<QuadTree> Ptr;
-    typedef std::shared_ptr<const QuadTree> CPtr;
+    typedef std::shared_ptr<OcTree> Ptr;
+    typedef std::shared_ptr<const OcTree> CPtr;
 
     enum class CellConnection
     {
+        // Sides
         DownSide,
-        RightSide,
         UpSide,
         LeftSide,
-        DownLeftCorner,
-        DownRightCorner,
-        UpRightCorner,
-        UpLefttCorner,
+        RightSide,
+        FrontSide,
+        BackSide,
+        // Ribs
+        DownLeftRib,
+        DownRightRib,
+        DownFrontRib,
+        DownBackRib,
+        UpLeftRib,
+        UpRightRib,
+        UpFrontRib,
+        UpBackRib,
+        LeftFrontRib,
+        RightFrontRib,
+        LeftBackRib,
+        RightBackRib,
+        // Corners
+        DownLeftFrontCorner,
+        DownRightFrontCorner,
+        DownRightBackCorner,
+        DownLeftBackCorner,
+        UpLeftFrontCorner,
+        UpRightFrontCorner,
+        UpRightBackCorner,
+        UpLeftBackCorner,
+        // Others
         Inner,
         Outer
     };
@@ -39,17 +61,18 @@ public:
 
 public:
 
-    static QuadTree::Ptr Deserialize(std::istream&);
+    static OcTree::Ptr Deserialize(std::istream&);
 
-    static QuadTree::Ptr Create(
-        const Bnd_Box2d&,
+    static OcTree::Ptr Create(
+        const Bnd_Box&,
         Standard_Integer in = 1,
-        Standard_Integer jn = 1
+        Standard_Integer jn = 1,
+        Standard_Integer kn = 1
     );
 
 public:
 
-    ~QuadTree();
+    ~OcTree();
 
     //! Количество уровней в дереве.
     Standard_Integer Levels() const;
@@ -61,21 +84,15 @@ public:
     void GetBox(
         Standard_Real& xMin,
         Standard_Real& yMin,
+        Standard_Real& zMin,
         Standard_Real& xMax,
-        Standard_Real& yMax
+        Standard_Real& yMax,
+        Standard_Real& zMax
     ) const;
 
-    void CellsNumberOnLevel(
-        Standard_Integer level,
-        Standard_Integer& nbByI,
-        Standard_Integer& nbByJ
-    ) const;
+    Ijk CellsNumberOnLevel(Standard_Integer level) const;
 
-    void GetCellCoords(
-        const Cell& cell,
-        Standard_Integer& i,
-        Standard_Integer& j
-    ) const;
+    Ijk GetCellCoords(const Cell& cell) const;
 
     //! Возвращает тип связи второй ячейки относительно первой.
     CellConnection GetConnectionType(const Cell&, const Cell&) const;
@@ -93,52 +110,55 @@ public:
         const Cell& cell,
         Standard_Real& xMin,
         Standard_Real& yMin,
+        Standard_Real& zMin,
         Standard_Real& xMax,
-        Standard_Real& yMax
+        Standard_Real& yMax,
+        Standard_Real& zMax
     ) const;
 
 
     //! Наименьшее и наибольшее расстояния от точки `q` до ячейки `cell`.
     //! Если точка попадает внутрь ячейки, то расстояния нулевые.
     void GetMinMaxDistances(
-        const gp_Pnt2d& q,
+        const gp_Pnt& q,
         const Cell& cell,
         Standard_Real& minDistance,
         Standard_Real& maxDistance
     ) const;
 
 
-    gp_Pnt2d GetCenter(const Cell& cell) const;
+    gp_Pnt GetCenter(const Cell& cell) const;
 
 
-    Standard_Boolean Equals(QuadTree::CPtr) const;
+    Standard_Boolean Equals(OcTree::CPtr) const;
 
     void Split(const Cell&);
 
     size_t GetAttr(const Cell&) const;
     void SetAttr(const Cell&, size_t) const;
 
-    Cell GetCell(const gp_Pnt2d&) const;
+    Cell GetCell(const gp_Pnt&) const;
 
     Standard_Boolean Dump(const std::filesystem::path&) const;
 
     void Serialize(std::ostream&) const;
 
 private:
-    QuadTree(
-        const Bnd_Box2d&,
+    OcTree(
+        const Bnd_Box&,
         Standard_Integer in,
-        Standard_Integer jn
+        Standard_Integer jn,
+        Standard_Integer kn
     );
-    QuadTree(const QuadTree&) = delete;
-    QuadTree& operator=(const QuadTree&) = delete;
+    OcTree(const OcTree&) = delete;
+    OcTree& operator=(const OcTree&) = delete;
 
 private:
     Internal* pimpl;
 };
 
 
-struct QuadTree::Cell
+struct OcTree::Cell
 {
     Standard_Integer level;
     Standard_Integer index;
@@ -173,7 +193,7 @@ struct QuadTree::Cell
 };
 
 
-struct QuadTree::Node
+struct OcTree::Node
 {
     Standard_Integer level;
     Standard_Integer index;
@@ -209,20 +229,19 @@ struct QuadTree::Node
 
 
 /**
-\brief Поиск в квадродереве ячеек (входящих в список отмеченных), которые
+\brief Поиск в октодереве ячеек (входящих в список отмеченных), которые
        наиболее близко расположены к точке.
-\param qTree Квадродерево.
+\param tree Октодерево.
 \param Q Искомая точка.
 \param isTaggedCell Функция, возвращающая признак отмеченности ячейки.
 \param maximumDistance Радиус, вокруг которого происходит поиск.
 \param nearestCells Ближайшие к точке терминальные отмеченные ячейки.
 */
 void NUMGEOM_EXPORT SearchNearestCells(
-    QuadTree::CPtr qTree,
-    const gp_Pnt2d& Q,
-    const std::function<Standard_Boolean(QuadTree::CPtr, const QuadTree::Cell&)>& isTaggedCell,
+    OcTree::CPtr tree,
+    const gp_Pnt& Q,
+    const std::function<Standard_Boolean(OcTree::CPtr, const OcTree::Cell&)>& isTaggedCell,
     Standard_Real maximumDistance,
-    std::list<QuadTree::Cell>& nearestCells
+    std::list<OcTree::Cell>& nearestCells
 );
-
-#endif // !numgeom_numgeom_quadtree_h
+#endif // !numgeom_numgeom_octree_h

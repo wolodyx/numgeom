@@ -16,6 +16,8 @@ public:
     ~Dumper();
 
     Dumper& AddPoints(const std::vector<gp_Pnt2d>&);
+    Dumper& AddPoints(const std::vector<gp_Pnt>&);
+    Dumper& AddPolyline(const std::vector<gp_Pnt>& polyline);
     Dumper& AddPolyline(const std::vector<gp_Pnt2d>& polyline);
 
     Standard_Boolean Save(const std::filesystem::path&) const;

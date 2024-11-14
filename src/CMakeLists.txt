@@ -6,6 +6,7 @@ set(PUBLIC_HEADERS
   include/numgeom/iterator.h
   include/numgeom/octree.h
   include/numgeom/quadtree.h
+  include/numgeom/removefaces.h
   include/numgeom/staticjaggedarray.h
   include/numgeom/tesselate.h
   include/numgeom/trimesh.h
@@ -16,9 +17,12 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   classificate.cpp
   curvemetriclength.cpp     curvemetriclength.h
+  ffextintersections.cpp    ffextintersections.h
+  intersections.h           intersections.cpp
   iterator_ijk.cpp          iterator_ijk.h
   octree.cpp
   quadtree.cpp
+  removefaces.cpp
   staticjaggedarray.cpp
   tesselate.cpp
   trimesh.cpp
@@ -40,6 +44,7 @@ target_link_libraries(numgeom
     TKG3d
     TKernel
   PRIVATE
+    TKBO
     TKBRep
     TKG2d
     TKDESTEP

@@ -1,6 +1,7 @@
 #include "writevtk.h"
 
 #include <fstream>
+#include <list>
 
 
 struct Dumper::Internal

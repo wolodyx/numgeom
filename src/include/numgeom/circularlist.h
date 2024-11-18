@@ -312,7 +312,7 @@ CircularList<T>::const_iterator::const_iterator()
 {
     myFirstNode = nullptr;
     myCurrentNode = nullptr;
-    myFirstInitialized = Standard_True;
+    myFirstInitialized = true;
 }
 
 
@@ -399,7 +399,7 @@ CircularList<T>::iterator::iterator()
 {
     myFirstNode = nullptr;
     myCurrentNode = nullptr;
-    myFirstInitialized = Standard_True;
+    myFirstInitialized = true;
 }
 
 

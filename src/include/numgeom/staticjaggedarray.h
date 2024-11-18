@@ -1,6 +1,7 @@
 #ifndef numgeom_numgeom_staticjaggedarray_h
 #define numgeom_numgeom_staticjaggedarray_h
 
+#include <cstddef>
 #include <vector>
 
 #include "numgeom/numgeom_export.h"

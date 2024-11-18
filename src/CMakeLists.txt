@@ -4,6 +4,7 @@ set(PUBLIC_HEADERS
   include/numgeom/enums.h
   include/numgeom/ijk.h
   include/numgeom/iterator.h
+  include/numgeom/loadfromvtk.h
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
@@ -21,6 +22,7 @@ set(SOURCE_FILES
   ffextintersections.cpp    ffextintersections.h
   intersections.h           intersections.cpp
   iterator_ijk.cpp          iterator_ijk.h
+  loadfromvtk.cpp
   octree.cpp
   quadtree.cpp
   removefaces.cpp

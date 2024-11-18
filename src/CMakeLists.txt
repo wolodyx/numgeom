@@ -10,6 +10,7 @@ set(PUBLIC_HEADERS
   include/numgeom/staticjaggedarray.h
   include/numgeom/tesselate.h
   include/numgeom/trimesh.h
+  include/numgeom/trimeshconnectivity.h
   include/numgeom/utilities.h
 )
 
@@ -26,6 +27,7 @@ set(SOURCE_FILES
   staticjaggedarray.cpp
   tesselate.cpp
   trimesh.cpp
+  trimeshconnectivity.cpp
   utilities.cpp
   writevtk.cpp              writevtk.h
 )

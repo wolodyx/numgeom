@@ -1,36 +1,40 @@
 #include "numgeom/trimesh.h"
 
+#include "numgeom/trimeshconnectivity.h"
 
-TriMesh::TriMesh()
+
+CTriMesh::~CTriMesh()
 {
+    delete myConnectivity;
 }
 
 
-TriMesh::TriMesh(Standard_Integer nbNodes, Standard_Integer nbCells)
+CTriMesh::CTriMesh(Standard_Integer nbNodes, Standard_Integer nbCells)
     : myNodes(nbNodes), myCells(nbCells)
 {
+    myConnectivity = nullptr;
 }
 
 
-Standard_Integer TriMesh::NbNodes() const
+Standard_Integer CTriMesh::NbNodes() const
 {
     return myNodes.size();
 }
 
 
-Standard_Integer TriMesh::NbCells() const
+Standard_Integer CTriMesh::NbCells() const
 {
     return myCells.size();
 }
 
 
-const gp_Pnt& TriMesh::GetNode(Standard_Integer index) const
+const gp_Pnt& CTriMesh::GetNode(Standard_Integer index) const
 {
     return myNodes[index];
 }
 
 
-const TriMesh::Cell& TriMesh::GetCell(Standard_Integer index) const
+const CTriMesh::Cell& CTriMesh::GetCell(Standard_Integer index) const
 {
     return myCells[index];
 }
@@ -42,7 +46,7 @@ gp_Pnt& TriMesh::GetNode(Standard_Integer index)
 }
 
 
-TriMesh::Cell& TriMesh::GetCell(Standard_Integer index)
+CTriMesh::Cell& TriMesh::GetCell(Standard_Integer index)
 {
     return myCells[index];
 }
@@ -57,7 +61,28 @@ TriMesh::Ptr TriMesh::Create(Standard_Integer nbNodes, Standard_Integer nbCells)
 }
 
 
-Standard_Boolean TriMesh::Dump(
+TriMeshConnectivity* CTriMesh::Connectivity() const
+{
+    if(!myConnectivity)
+        myConnectivity = new TriMeshConnectivity(this->NbNodes(),
+                                                 this->NbCells(),
+                                                 myCells.data());
+    return myConnectivity;
+}
+
+
+TriMesh::TriMesh(Standard_Integer nbNodes, Standard_Integer nbCells)
+    : CTriMesh(nbNodes, nbCells)
+{
+}
+
+
+TriMesh::~TriMesh()
+{
+}
+
+
+Standard_Boolean CTriMesh::Dump(
     const std::filesystem::path& fileName
 ) const
 {
@@ -83,7 +108,7 @@ Standard_Boolean TriMesh::Dump(
     file << "CELLS " << nbCells << ' ' << 4 * nbCells << std::endl;
     for(Standard_Integer i = 0; i < nbCells; ++i)
     {
-        const TriMesh::Cell& cell = this->GetCell(i);
+        const CTriMesh::Cell& cell = this->GetCell(i);
         file << "3 " << cell.na << ' ' << cell.nb << ' ' << cell.nc << ' ';
     }
     file << std::endl;

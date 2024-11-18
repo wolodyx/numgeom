@@ -9,9 +9,15 @@ class NUMGEOM_EXPORT CircularList
 {
 public:
 
-    struct Node;
     class const_iterator;
     class iterator;
+
+    struct Node
+    {
+        T data;
+        Node* next;
+        Node* prev;
+    };
 
 public:
 
@@ -28,11 +34,11 @@ public:
 
     bool empty() const;
 
-    typename const_iterator begin() const;
-    typename const_iterator end() const;
+    const_iterator begin() const;
+    const_iterator end() const;
 
-    typename iterator begin();
-    typename iterator end();
+    iterator begin();
+    iterator end();
 
     const T& front() const;
 
@@ -52,15 +58,7 @@ public:
     void assign(const Iter& first, const Iter& last);
 
 private:
-
     Node* myFirstNode;
-
-    struct Node
-    {
-        T data;
-        Node* next;
-        Node* prev;
-    };
 };
 
 
@@ -365,6 +363,13 @@ const T& CircularList<T>::const_iterator::operator*() const
 
 
 template<typename T>
+const T* CircularList<T>::const_iterator::operator->() const
+{
+    return &myCurrentNode->data;
+}
+
+
+template<typename T>
 typename CircularList<T>::const_iterator& CircularList<T>::const_iterator::operator++()
 {
     myCurrentNode = myCurrentNode->next;
@@ -441,6 +446,13 @@ template<typename T>
 T& CircularList<T>::iterator::operator*() const
 {
     return myCurrentNode->data;
+}
+
+
+template<typename T>
+T* CircularList<T>::iterator::operator->() const
+{
+    return &myCurrentNode->data;
 }
 
 

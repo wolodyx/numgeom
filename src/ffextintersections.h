@@ -2,9 +2,9 @@
 #define numgeom_numgeom_ffextintersections_h
 
 #include <list>
-#include <map>
+#include <unordered_map>
 
-#include <Standard_Handle.hxx>
+#include <Geom_Surface.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopTools_MapOfShape.hxx>
 
@@ -69,7 +69,7 @@ public:
 private:
 
     //! Расширенные поверхности граней.
-    std::unordered_map<TopoDS_Face, Handle(Geom_Surface)> myFace2extendedSurface;
+    std::unordered_map<TopoDS_Face, Handle(Geom_Surface), std::hash<TopoDS_Face>> myFace2extendedSurface;
 
     //! Кешированный результат пересечения граней с гранями.
     mutable std::unordered_map<TopoDS_Face, std::list<IntFF>> myFace2intersections;

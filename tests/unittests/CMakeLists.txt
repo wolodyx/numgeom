@@ -4,6 +4,7 @@ set(SOURCE_FILES
   testclassificate.cpp
   testoctree.cpp
   testquadtree.cpp
+  testremovefaces.cpp
   utilities.cpp             utilities.h
 )
 

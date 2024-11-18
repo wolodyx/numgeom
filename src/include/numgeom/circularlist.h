@@ -11,6 +11,7 @@ public:
 
     struct Node;
     class const_iterator;
+    class iterator;
 
 public:
 
@@ -29,6 +30,9 @@ public:
 
     typename const_iterator begin() const;
     typename const_iterator end() const;
+
+    typename iterator begin();
+    typename iterator end();
 
     const T& front() const;
 
@@ -66,20 +70,25 @@ class CircularList<T>::const_iterator
 public:
 
     using iterator_category = std::bidirectional_iterator_tag;
-    using value_type = T;
+    using value_type        = T;
     using difference_type   = ptrdiff_t;
-    using pointer           = T;
-    using reference = T;
+    using pointer           = const value_type*;
+    using reference         = const value_type&;
 
 public:
 
+    const_iterator();
+
     const_iterator(const Node* firstNode, bool beginIterator);
+
+    bool operator!() const;
 
     bool operator==(const const_iterator& other) const;
 
     bool operator!=(const const_iterator& other) const;
 
     const T& operator*() const;
+    const T* operator->() const;
 
     const_iterator& operator++();
     const_iterator& operator--();
@@ -89,6 +98,42 @@ public:
 private:
     const Node* myFirstNode;
     const Node* myCurrentNode;
+    bool myFirstInitialized;
+};
+
+
+template<typename T>
+class CircularList<T>::iterator
+{
+public:
+
+    using iterator_category = std::bidirectional_iterator_tag;
+    using value_type        = T;
+    using difference_type   = ptrdiff_t;
+    using pointer           = value_type*;
+    using reference         = value_type&;
+
+public:
+
+    iterator();
+
+    iterator(Node* firstNode, bool beginIterator);
+
+    bool operator!() const;
+
+    bool operator==(const iterator& other) const;
+
+    bool operator!=(const iterator& other) const;
+
+    T& operator*() const;
+    T* operator->() const;
+
+    iterator& operator++();
+    iterator& operator--();
+
+private:
+    Node* myFirstNode;
+    Node* myCurrentNode;
     bool myFirstInitialized;
 };
 
@@ -251,6 +296,29 @@ typename CircularList<T>::const_iterator CircularList<T>::end() const
 
 
 template<typename T>
+typename CircularList<T>::iterator CircularList<T>::begin()
+{
+    return iterator(myFirstNode, myFirstNode != nullptr);
+}
+
+
+template<typename T>
+typename CircularList<T>::iterator CircularList<T>::end()
+{
+    return iterator(myFirstNode, false);
+}
+
+
+template<typename T>
+CircularList<T>::const_iterator::const_iterator()
+{
+    myFirstNode = nullptr;
+    myCurrentNode = nullptr;
+    myFirstInitialized = Standard_True;
+}
+
+
+template<typename T>
 CircularList<T>::const_iterator::const_iterator(
     const Node* firstNode,
     bool beginIterator
@@ -259,6 +327,13 @@ CircularList<T>::const_iterator::const_iterator(
     myFirstNode = firstNode;
     myCurrentNode = firstNode;
     myFirstInitialized = beginIterator;
+}
+
+
+template<typename T>
+bool CircularList<T>::const_iterator::operator!() const
+{
+    return myFirstNode == nullptr;
 }
 
 
@@ -311,6 +386,79 @@ template<typename T>
 const typename CircularList<T>::Node* CircularList<T>::const_iterator::current_node() const
 {
     return myCurrentNode;
+}
+
+
+template<typename T>
+CircularList<T>::iterator::iterator()
+{
+    myFirstNode = nullptr;
+    myCurrentNode = nullptr;
+    myFirstInitialized = Standard_True;
+}
+
+
+template<typename T>
+CircularList<T>::iterator::iterator(
+    Node* firstNode,
+    bool beginIterator
+)
+{
+    myFirstNode = firstNode;
+    myCurrentNode = firstNode;
+    myFirstInitialized = beginIterator;
+}
+
+
+template<typename T>
+bool CircularList<T>::iterator::operator!() const
+{
+    return myFirstNode == nullptr;
+}
+
+
+template<typename T>
+bool CircularList<T>::iterator::operator==(
+    const iterator& other
+) const
+{
+    return myFirstNode == other.myFirstNode
+        && myCurrentNode == other.myCurrentNode
+        && myFirstInitialized == other.myFirstInitialized;
+}
+
+
+template<typename T>
+bool CircularList<T>::iterator::operator!=(
+    const iterator& other
+) const
+{
+    return !this->operator==(other);
+}
+
+
+template<typename T>
+T& CircularList<T>::iterator::operator*() const
+{
+    return myCurrentNode->data;
+}
+
+
+template<typename T>
+typename CircularList<T>::iterator& CircularList<T>::iterator::operator++()
+{
+    myCurrentNode = myCurrentNode->next;
+    myFirstInitialized = false;
+    return *this;
+}
+
+
+template<typename T>
+typename CircularList<T>::iterator& CircularList<T>::iterator::operator--()
+{
+    myCurrentNode = myCurrentNode->prev;
+    myFirstInitialized = false;
+    return *this;
 }
 
 

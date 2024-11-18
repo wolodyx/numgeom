@@ -5,6 +5,7 @@
 #include <BRep_Tool.hxx>
 #include <BRepBndLib.hxx>
 #include <BRepClass_FaceClassifier.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 #include <Geom_BoundedCurve.hxx>
 #include <Geom2d_BSplineCurve.hxx>
@@ -23,6 +24,8 @@
 #include <TopoDS_Edge.hxx>
 #include <TopoDS_Face.hxx>
 #include <TopoDS_Iterator.hxx>
+#include <TopoDS_Shell.hxx>
+#include <TopoDS_Solid.hxx>
 #include <TopTools_IndexedDataMapOfShapeListOfShape.hxx>
 
 
@@ -190,4 +193,178 @@ Standard_Real Project(const gp_Pnt& P, const Handle(Geom_Curve)& C)
     if(project.NbPoints() == 0)
         return HUGE_VAL;
     return project.LowerDistanceParameter();
+}
+
+
+TriMesh::Ptr ConvertToTriMesh(const TopoDS_Solid& solid)
+{
+    std::unordered_map<TopoDS_Face,
+                       std::pair<Handle(Poly_Triangulation),
+                                 TopLoc_Location>
+                      > face2triangulation;
+    for(TopoDS_Iterator it(solid); it.More(); it.Next())
+    {
+        const TopoDS_Shell& shell = TopoDS::Shell(it.Value());
+        for(TopoDS_Iterator it(shell); it.More(); it.Next())
+        {
+            const TopoDS_Face& f = TopoDS::Face(it.Value());
+            TopLoc_Location l;
+            Handle(Poly_Triangulation) tr = BRep_Tool::Triangulation(f, l);
+            if(!tr)
+            {
+                BRepMesh_IncrementalMesh(f, 0.6f);
+                tr = BRep_Tool::Triangulation(f, l);
+            }
+            face2triangulation.insert(std::make_pair(f, std::make_pair(tr,l)));
+        }
+    }
+
+    size_t nbNodes = 0, nbCells = 0;
+    for(const auto& v : face2triangulation)
+    {
+        nbNodes += v.second.first->NbNodes();
+        nbCells += v.second.first->NbTriangles();
+    }
+
+    TriMesh::Ptr mesh = TriMesh::Create(nbNodes, nbCells);
+    Standard_Integer nodeIndex = 0, cellIndex = 0, nodeOffset = 0;
+    for(const auto& v : face2triangulation)
+    {
+        Handle(Poly_Triangulation) triangulation = v.second.first;
+        const TopLoc_Location& location = v.second.second;
+        const gp_Trsf& tr = location.Transformation();
+        Standard_Integer nbNodes = triangulation->NbNodes();
+        for(Standard_Integer i = 1; i <= nbNodes; ++i)
+        {
+            gp_Pnt pt = triangulation->Node(i);
+            pt.Transform(tr);
+            mesh->GetNode(nodeIndex++) = pt;
+        }
+
+        Standard_Integer nbCells = triangulation->NbTriangles();
+        for(Standard_Integer i = 1; i <= nbCells; ++i)
+        {
+            const Poly_Triangle& cell = triangulation->Triangle(i);
+            Standard_Integer na, nb, nc;
+            cell.Get(na, nb, nc);
+            mesh->GetCell(cellIndex++) =
+                TriMesh::Cell
+                {
+                    na + nodeOffset - 1,
+                    nb + nodeOffset - 1,
+                    nc + nodeOffset - 1
+                };
+        }
+
+        nodeOffset += nbNodes;
+    }
+
+    return mesh;
+}
+
+
+namespace {;
+Standard_Integer RoundToInt(Standard_Real value)
+{
+    if(value > 0.0)
+        return static_cast<Standard_Integer>(std::floor(value + 0.5));
+    if(value < 0.0)
+        return static_cast<Standard_Integer>(std::ceil(value - 0.5));
+    return 0;
+}
+}
+
+
+void GetMeshSideSizes(
+    const Bnd_Box2d& box,
+    Standard_Integer nbCells,
+    Standard_Integer& xN,
+    Standard_Integer& yN
+)
+{
+    Standard_Real xMin, yMin, xMax, yMax;
+    box.Get(xMin, yMin, xMax, yMax);
+    Standard_Real xWidth = xMax - xMin;
+    Standard_Real yWidth = yMax - yMin;
+    Standard_Real maxWidth = std::max(xWidth, yWidth);
+    Standard_Real minWidth = std::min(xWidth, yWidth);
+    Standard_Real ratio = maxWidth / minWidth;
+
+    Standard_Integer n1Min = 5;
+    Standard_Integer n1Max = 2 * nbCells / n1Min;
+    Standard_Integer n1, n2;
+    for(Standard_Integer iter = 0; iter < 16; ++iter)
+    {
+        n1 = (n1Min + n1Max) / 2;
+        Standard_Real h1 = maxWidth / n1;
+        n2 = RoundToInt(minWidth / h1);
+        Standard_Integer n = n1 * n2;
+
+        if(n == nbCells || n1Max - n1Min < 2)
+            break;
+
+        if(n > nbCells)
+            n1Max = n1;
+        else if(n < nbCells)
+            n1Min = n1;
+    }
+
+    if(xWidth != maxWidth)
+        std::swap(n1, n2);
+    xN = n1, yN = n2;
+}
+
+
+void GetMeshSideSizes(
+    const Bnd_Box& box,
+    Standard_Integer nbCells,
+    Standard_Integer& xN,
+    Standard_Integer& yN,
+    Standard_Integer& zN
+)
+{
+    Standard_Real xMin, yMin, zMin, xMax, yMax, zMax;
+    box.Get(xMin, yMin, zMin, xMax, yMax, zMax);
+
+    Standard_Real width[3] = {
+        xMax - xMin,
+        yMax - yMin,
+        zMax - zMin
+    };
+
+    Standard_Integer maxWidthIndex = 0;
+    if(width[1] > width[0] && width[1] > width[2])
+        maxWidthIndex = 1;
+    else if(width[2] > width[0] && width[2] > width[1])
+        maxWidthIndex = 2;
+
+    Standard_Integer nMin = 5;
+    Standard_Integer nMax = nbCells / nMin / nMin;
+    Standard_Integer nMid, nn[3];
+    for(Standard_Integer iter = 0; iter < 16; ++iter)
+    {
+        nMid = (nMin + nMax) / 2;
+
+        Standard_Real h = width[maxWidthIndex] / nMid;
+
+        nn[maxWidthIndex] = nMid;
+        if(maxWidthIndex != 0)
+            nn[0] = RoundToInt(width[0] / h);
+        if(maxWidthIndex != 1)
+            nn[1] = RoundToInt(width[1] / h);
+        if(maxWidthIndex != 2)
+            nn[2] = RoundToInt(width[2] / h);
+
+        Standard_Integer vol = nn[0] * nn[1] * nn[2];
+
+        if(vol == nbCells || nMax - nMin < 2)
+            break;
+
+        if(vol > nbCells)
+            nMax = nMid;
+        else if(vol < nbCells)
+            nMin = nMid;
+    }
+
+    xN = nn[0], yN = nn[1], zN = nn[2];
 }

@@ -34,6 +34,10 @@ public:
     struct Cell
     {
         Cell() : na(NONE_INDEX) {}
+
+        Cell(const Standard_Integer* nodes)
+            : na(nodes[0]), nb(nodes[1]), nc(nodes[2]) {}
+
         Cell(Standard_Integer a, Standard_Integer b, Standard_Integer c)
             : na(a), nb(b), nc(c) {}
 
@@ -86,6 +90,11 @@ public:
     static Ptr Create(
         Standard_Integer nbNodes,
         Standard_Integer nbCells
+    );
+
+    static Ptr Create(
+        const std::vector<gp_Pnt>& nodes,
+        const std::vector<Cell>& cells
     );
 
 public:

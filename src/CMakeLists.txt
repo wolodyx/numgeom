@@ -42,6 +42,23 @@ generate_export_header(numgeom
   EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/numgeom_export.h
 )
 
+if(FLEX_FOUND AND BISON_FOUND)
+  flex_target(vtk_scanner vtk.l ${CMAKE_CURRENT_BINARY_DIR}/vtk_scanner.c)
+  bison_target(vtk_parser vtk.y ${CMAKE_CURRENT_BINARY_DIR}/vtk_parser.c)
+  add_flex_bison_dependency(vtk_scanner vtk_parser)
+
+  target_sources(numgeom
+    PRIVATE
+      ${BISON_vtk_parser_OUTPUTS}
+      ${FLEX_vtk_scanner_OUTPUTS}
+  )
+
+  target_include_directories(numgeom
+    PRIVATE
+      ${CMAKE_CURRENT_BINARY_DIR}
+  )
+endif()
+
 target_link_libraries(numgeom
   PUBLIC
     TKMath

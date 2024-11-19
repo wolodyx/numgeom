@@ -120,3 +120,15 @@ Standard_Boolean CTriMesh::Dump(
 
     return Standard_True;
 }
+
+
+TriMesh::Ptr TriMesh::Create(
+    const std::vector<gp_Pnt>& nodes,
+    const std::vector<Cell>& cells
+)
+{
+    auto mesh = Ptr(new TriMesh(0,0));
+    mesh->myNodes = std::move(nodes);
+    mesh->myCells = std::move(cells);
+    return mesh;
+}

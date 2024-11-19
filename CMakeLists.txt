@@ -8,6 +8,8 @@ project(NumGeom
 
 set(CMAKE_CXX_STANDARD 17)
 
+find_package(FLEX 2.6.4)
+find_package(BISON 3.8.2)
 find_package(OpenCASCADE CONFIG REQUIRED)
 find_package(GTest)
 find_package(nlohmann_json REQUIRED)

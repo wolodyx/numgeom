@@ -36,6 +36,11 @@ public:
         const std::vector<size_t>& rowSizes
     );
 
+    void Initialize(
+        size_t rows,
+        size_t elems
+    );
+
     size_t Size() const;
 
     size_t Size(size_t i) const;
@@ -52,7 +57,9 @@ public:
 
     size_t* Offsets();
 
-    void Append(size_t iRow,size_t element);
+    void Append(size_t iRow, size_t element);
+
+    void Clear();
 
 private:
     StaticJaggedArray(const StaticJaggedArray&) = delete;

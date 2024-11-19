@@ -55,6 +55,16 @@ void StaticJaggedArray::Initialize(
 }
 
 
+void StaticJaggedArray::Initialize(
+    size_t rows,
+    size_t elems
+)
+{
+    myData.resize(elems, -1);
+    myOffsets.resize(rows + 1, 0);
+}
+
+
 size_t StaticJaggedArray::Size() const
 {
     return myOffsets.size() - 1;
@@ -112,4 +122,11 @@ const size_t* StaticJaggedArray::Offsets() const
 size_t* StaticJaggedArray::Offsets()
 {
     return myOffsets.data();
+}
+
+
+void StaticJaggedArray::Clear()
+{
+    myData.clear();
+    myOffsets.clear();
 }

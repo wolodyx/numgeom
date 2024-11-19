@@ -100,7 +100,6 @@ void InsertNextValue(double val)
         else
         {
             s_fileData.cells.Data()[s_fileData.index] = static_cast<Standard_Integer>(val);
-            std::cout << s_fileData.index << ' ';
             ++s_fileData.index;
             --s_fileData.num;
         }

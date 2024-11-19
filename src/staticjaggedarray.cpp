@@ -9,20 +9,42 @@ StaticJaggedArray::StaticJaggedArray()
 }
 
 
-StaticJaggedArray::StaticJaggedArray(const std::vector<size_t>& rowSizes)
+StaticJaggedArray::StaticJaggedArray(
+    size_t rows,
+    size_t elems
+)
+    : myData(elems, -1), myOffsets(rows + 1, 0)
+{
+}
+
+
+StaticJaggedArray::StaticJaggedArray(
+    const std::vector<size_t>& data,
+    const std::vector<size_t>& offsets
+)
+: myData(data), myOffsets(offsets)
+{
+}
+
+
+StaticJaggedArray::StaticJaggedArray(
+    const std::vector<size_t>& rowSizes
+)
 {
     this->Initialize(rowSizes);
 }
 
 
-void StaticJaggedArray::Initialize(const std::vector<size_t>& rowSizes)
+void StaticJaggedArray::Initialize(
+    const std::vector<size_t>& rowSizes
+)
 {
-    m_offsets.clear();
-    m_data.clear();
+    myOffsets.clear();
+    myData.clear();
     size_t nElements = std::accumulate(rowSizes.begin(), rowSizes.end(), static_cast<size_t>(0));
-    m_data.resize(nElements, -1);
-    m_offsets.resize(rowSizes.size() + 1);
-    auto ito = m_offsets.begin();
+    myData.resize(nElements, -1);
+    myOffsets.resize(rowSizes.size() + 1);
+    auto ito = myOffsets.begin();
     (*ito) = 0;
     size_t offset = 0;
     for(auto rowSz : rowSizes)
@@ -35,25 +57,25 @@ void StaticJaggedArray::Initialize(const std::vector<size_t>& rowSizes)
 
 size_t StaticJaggedArray::Size() const
 {
-    return m_offsets.size() - 1;
+    return myOffsets.size() - 1;
 }
 
 
 size_t StaticJaggedArray::Size(size_t i) const
 {
-    return m_offsets[i + 1] - m_offsets[i];
+    return myOffsets[i + 1] - myOffsets[i];
 }
 
 
 const size_t* StaticJaggedArray::operator[](size_t i) const
 {
-    return &m_data[m_offsets[i]];
+    return &myData[myOffsets[i]];
 }
 
 
 size_t* StaticJaggedArray::operator[](size_t i)
 {
-    return &m_data[m_offsets[i]];
+    return &myData[myOffsets[i]];
 }
 
 
@@ -66,4 +88,28 @@ void StaticJaggedArray::Append(size_t iRow, size_t element)
         ++i;
     assert(i < rowSz);
     row[i] = element;
+}
+
+
+const size_t* StaticJaggedArray::Data() const
+{
+    return myData.data();
+}
+
+
+size_t* StaticJaggedArray::Data()
+{
+    return myData.data();
+}
+
+
+const size_t* StaticJaggedArray::Offsets() const
+{
+    return myOffsets.data();
+}
+
+
+size_t* StaticJaggedArray::Offsets()
+{
+    return myOffsets.data();
 }

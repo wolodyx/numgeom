@@ -18,9 +18,23 @@ public:
 
     StaticJaggedArray();
 
-    StaticJaggedArray(const std::vector<size_t>& rowSizes);
+    StaticJaggedArray(
+        size_t rows,
+        size_t elems
+    );
 
-    void Initialize(const std::vector<size_t>& rowSizes);
+    StaticJaggedArray(
+        const std::vector<size_t>& data,
+        const std::vector<size_t>& offsets
+    );
+
+    StaticJaggedArray(
+        const std::vector<size_t>& rowSizes
+    );
+
+    void Initialize(
+        const std::vector<size_t>& rowSizes
+    );
 
     size_t Size() const;
 
@@ -30,10 +44,22 @@ public:
 
     size_t* operator[](size_t i);
 
-    void Append(size_t iRow, size_t element);
+    const size_t* Data() const;
+
+    size_t* Data();
+
+    const size_t* Offsets() const;
+
+    size_t* Offsets();
+
+    void Append(size_t iRow,size_t element);
 
 private:
-    std::vector<size_t> m_data;
-    std::vector<size_t> m_offsets;
+    StaticJaggedArray(const StaticJaggedArray&) = delete;
+    void operator=(const StaticJaggedArray&) = delete;
+
+private:
+    std::vector<size_t> myData;
+    std::vector<size_t> myOffsets;
 };
 #endif // !numgeom_numgeom_staticjaggedarray_h

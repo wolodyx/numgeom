@@ -13,6 +13,7 @@ find_package(BISON 3.8.2)
 find_package(OpenCASCADE CONFIG REQUIRED)
 find_package(GTest)
 find_package(nlohmann_json REQUIRED)
+find_package(OpenGL REQUIRED)
 
 include(GenerateExportHeader)
 

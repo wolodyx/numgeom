@@ -6,7 +6,8 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows"
-      }
+      },
+      "binaryDir": "${sourceDir}/bld"
     },
     {
       "name": "linux-release",
@@ -14,7 +15,8 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux",
         "CMAKE_BUILD_TYPE": "Release"
-      }
+      },
+      "binaryDir": "${sourceDir}/bld/linux-release"
     }
   ]
 }

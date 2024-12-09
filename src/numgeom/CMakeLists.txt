@@ -35,6 +35,7 @@ set(SOURCE_FILES
 )
 
 add_library(numgeom ${SOURCE_FILES})
+add_library(numgeom::numgeom ALIAS numgeom)
 
 set_target_properties(numgeom PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
@@ -73,6 +74,7 @@ endif()
 
 target_link_libraries(numgeom
   PUBLIC
+    numgeom::core
     TKMath
     TKG3d
     TKernel

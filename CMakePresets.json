@@ -16,7 +16,22 @@
         "VCPKG_TARGET_TRIPLET": "x64-linux",
         "CMAKE_BUILD_TYPE": "Release"
       },
+      "environment": {
+        "LD_LIBRARY_PATH": "/usr/lib64"
+      },
       "binaryDir": "${sourceDir}/bld/linux-release"
+    },
+    {
+      "name": "linux-debug",
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "LD_LIBRARY_PATH": "/usr/lib64"
+      },
+      "binaryDir": "${sourceDir}/bld/linux-debug"
     }
   ]
 }

@@ -14,6 +14,11 @@ find_package(OpenCASCADE CONFIG REQUIRED)
 find_package(GTest)
 find_package(nlohmann_json REQUIRED)
 find_package(OpenGL REQUIRED)
+find_package(GLEW REQUIRED)
+find_package(Qt5 COMPONENTS Core Gui Widgets OpenGL REQUIRED)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
 
 include(GenerateExportHeader)
 

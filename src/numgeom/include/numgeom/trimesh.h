@@ -150,6 +150,8 @@ public:
 
     Cell& GetCell(Standard_Integer);
 
+    void Transform(const gp_Trsf&);
+
 private:
     TriMesh(Standard_Integer nbNodes, Standard_Integer nbCells);
 };

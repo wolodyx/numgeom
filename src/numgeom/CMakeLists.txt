@@ -8,6 +8,7 @@ set(PUBLIC_HEADERS
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
+  include/numgeom/shapes.h
   include/numgeom/staticjaggedarray.h
   include/numgeom/tesselate.h
   include/numgeom/trimesh.h
@@ -26,6 +27,7 @@ set(SOURCE_FILES
   octree.cpp
   quadtree.cpp
   removefaces.cpp
+  shapes.cpp
   staticjaggedarray.cpp
   tesselate.cpp
   trimesh.cpp

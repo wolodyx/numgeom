@@ -1,5 +1,7 @@
 #include "numgeom/trimesh.h"
 
+#include <algorithm>
+
 #include "numgeom/trimeshconnectivity.h"
 
 
@@ -131,4 +133,18 @@ TriMesh::Ptr TriMesh::Create(
     mesh->myNodes = std::move(nodes);
     mesh->myCells = std::move(cells);
     return mesh;
+}
+
+
+void TriMesh::Transform(const gp_Trsf& tr)
+{
+    std::transform(
+        myNodes.begin(),
+        myNodes.end(),
+        myNodes.begin(),
+        [&](const gp_Pnt& pt)
+        {
+            return pt.Transformed(tr);
+        }
+    );
 }

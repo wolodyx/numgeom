@@ -19,10 +19,11 @@ cd vcpkg
 mv vcpkg ~/bin/vcpkg
 export VCPKG_ROOT=$HOME/vcpkg
 
-
 # Install external dependencies
-vcpkg install     \
-    gtest         \
-    nlohmann-json \
+vcpkg install             \
+    gtest                 \
+    nlohmann-json         \
+    vulkan-sdk-components \
+    qt5                   \
+    qt5-wayland           \
     opencascade
-

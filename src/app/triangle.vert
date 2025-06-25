@@ -1,22 +1,26 @@
-#version 450
+#version 420 core
 
-// Выходные переменные
-layout(location = 0) out vec3 fragColor;
+layout(std140, set = 0, binding = 0) uniform block {
+    uniform mat4 modelviewMatrix;
+    uniform mat4 modelviewprojectionMatrix;
+    uniform mat3 normalMatrix;
+};
 
-// Координаты треугольника и цвета (в NDC пространстве)
-vec2 positions[3] = vec2[](
-    vec2(0.0, -0.5),  // Верхняя вершина
-    vec2(0.5, 0.5),   // Правая нижняя
-    vec2(-0.5, 0.5)   // Левая нижняя
-);
+layout(location = 0) in vec4 in_position;
+layout(location = 1) in vec4 in_color;
+layout(location = 2) in vec3 in_normal;
 
-vec3 colors[3] = vec3[](
-    vec3(1.0, 0.0, 0.0), // Красный
-    vec3(0.0, 1.0, 0.0), // Зеленый
-    vec3(0.0, 0.0, 1.0)  // Синий
-);
+vec4 lightSource = vec4(2.0, 2.0, 20.0, 0.0);
 
-void main() {
-    gl_Position = vec4(positions[gl_VertexIndex], 0.0, 1.0);
-    fragColor = colors[gl_VertexIndex];
+layout(location = 0) out vec4 vVaryingColor;
+
+void main()
+{
+    gl_Position = modelviewprojectionMatrix * in_position;
+    vec3 vEyeNormal = normalMatrix * in_normal;
+    vec4 vPosition4 = modelviewMatrix * in_position;
+    vec3 vPosition3 = vPosition4.xyz / vPosition4.w;
+    vec3 vLightDir = normalize(lightSource.xyz - vPosition3);
+    float diff = max(0.0, dot(vEyeNormal, vLightDir));
+    vVaryingColor = vec4(diff * in_color.rgb, 1.0);
 }

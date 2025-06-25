@@ -1,11 +1,9 @@
-#version 450
+#version 420 core
 
-// Входные переменные (должны соответствовать вершинному шейдеру)
-layout(location = 0) in vec3 fragColor;
+layout(location = 0) in vec4 vVaryingColor;
+layout(location = 0) out vec4 f_color;
 
-// Выходной цвет
-layout(location = 0) out vec4 outColor;
-
-void main() {
-    outColor = vec4(fragColor, 1.0); // RGB + альфа
+void main()
+{
+    f_color = vVaryingColor;
 }

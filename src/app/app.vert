@@ -1,8 +1,8 @@
 #version 420 core
 
 layout(std140, set = 0, binding = 0) uniform block {
-    uniform mat4 modelviewMatrix;
-    uniform mat4 modelviewprojectionMatrix;
+    uniform mat4 mvMatrix;
+    uniform mat4 mvpMatrix;
     uniform mat3 normalMatrix;
 };
 
@@ -16,9 +16,9 @@ layout(location = 0) out vec4 vVaryingColor;
 
 void main()
 {
-    gl_Position = modelviewprojectionMatrix * in_position;
+    gl_Position = mvpMatrix * in_position;
     vec3 vEyeNormal = normalMatrix * in_normal;
-    vec4 vPosition4 = modelviewMatrix * in_position;
+    vec4 vPosition4 = mvMatrix * in_position;
     vec3 vPosition3 = vPosition4.xyz / vPosition4.w;
     vec3 vLightDir = normalize(lightSource.xyz - vPosition3);
     float diff = max(0.0, dot(vEyeNormal, vLightDir));

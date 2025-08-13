@@ -33,7 +33,7 @@ target_link_libraries(render
     numgeom::core
     TKMath
   PRIVATE
-    GLEW::glew
+#    GLEW::glew
     OpenGL::GL
     glm::glm
 )

@@ -11,7 +11,6 @@ int main(int argc, char *argv[])
    struct vkcube vc;
 
    vc.model = cube_model;
-   vc.wl.surface = nullptr;
    vc.width = width;
    vc.height = height;
    gettimeofday(&vc.start_tv, nullptr);

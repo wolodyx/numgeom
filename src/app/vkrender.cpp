@@ -1,6 +1,7 @@
 #include "vkrender.h"
 
 #include <cassert>
+#include <cstdlib>
 
 #include <stdio.h>
 #include <string.h>
@@ -15,7 +16,7 @@
 {
    vfprintf(stderr, format, args);
    fprintf(stderr, "\n");
-   exit(1);
+   std::exit(1);
 }
 
 [[noreturn]] void printflike(1,2)
@@ -48,9 +49,13 @@ static void init_vk(struct vkcube *vc)
       .pApplicationName = "numgeom",
       .apiVersion = VK_MAKE_VERSION(1, 1, 0),
    };
-   const char* enabledExtensionNames[2]  = {
+   const char* enabledExtensionNames[]  = {
       VK_KHR_SURFACE_EXTENSION_NAME,
+#ifdef ENABLE_WAYLAND
       VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME,
+#elif ENABLE_XCB
+      VK_KHR_XCB_SURFACE_EXTENSION_NAME,
+#endif
    };
    VkInstanceCreateInfo instanceCreateInfo {
       .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
@@ -359,6 +364,9 @@ create_swapchain(struct vkcube *vc)
    }
 }
 
+
+#ifdef ENABLE_WAYLAND
+
 /* Wayland display code - render to Wayland window */
 
 static void
@@ -431,7 +439,7 @@ handle_wl_keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
 		       uint32_t state)
 {
     if (key == KEY_ESC && state == WL_KEYBOARD_KEY_STATE_PRESSED)
-      exit(0);
+      std::exit(0);
 }
 
 static void
@@ -505,9 +513,11 @@ static const struct wl_registry_listener registry_listener = {
    registry_handle_global_remove
 };
 
-// Return -1 on failure.
-int init_display(struct vkcube *vc)
+
+int init_wayland_display(struct vkcube *vc)
 {
+   vc->wl.surface = nullptr;
+
    vc->wl.display = wl_display_connect(nullptr);
    if (!vc->wl.display)
       return -1;
@@ -574,6 +584,116 @@ int init_display(struct vkcube *vc)
 
    return 0;
 }
+#endif
+
+
+static int init_xcb_display(struct vkcube *vc)
+{
+   vc->surface = nullptr;
+
+   int screenNumber = 0;
+   xcb_connection_t* connection = xcb_connect(nullptr, &screenNumber);
+   if(xcb_connection_has_error(connection))
+      fail("Failed to connect to X server");
+
+   xcb_screen_t* screen = nullptr;
+   {
+      xcb_screen_iterator_t it = xcb_setup_roots_iterator(xcb_get_setup(connection));
+      for(int i = 0; i < screenNumber; ++i)
+         xcb_screen_next(&it);
+      screen = it.data;
+   }
+   assert(screen != nullptr);
+
+   uint32_t value_list[2];
+
+   xcb_window_t window = xcb_generate_id(connection);
+   value_list[0] = screen->black_pixel,
+   value_list[1] = XCB_EVENT_MASK_EXPOSURE |
+                   XCB_EVENT_MASK_RESIZE_REDIRECT |
+                   XCB_EVENT_MASK_KEY_PRESS |
+                   XCB_EVENT_MASK_KEY_RELEASE |
+                   XCB_EVENT_MASK_POINTER_MOTION |
+                   XCB_EVENT_MASK_BUTTON_PRESS |
+                   XCB_EVENT_MASK_BUTTON_RELEASE;
+   xcb_void_cookie_t cookieWindow = xcb_create_window_checked(
+      connection,
+      XCB_COPY_FROM_PARENT,
+      window,
+      screen->root,
+      0, 0, vc->width, vc->height,
+      0,
+      XCB_WINDOW_CLASS_INPUT_OUTPUT,
+      screen->root_visual,
+      XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
+      value_list
+   );
+
+   xcb_generic_error_t* err = xcb_request_check(connection, cookieWindow);
+   assert(err == nullptr);
+
+   // Код, который в будущем позволит отправить уведомление при уничтожении окна.
+   xcb_intern_atom_cookie_t cookie1 = xcb_intern_atom(connection, 1, 12, "WM_PROTOCOLS");
+   xcb_intern_atom_reply_t* reply = xcb_intern_atom_reply(connection, cookie1, 0);
+   xcb_intern_atom_cookie_t cookie2 = xcb_intern_atom(connection, 0, 16,"WM_DELETE_WINDOW");
+   xcb_intern_atom_reply_t* atomReply = xcb_intern_atom_reply(connection, cookie2, 0);
+   xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window,
+       (*reply).atom, 4, 32, 1, &(*atomReply).atom);
+   free(reply);
+
+   // Устанавливаем заголовок окна.
+   const char* title = "numgeom";
+   xcb_change_property(connection, XCB_PROP_MODE_REPLACE, window,
+       XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 8, strlen(title), title);
+   xcb_void_cookie_t cookieMap = xcb_map_window_checked(connection, window);
+   err = xcb_request_check(connection, cookieMap);
+   assert(err == nullptr);
+
+   xcb_flush(connection);
+
+   vc->xcb.connection = connection;
+   vc->xcb.window = window;
+
+   init_vk(vc);
+
+   // Создаем поверхность Vulkan.
+   VkXcbSurfaceCreateInfoKHR surfaceCreateInfoKHR {
+      .sType = VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR,
+      .pNext = nullptr,
+      .connection = vc->xcb.connection,
+      .window = vc->xcb.window
+   };
+   VkResult r;
+   r = vkCreateXcbSurfaceKHR(
+      vc->instance,
+      &surfaceCreateInfoKHR,
+      nullptr,
+      &vc->surface
+   );
+   assert(r == VK_SUCCESS);
+   assert(vc->surface != nullptr);
+
+   vc->image_format = choose_surface_format(vc);
+
+   init_vk_objects(vc);
+
+   create_swapchain(vc);
+
+   return 0;
+}
+
+
+int init_display(struct vkcube *vc)
+{
+#ifdef ENABLE_WAYLAND
+    return init_wayland_display(vc);
+#elif ENABLE_XCB
+    return init_xcb_display(vc);
+#else
+    return -1;
+#endif
+}
+
 
 static void
 fini_buffer(struct vkcube *vc, struct vkcube_buffer *b)
@@ -596,7 +716,9 @@ recreate_swapchain(struct vkcube *vc)
    create_swapchain(vc);
 }
 
-void mainloop(struct vkcube *vc)
+
+#ifdef ENABLE_WAYLAND
+void mainloop_wayland(struct vkcube *vc)
 {
    VkResult result = VK_SUCCESS;
    struct pollfd fds[] = {
@@ -647,4 +769,77 @@ void mainloop(struct vkcube *vc)
 
       vkQueueWaitIdle(vc->queue);
    }
+}
+#endif
+
+
+void mainloop_xcb(struct vkcube *vc)
+{
+   VkResult result = VK_SUCCESS;
+   bool quit = false;
+   while(!quit) {
+      xcb_generic_event_t* event = xcb_poll_for_event(vc->xcb.connection);
+      if(event) {
+         switch(event->response_type & ~0x80) {
+            case XCB_EXPOSE: //< Перерисовать окно.
+               xcb_flush(vc->xcb.connection);
+               break;
+            case XCB_KEY_PRESS: { //< Нажата клавиша.
+               auto* key_event = (xcb_key_press_event_t*)(event);
+               // Выходим по нажатию клавиш `esc` или `q`.
+               if(key_event->detail == 0x9 || key_event->detail == 0x18)
+                  quit = true;
+               break;
+            }
+            case XCB_RESIZE_REQUEST:
+               break;
+            default:
+               //std::cout << "opcode = " << (event->response_type & ~0x80) << std::endl;
+               continue;
+         }
+
+         free(event);
+      }
+
+      uint32_t index;
+
+      result = vkAcquireNextImageKHR(vc->device, vc->swap_chain, 60,
+                                        vc->semaphore, VK_NULL_HANDLE, &index);
+      if (result == VK_SUBOPTIMAL_KHR ||
+         result == VK_ERROR_OUT_OF_DATE_KHR) {
+         recreate_swapchain(vc);
+         continue;
+      } else if (result == VK_NOT_READY ||
+         result == VK_TIMEOUT) {
+         continue;
+      } else if (result != VK_SUCCESS) {
+         return;
+      }
+
+      assert(index <= MAX_NUM_IMAGES);
+      vc->model.render(vc, &vc->buffers[index], true);
+
+      VkPresentInfoKHR presentInfoKHR {
+         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
+         .swapchainCount = 1,
+         .pSwapchains = &vc->swap_chain,
+         .pImageIndices = &index,
+         .pResults = &result,
+      };
+      vkQueuePresentKHR(vc->queue, &presentInfoKHR);
+      if (result != VK_SUCCESS)
+         return;
+
+      vkQueueWaitIdle(vc->queue);
+   }
+}
+
+
+void mainloop(vkcube *vc)
+{
+#ifdef ENABLE_WAYLAND
+    mainloop_wayland(vc);
+#elif ENABLE_XCB
+    mainloop_xcb(vc);
+#endif
 }

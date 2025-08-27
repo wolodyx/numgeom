@@ -12,12 +12,9 @@ set(SHADER_FILES
   app.frag
 )
 
-add_executable(app ${SOURCE_FILES})
+set(DISPLAY_MODE "xcb_mode") # wayland_mode, xcb_mode
 
-target_compile_definitions(app
-  PUBLIC
-    ENABLE_WAYLAND
-)
+add_executable(app ${SOURCE_FILES})
 
 target_link_libraries(app
   Vulkan::Vulkan
@@ -27,6 +24,17 @@ target_link_libraries(app
   Qt5::Widgets
   Qt5::Gui
 )
+
+if(DISPLAY_MODE STREQUAL "wayland_mode")
+  target_compile_definitions(app PUBLIC ENABLE_WAYLAND)
+  target_link_libraries(app
+    Wayland::Client
+    SDL2::SDL2
+  )
+elseif(DISPLAY_MODE STREQUAL "xcb_mode")
+  target_compile_definitions(app PUBLIC ENABLE_XCB)
+else()
+endif()
 
 # Добавляем шейдерные файлы в проект.
 if(DEFINED SHADER_FILES)

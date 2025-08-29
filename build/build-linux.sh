@@ -10,9 +10,9 @@ fi
 rm -rf bld
 mkdir bld
 cd bld
-cmake --preset=linux-release ..
-cmake --build .
+cmake --preset=linux-debug ..
+cmake --build ./linux-debug
 ctest
-cmake --install .
+cmake --install ./linux-debug
 cpack -G "ZIP" -B .
 

@@ -5,13 +5,7 @@
 #include <vulkan/vulkan.h>
 
 #if defined(ENABLE_WAYLAND)
-#include <wayland-client.h>
-#include </home/tim/vcpkg/buildtrees/sdl2/x64-linux-rel/wayland-generated-protocols/xdg-shell-client-protocol.h>
-#include "vulkan/vulkan_wayland.h"
-#define VK_USE_PLATFORM_WAYLAND_KHR
-#elif defined(ENABLE_XCB)
-#include <xcb/xcb.h>
-#include "vulkan/vulkan_xcb.h"
+#  define VK_USE_PLATFORM_WAYLAND_KHR
 #endif
 
 #define printflike(a, b) __attribute__((format(printf, (a), (b))))
@@ -40,27 +34,6 @@ struct model {
 
 struct vkcube {
     struct model model;
-
-#if defined(ENABLE_WAYLAND)
-    struct {
-        struct wl_display *display;
-        struct wl_compositor *compositor;
-        struct xdg_wm_base *shell;
-        struct wl_keyboard *keyboard;
-        struct wl_seat *seat;
-        struct wl_surface *surface;
-        struct xdg_surface *xdg_surface;
-        struct xdg_toplevel *xdg_toplevel;
-        bool wait_for_configure;
-    } wl;
-#elif defined(ENABLE_XCB)
-    struct {
-        xcb_connection_t* connection;
-        xcb_window_t window;
-        // xcb_atom_t atom_wm_protocols;
-        // xcb_atom_t atom_wm_delete_window;
-    } xcb;
-#endif
 
     VkSwapchainKHR swap_chain;
 

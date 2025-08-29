@@ -1,4 +1,4 @@
-#include "common.h"
+#include "numgeom/common.h"
 
 #include <sys/time.h>
 
@@ -407,8 +407,10 @@ init_cube(struct vkcube *vc)
                           0, nullptr);
 }
 
-static void
-render_cube(struct vkcube *vc, struct vkcube_buffer *b, bool wait_semaphore)
+static void render_cube(
+   struct vkcube *vc,
+   struct vkcube_buffer *b,
+   bool wait_semaphore)
 {
    struct ubo ubo;
    struct timeval tv;

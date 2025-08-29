@@ -2,16 +2,18 @@
 
 #include <QMenu>
 #include <QMenuBar>
+#include <QLabel>
 
-#include "openglwidget.h"
+#include "vulkanwidget.h"
 
 
 MainWindow::MainWindow()
 {
-    this->createActions();
+    //this->createActions();
 
-    auto* oglPanel = new OpenGLWidget(this);
-    this->setCentralWidget(oglPanel);
+    //auto centralWidget = new QLabel(tr("hello"));
+    auto w = new VulkanWidget;
+    this->setCentralWidget(w);
 }
 
 

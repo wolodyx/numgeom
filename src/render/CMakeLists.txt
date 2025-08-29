@@ -1,14 +1,23 @@
 set(PUBLIC_HEADERS
+  include/numgeom/common.h
   include/numgeom/sceneitem.h
   include/numgeom/scenemanager.h
   include/numgeom/shaderprogram.h
+  include/numgeom/vkrender.h
+)
+
+set(SHADER_FILES
+  app.vert
+  app.frag
 )
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
+  cube.cpp
   sceneitem.cpp
   scenemanager.cpp
   shaderprogram.cpp
+  vkrender.cpp
 )
 
 add_library(render ${SOURCE_FILES})
@@ -33,7 +42,46 @@ target_link_libraries(render
     numgeom::core
     TKMath
   PRIVATE
-#    GLEW::glew
-    OpenGL::GL
+    Vulkan::Vulkan
     glm::glm
 )
+
+if(ENABLE_WAYLAND)
+  target_link_libraries(render
+    PUBLIC
+      SDL2::SDL2
+      Wayland::Client
+      xdg-shell-client
+  )
+  target_compile_definitions(render PUBLIC ENABLE_WAYLAND)
+  target_sources(render PRIVATE connect-wayland.cpp)
+endif()
+
+if(ENABLE_XCB)
+  target_link_libraries(render
+    PUBLIC
+      xcb::xcb
+  )
+  target_compile_definitions(render PUBLIC ENABLE_XCB)
+  target_sources(render PRIVATE connect-xcb.cpp)
+endif()
+
+# Добавляем шейдерные файлы в проект.
+if(DEFINED SHADER_FILES)
+  foreach(file IN LISTS SHADER_FILES)
+    add_custom_command(
+      OUTPUT ${file}.spv.h
+      COMMAND
+        "$<TARGET_FILE:glslang::glslang-standalone>"
+          -V ${CMAKE_CURRENT_SOURCE_DIR}/${file}
+          -o ${file}.spv
+      COMMAND
+        bash -c "${CMAKE_CURRENT_SOURCE_DIR}/binary2text.sh ${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
+      DEPENDS ${file}
+    )
+    target_sources(render PRIVATE ${file}.spv.h)
+  endforeach()
+
+  target_include_directories(render PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+endif()
+

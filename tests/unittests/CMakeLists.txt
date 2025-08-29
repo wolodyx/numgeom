@@ -5,7 +5,6 @@ set(SOURCE_FILES
   testoctree.cpp
   testquadtree.cpp
   testremovefaces.cpp
-  testrender.cpp
   testtrimesh.cpp
   utilities.cpp             utilities.h
 )
@@ -25,7 +24,6 @@ target_include_directories(unittests
 target_link_libraries(unittests
   GTest::gtest_main
   numgeom
-  numgeom::render
 )
 
 include(GoogleTest)

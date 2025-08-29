@@ -1,0 +1,21 @@
+{
+    "name": "numgeom",
+
+    "image": "numgeom-app:latest",
+    //"build": {
+    //    "dockerfile": "../build/Dockerfile"
+    //},
+
+    "remoteEnv": {
+        "DISPLAY": "${localEnv:DISPLAY}",
+        "HOST_PROJECT_PATH": "${localWorkspaceFolder}"
+    },
+
+    "remoteUser": "tim",
+
+    "runArgs": [
+        "--privileged",
+        "--network=host",
+        "--volume=/tmp/.X11-unix:/tmp/.X11-unix"
+    ]
+}

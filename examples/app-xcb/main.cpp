@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     vc.model = cube_model;
     vc.width = width;
     vc.height = height;
-    gettimeofday(&vc.start_tv, nullptr);
+    vc.start_tv = std::chrono::system_clock::now();
     xcb_connection xcb;
     init_xcb_display(&vc, &xcb);
     mainloop_xcb(&vc, &xcb);

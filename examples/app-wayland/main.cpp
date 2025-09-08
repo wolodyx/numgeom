@@ -13,7 +13,7 @@ int main(int argc, char* argv[])
     vc.model = cube_model;
     vc.width = width;
     vc.height = height;
-    gettimeofday(&vc.start_tv, nullptr);
+    vc.start_tv = std::chrono::system_clock::now();
     wl_connection wl;
     init_wayland_display(&vc, &wl);
     mainloop_wayland(&vc, &wl);

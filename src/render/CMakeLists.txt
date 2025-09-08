@@ -42,6 +42,7 @@ target_link_libraries(render
   PRIVATE
     Vulkan::Vulkan
     glm::glm
+    Boost::log
 )
 
 if(ENABLE_WAYLAND)

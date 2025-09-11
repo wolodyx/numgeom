@@ -75,7 +75,7 @@ Standard_Boolean ReadFromFile(
     if(ext == ".step" || ext == ".stp")
     {
         STEPControl_Reader reader;
-        std::string str = fileName.u8string();
+        std::string str = fileName.string();
         if(reader.ReadFile(str.c_str()) != IFSelect_RetDone)
             return Standard_False;
         Standard_Integer NbRoots = reader.NbRootsForTransfer();
@@ -108,7 +108,7 @@ Standard_Boolean WriteToStep(
 {
     STEPControl_Writer writer;
     writer.Transfer(shape, STEPControl_AsIs, Standard_True);
-    auto rc = writer.Write(fileName.u8string().c_str());
+    auto rc = writer.Write(fileName.string().c_str());
     if(rc != IFSelect_RetDone)
         return Standard_False;
     return Standard_True;

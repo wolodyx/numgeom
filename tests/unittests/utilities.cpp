@@ -48,7 +48,7 @@ TopoDS_Shape LoadFromFile(const std::filesystem::path& fileName)
     if(ext == ".step" || ext == ".stp")
     {
         STEPControl_Reader reader;
-        std::string str = fileName.u8string();
+        std::string str = fileName.string();
         if(reader.ReadFile(str.c_str()) != IFSelect_RetDone)
             return TopoDS_Shape();
         //reader.PrintCheckLoad(false, IFSelect_ListByItem);

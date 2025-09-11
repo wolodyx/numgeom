@@ -2,6 +2,7 @@
 
 #include <cassert>
 #include <cstdlib>
+#include <format>
 
 #include <stdio.h>
 #include <string.h>
@@ -12,41 +13,17 @@
 
 #include <xcb/xproto.h>
 
+#include "boost/log/trivial.hpp"
+
 #include "numgeom/common.h"
 
-#include "numgeom/connect-wayland.h"
-#include "numgeom/connect-xcb.h"
+#ifdef ENABLE_WAYLAND
+#  include "numgeom/connect-wayland.h"
+#endif
+#ifdef ENABLE_XCB
+#  include "numgeom/connect-xcb.h"
+#endif
 
-
-[[noreturn]] void failv(const char *format, va_list args)
-{
-    vfprintf(stderr, format, args);
-    fprintf(stderr, "\n");
-    std::exit(1);
-}
-
-[[noreturn]] void printflike(1,2)
-fail(const char *format, ...)
-{
-    va_list args;
-
-    va_start(args, format);
-    failv(format, args);
-    va_end(args);
-}
-
-void printflike(2, 3)
-fail_if(int cond, const char *format, ...)
-{
-    va_list args;
-
-    if (!cond)
-        return;
-
-    va_start(args, format);
-    failv(format, args);
-    va_end(args);
-}
 
 /**
 \brief Инициализация и выбор объектов vulkan:
@@ -84,14 +61,16 @@ void init_vulkan(
         nullptr,
         &vc->instance
     );
-    fail_if(res != VK_SUCCESS, "Failed to create Vulkan instance.\n");
+    if(res != VK_SUCCESS)
+        BOOST_LOG_TRIVIAL(fatal) << "Failed to create Vulkan instance.";
 
     // Выбор физического устройства vulkan.
     uint32_t count;
     res = vkEnumeratePhysicalDevices(vc->instance, &count, nullptr);
-    fail_if(res != VK_SUCCESS || count == 0, "No Vulkan devices found.\n");
-    VkPhysicalDevice pd[count];
-    vkEnumeratePhysicalDevices(vc->instance, &count, pd);
+    if(res != VK_SUCCESS || count == 0)
+        BOOST_LOG_TRIVIAL(fatal) << "No Vulkan devices found.";
+    std::vector<VkPhysicalDevice> pd(count);
+    vkEnumeratePhysicalDevices(vc->instance, &count, pd.data());
     vc->physical_device = pd[0];
 
     // Получаем свойства памятий.
@@ -100,8 +79,8 @@ void init_vulkan(
     // Выбираем семейство очередей.
     vkGetPhysicalDeviceQueueFamilyProperties(vc->physical_device, &count, nullptr);
     assert(count > 0);
-    VkQueueFamilyProperties props[count];
-    vkGetPhysicalDeviceQueueFamilyProperties(vc->physical_device, &count, props);
+    std::vector<VkQueueFamilyProperties> props(count);
+    vkGetPhysicalDeviceQueueFamilyProperties(vc->physical_device, &count, props.data());
     assert(props[0].queueFlags & VK_QUEUE_GRAPHICS_BIT);
 
     // Создаем логическое устройство vulkan.
@@ -112,14 +91,15 @@ void init_vulkan(
         .queueCount = 1,
         .pQueuePriorities = queuePriorities,
     };
+    std::vector<const char*> deviceEnabledExtensionNames = {
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+    };
     VkDeviceCreateInfo deviceCreateInfo {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1,
         .pQueueCreateInfos = &queueCreateInfo,
-        .enabledExtensionCount = 1,
-        .ppEnabledExtensionNames = (const char * const []) {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-        },
+        .enabledExtensionCount = static_cast<uint32_t>(deviceEnabledExtensionNames.size()),
+        .ppEnabledExtensionNames = deviceEnabledExtensionNames.data(),
     };
     vkCreateDevice(
         vc->physical_device,
@@ -308,13 +288,13 @@ choose_surface_format(vkcube *vc)
     );
     assert(num_formats > 0);
 
-    VkSurfaceFormatKHR formats[num_formats];
+    std::vector<VkSurfaceFormatKHR> formats(num_formats);
 
     vkGetPhysicalDeviceSurfaceFormatsKHR(
         vc->physical_device,
         vc->surface,
         &num_formats,
-        formats
+        formats.data()
     );
 
     VkFormat format = VK_FORMAT_UNDEFINED;
@@ -371,12 +351,12 @@ static void create_swapchain(vkcube* vc)
         &count,
         nullptr
     );
-    VkPresentModeKHR present_modes[count];
+    std::vector<VkPresentModeKHR> present_modes(count);
     vkGetPhysicalDeviceSurfacePresentModesKHR(
         vc->physical_device,
         vc->surface,
         &count,
-        present_modes
+        present_modes.data()
     );
     int i;
     VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
@@ -389,9 +369,11 @@ static void create_swapchain(vkcube* vc)
 
     uint32_t minImageCount = 2;
     if(minImageCount < surface_caps.minImageCount) {
-        if (surface_caps.minImageCount > MAX_NUM_IMAGES)
-            fail("surface_caps.minImageCount is too large (is: %d, max: %d)",
-                 surface_caps.minImageCount, MAX_NUM_IMAGES);
+        if (surface_caps.minImageCount > MAX_NUM_IMAGES) {
+            BOOST_LOG_TRIVIAL(fatal) << std::format("surface_caps.minImageCount is too large (is: {}, max: {})",
+                                                    surface_caps.minImageCount,
+                                                    MAX_NUM_IMAGES);
+        }
         minImageCount = surface_caps.minImageCount;
     }
 
@@ -431,12 +413,12 @@ static void create_swapchain(vkcube* vc)
         nullptr
     );
     assert(vc->image_count > 0);
-    VkImage swap_chain_images[vc->image_count];
+    std::vector<VkImage> swap_chain_images(vc->image_count);
     vkGetSwapchainImagesKHR(
         vc->device,
         vc->swap_chain,
         &vc->image_count,
-        swap_chain_images
+        swap_chain_images.data()
     );
 
     assert(vc->image_count <= MAX_NUM_IMAGES);

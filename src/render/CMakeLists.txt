@@ -2,7 +2,6 @@ set(PUBLIC_HEADERS
   include/numgeom/common.h
   include/numgeom/sceneitem.h
   include/numgeom/scenemanager.h
-  include/numgeom/shaderprogram.h
   include/numgeom/vkrender.h
 )
 
@@ -16,7 +15,6 @@ set(SOURCE_FILES
   cube.cpp
   sceneitem.cpp
   scenemanager.cpp
-  shaderprogram.cpp
   vkrender.cpp
 )
 

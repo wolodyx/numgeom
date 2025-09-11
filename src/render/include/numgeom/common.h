@@ -1,5 +1,5 @@
 #include <stdarg.h>
-#include <sys/time.h>
+#include <chrono>
 
 #define VK_PROTOTYPES
 #include <vulkan/vulkan.h>
@@ -7,8 +7,6 @@
 #if defined(ENABLE_WAYLAND)
 #  define VK_USE_PLATFORM_WAYLAND_KHR
 #endif
-
-#define printflike(a, b) __attribute__((format(printf, (a), (b))))
 
 #define MAX_NUM_IMAGES 5
 
@@ -56,13 +54,9 @@ struct vkcube {
     void *map;
     uint32_t vertex_offset, colors_offset, normals_offset;
 
-    struct timeval start_tv;
+    std::chrono::time_point<std::chrono::system_clock> start_tv;
     VkSurfaceKHR surface;
     VkFormat image_format;
     struct vkcube_buffer buffers[MAX_NUM_IMAGES];
     uint32_t image_count;
 };
-
-[[noreturn]] void failv(const char *format, va_list args);
-[[noreturn]] void fail(const char *format, ...) printflike(1, 2) ;
-void fail_if(int cond, const char *format, ...) printflike(2, 3);

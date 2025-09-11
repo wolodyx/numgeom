@@ -24,4 +24,3 @@ vcpkg install gtest nlohmann-json
 vcpkg install vulkan-sdk-components glslang[tools]
 #vcpkg install opencascade
 vcpkg install qt5-base[vulkan]
-

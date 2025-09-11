@@ -1,7 +1,5 @@
 #include "numgeom/common.h"
 
-#include <sys/time.h>
-
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #include "glm/mat4x4.hpp"
 #include "glm/gtc/type_ptr.hpp"

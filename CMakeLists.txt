@@ -35,9 +35,6 @@ endif()
 
 if(ENABLE_QT)
   find_package(Qt5 COMPONENTS Core Gui Widgets OpenGL REQUIRED)
-  set(CMAKE_AUTOMOC ON)
-  set(CMAKE_AUTORCC ON)
-  set(CMAKE_AUTOUIC ON)
 endif()
 
 include(GenerateExportHeader)

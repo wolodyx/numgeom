@@ -8,10 +8,9 @@
 #include <string.h>
 
 #include <errno.h>
-#include <poll.h>
-#include <linux/input.h>
-
-#include <xcb/xproto.h>
+#ifdef ENABLE_WAYLAND
+#  include <poll.h>
+#endif
 
 #include "boost/log/trivial.hpp"
 

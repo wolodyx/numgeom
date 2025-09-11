@@ -75,7 +75,10 @@ if(DEFINED SHADER_FILES)
           -V ${CMAKE_CURRENT_SOURCE_DIR}/${file}
           -o ${file}.spv
       COMMAND
-        bash -c "${CMAKE_CURRENT_SOURCE_DIR}/binary2text.sh ${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
+        "${Python3_EXECUTABLE}"
+      ARGS "${CMAKE_CURRENT_SOURCE_DIR}/binary_to_hex_array.py"
+           "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
+           "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv.h"
       DEPENDS ${file}
     )
     target_sources(render PRIVATE ${file}.spv.h)

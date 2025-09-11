@@ -217,12 +217,12 @@ init_cube(struct vkcube *vc)
         .layout = vc->pipeline_layout,
         .renderPass = vc->render_pass,
         .subpass = 0,
-        .basePipelineHandle = (VkPipeline) { 0 },
+        .basePipelineHandle = VK_NULL_HANDLE,
         .basePipelineIndex = 0
     };
     vkCreateGraphicsPipelines(
         vc->device,
-        (VkPipelineCache) { VK_NULL_HANDLE },
+        VK_NULL_HANDLE,
         1,
         &graphicsPipelineCreateInfo,
         nullptr,

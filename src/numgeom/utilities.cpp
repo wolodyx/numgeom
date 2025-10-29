@@ -196,16 +196,57 @@ Standard_Real Project(const gp_Pnt& P, const Handle(Geom_Curve)& C)
 }
 
 
-TriMesh::Ptr ConvertToTriMesh(const TopoDS_Solid& solid)
+namespace {;
+void ExtractTriangulableShapes(
+    const TopoDS_Shape& initShape,
+    std::vector<TopoDS_Shape>& resultShapes
+)
+{
+    if(initShape.IsNull())
+        return;
+
+    std::queue<TopoDS_Shape> queue;
+    queue.push(initShape);
+    while(!queue.empty()) {
+        TopoDS_Shape shape = queue.front();
+        queue.pop();
+        switch(shape.ShapeType()) {
+        case TopAbs_COMPOUND:
+        case TopAbs_COMPSOLID:
+            for(TopoDS_Iterator it(shape); it.More(); it.Next()) {
+                TopoDS_Shape subShape = it.Value();
+                queue.push(subShape);
+            }
+            break;
+        case TopAbs_SOLID:
+        case TopAbs_SHELL:
+        case TopAbs_FACE:
+            resultShapes.push_back(shape);
+            break;
+        case TopAbs_WIRE:
+        case TopAbs_EDGE:
+        case TopAbs_VERTEX:
+            break;
+        default:
+            std::exit(1);
+        }
+    }
+}
+}
+
+
+TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape& initShape)
 {
     std::unordered_map<TopoDS_Face,
                        std::pair<Handle(Poly_Triangulation),
                                  TopLoc_Location>
                       > face2triangulation;
-    for(TopoDS_Iterator it(solid); it.More(); it.Next())
-    {
-        const TopoDS_Shell& shell = TopoDS::Shell(it.Value());
-        for(TopoDS_Iterator it(shell); it.More(); it.Next())
+
+    std::vector<TopoDS_Shape> triangulableShapes;
+    ExtractTriangulableShapes(initShape, triangulableShapes);
+
+    for(const TopoDS_Shape& shape : triangulableShapes) {
+        for(TopExp_Explorer it(shape,TopAbs_FACE); it.More(); it.Next())
         {
             const TopoDS_Face& f = TopoDS::Face(it.Value());
             TopLoc_Location l;

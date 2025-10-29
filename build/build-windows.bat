@@ -5,7 +5,14 @@ if not exist .git\ (
   exit /b 1
 )
 
-rmdir /s /q bld
+if exist "bld\" (
+  rmdir /s /q bld\
+  if exist "bld\" (
+    echo "ERROR. Close any applications that might be accessing the 'bld' directory."
+    exit /b 2
+  )
+)
+
 mkdir bld
 cd bld
 cmake --preset=windows-release .. ^

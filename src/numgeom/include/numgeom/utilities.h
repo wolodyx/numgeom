@@ -92,6 +92,6 @@ void GetMeshSideSizes(
 
 
 //! Извлекает из твердого тела треугольную сетку.
-TriMesh::Ptr ConvertToTriMesh(const TopoDS_Solid&);
+TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape&);
 
 #endif //! numgeom_numgeom_utilities_h

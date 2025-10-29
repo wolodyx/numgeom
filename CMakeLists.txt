@@ -17,7 +17,6 @@ endif()
 
 find_package(OpenCASCADE CONFIG REQUIRED)
 find_package(GTest)
-find_package(nlohmann_json REQUIRED)
 find_package(Vulkan REQUIRED)
 find_package(glslang COMPONENTS glslang-standalone REQUIRED)
 find_package(Boost COMPONENTS log REQUIRED)

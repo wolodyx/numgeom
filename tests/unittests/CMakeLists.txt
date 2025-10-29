@@ -2,6 +2,7 @@ set(SOURCE_FILES
   main.cpp
   testcircularlist.cpp
   testclassificate.cpp
+  testexample.cpp
   testoctree.cpp
   testquadtree.cpp
   testremovefaces.cpp

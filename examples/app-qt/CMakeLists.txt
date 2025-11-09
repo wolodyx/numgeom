@@ -14,3 +14,30 @@ target_link_libraries(app-qt
   Qt::Gui
   numgeom::render
 )
+
+set(SHADER_FILES
+  color.vert
+  color.frag
+)
+
+# Добавляем шейдерные файлы в проект.
+if(DEFINED SHADER_FILES)
+  foreach(file IN LISTS SHADER_FILES)
+    add_custom_command(
+      OUTPUT ${file}.spv.h
+      COMMAND
+        "$<TARGET_FILE:glslang::glslang-standalone>"
+          -V ${CMAKE_CURRENT_SOURCE_DIR}/${file}
+          -o ${file}.spv
+      COMMAND
+        "${Python3_EXECUTABLE}"
+      ARGS "${CMAKE_CURRENT_SOURCE_DIR}/binary_to_hex_array.py"
+           "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
+           "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv.h"
+      DEPENDS ${file}
+    )
+    target_sources(app-qt PRIVATE ${file}.spv.h)
+  endforeach()
+
+  target_include_directories(app-qt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+endif()

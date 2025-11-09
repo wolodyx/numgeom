@@ -1,32 +1,39 @@
 #include "vulkanwidget.h"
 
-#include <QLayout>
+#include "qapplication.h"
+#include "qlayout.h"
+#include "qscreen.h"
 
 #include "vulkanwindow.h"
 #include "vulkanwindowrenderer.h"
 
 
-#include <iostream>
 VulkanWidget::VulkanWidget(QWidget* parent)
     : QWidget(parent)
 {
     QVBoxLayout *layout = new QVBoxLayout(this);
     
-    QVulkanInstance vulkanInstance;
-    // std::cout << "Print extensions" << std::endl;
-    // for(const auto& ext : vulkanInstance.supportedExtensions()) {
-    //     std::cout << "extension = " << ext.name.toStdString();
-    // }
     vulkanInstance.setExtensions({"VK_KHR_surface", "VK_KHR_xcb_surface"});
     vulkanInstance.setLayers({"VK_LAYER_KHRONOS_validation"});
     if(!vulkanInstance.create())
-        throw std::runtime_error("Vulkan instance creating error");
+        qFatal("Vulkan instance creating error");
 
-    // Контейнер для Vulkan
     auto vulkanWindow = new VulkanWindow();
     vulkanWindow->setVulkanInstance(&vulkanInstance);
-    //auto x = QVulkanInstance::surfaceForWindow(vulkanWindow);
-    QWidget *vulkanContainer = QWidget::createWindowContainer(vulkanWindow, this);
-    vulkanContainer->setMinimumSize(400, 300);
+    QWidget* vulkanContainer = QWidget::createWindowContainer(vulkanWindow, this);
     layout->addWidget(vulkanContainer);
+}
+
+
+void VulkanWidget::saveAsPng(const QString& filename)
+{
+    QScreen* screen = QApplication::primaryScreen();
+    QPixmap screenshot = screen->grabWindow(
+        0,
+        this->mapToGlobal(QPoint(0,0)).x(),
+        this->mapToGlobal(QPoint(0,0)).y(),
+        this->width(),
+        this->height()
+    );
+    screenshot.save(filename, "PNG");
 }

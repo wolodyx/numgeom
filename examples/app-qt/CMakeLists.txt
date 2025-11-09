@@ -1,12 +1,19 @@
 set(SOURCE_FILES
   main.cpp
-  #mainwindow.cpp            mainwindow.h
-  #vulkanwidget.cpp          vulkanwidget.h
+  mainwindow.cpp            mainwindow.h
+  vulkanwidget.cpp          vulkanwidget.h
   vulkanwindow.cpp          vulkanwindow.h
   vulkanwindowrenderer.cpp  vulkanwindowrenderer.h
 )
 
-add_executable(app-qt ${SOURCE_FILES})
+set(RESOURCE_FILES
+  resources/app.qrc
+)
+
+add_executable(app-qt
+  ${SOURCE_FILES}
+  ${RESOURCE_FILES}
+)
 
 target_link_libraries(app-qt
   Qt::Core

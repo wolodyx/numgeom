@@ -23,7 +23,6 @@ private:
     VkShaderModule createShader(const uint32_t*, size_t);
 
     QVulkanWindow *m_window;
-    QVulkanDeviceFunctions *m_devFuncs;
 
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
     VkBuffer m_buf = VK_NULL_HANDLE;

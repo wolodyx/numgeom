@@ -1,7 +1,5 @@
 #include "vulkanwindowrenderer.h"
 
-#include <QVulkanFunctions>
-#include <QFile>
 
 // Note that the vertex data and the projection matrix assume OpenGL. With
 // Vulkan Y is negated in clip space and the near/far plane is at 0/1 instead
@@ -40,21 +38,13 @@ VkShaderModule VulkanWindowRenderer::createShader(
     const uint32_t* pCode,
     size_t codeSize
 ) {
-    //QFile file(name);
-    //if(!file.open(QIODevice::ReadOnly)) {
-    //    qWarning("Failed to read shader %s",qPrintable(name));
-    //    return VK_NULL_HANDLE;
-    //}
-    //QByteArray blob = file.readAll();
-    //file.close();
-
     VkShaderModuleCreateInfo shaderInfo;
     memset(&shaderInfo,0,sizeof(shaderInfo));
     shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
     shaderInfo.codeSize = static_cast<uint32_t>(codeSize); //blob.size();
     shaderInfo.pCode = pCode; //reinterpret_cast<const uint32_t *>(blob.constData());
     VkShaderModule shaderModule;
-    VkResult err = m_devFuncs->vkCreateShaderModule(m_window->device(),&shaderInfo,nullptr,&shaderModule);
+    VkResult err = vkCreateShaderModule(m_window->device(),&shaderInfo,nullptr,&shaderModule);
     if(err != VK_SUCCESS) {
         qWarning("Failed to create shader module: %d",err);
         return VK_NULL_HANDLE;
@@ -68,7 +58,6 @@ void VulkanWindowRenderer::initResources()
     qDebug("initResources");
 
     VkDevice dev = m_window->device();
-    m_devFuncs = m_window->vulkanInstance()->deviceFunctions(dev);
 
     // Prepare the vertex and uniform data. The vertex data will never
     // change so one buffer is sufficient regardless of the value of
@@ -99,12 +88,12 @@ void VulkanWindowRenderer::initResources()
     bufInfo.size = vertexAllocSize + concurrentFrameCount * uniformAllocSize;
     bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
 
-    VkResult err = m_devFuncs->vkCreateBuffer(dev,&bufInfo,nullptr,&m_buf);
+    VkResult err = vkCreateBuffer(dev,&bufInfo,nullptr,&m_buf);
     if(err != VK_SUCCESS)
         qFatal("Failed to create buffer: %d",err);
 
     VkMemoryRequirements memReq;
-    m_devFuncs->vkGetBufferMemoryRequirements(dev,m_buf,&memReq);
+    vkGetBufferMemoryRequirements(dev,m_buf,&memReq);
 
     VkMemoryAllocateInfo memAllocInfo = {
         VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
@@ -113,16 +102,16 @@ void VulkanWindowRenderer::initResources()
         m_window->hostVisibleMemoryIndex()
     };
 
-    err = m_devFuncs->vkAllocateMemory(dev,&memAllocInfo,nullptr,&m_bufMem);
+    err = vkAllocateMemory(dev,&memAllocInfo,nullptr,&m_bufMem);
     if(err != VK_SUCCESS)
         qFatal("Failed to allocate memory: %d",err);
 
-    err = m_devFuncs->vkBindBufferMemory(dev,m_buf,m_bufMem,0);
+    err = vkBindBufferMemory(dev,m_buf,m_bufMem,0);
     if(err != VK_SUCCESS)
         qFatal("Failed to bind buffer memory: %d",err);
 
     quint8 *p;
-    err = m_devFuncs->vkMapMemory(dev,m_bufMem,0,memReq.size,0,reinterpret_cast<void **>(&p));
+    err = vkMapMemory(dev,m_bufMem,0,memReq.size,0,reinterpret_cast<void **>(&p));
     if(err != VK_SUCCESS)
         qFatal("Failed to map memory: %d",err);
     memcpy(p,vertexData,sizeof(vertexData));
@@ -135,7 +124,7 @@ void VulkanWindowRenderer::initResources()
         m_uniformBufInfo[i].offset = offset;
         m_uniformBufInfo[i].range = uniformAllocSize;
     }
-    m_devFuncs->vkUnmapMemory(dev,m_bufMem);
+    vkUnmapMemory(dev,m_bufMem);
 
     VkVertexInputBindingDescription vertexBindingDesc = {
         0, // binding
@@ -174,7 +163,7 @@ void VulkanWindowRenderer::initResources()
     descPoolInfo.maxSets = concurrentFrameCount;
     descPoolInfo.poolSizeCount = 1;
     descPoolInfo.pPoolSizes = &descPoolSizes;
-    err = m_devFuncs->vkCreateDescriptorPool(dev,&descPoolInfo,nullptr,&m_descPool);
+    err = vkCreateDescriptorPool(dev,&descPoolInfo,nullptr,&m_descPool);
     if(err != VK_SUCCESS)
         qFatal("Failed to create descriptor pool: %d",err);
 
@@ -192,7 +181,7 @@ void VulkanWindowRenderer::initResources()
         1,
         &layoutBinding
     };
-    err = m_devFuncs->vkCreateDescriptorSetLayout(dev,&descLayoutInfo,nullptr,&m_descSetLayout);
+    err = vkCreateDescriptorSetLayout(dev,&descLayoutInfo,nullptr,&m_descSetLayout);
     if(err != VK_SUCCESS)
         qFatal("Failed to create descriptor set layout: %d",err);
 
@@ -204,7 +193,7 @@ void VulkanWindowRenderer::initResources()
             1,
             &m_descSetLayout
         };
-        err = m_devFuncs->vkAllocateDescriptorSets(dev,&descSetAllocInfo,&m_descSet[i]);
+        err = vkAllocateDescriptorSets(dev,&descSetAllocInfo,&m_descSet[i]);
         if(err != VK_SUCCESS)
             qFatal("Failed to allocate descriptor set: %d",err);
 
@@ -215,14 +204,14 @@ void VulkanWindowRenderer::initResources()
         descWrite.descriptorCount = 1;
         descWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         descWrite.pBufferInfo = &m_uniformBufInfo[i];
-        m_devFuncs->vkUpdateDescriptorSets(dev,1,&descWrite,0,nullptr);
+        vkUpdateDescriptorSets(dev,1,&descWrite,0,nullptr);
     }
 
     // Pipeline cache
     VkPipelineCacheCreateInfo pipelineCacheInfo;
     memset(&pipelineCacheInfo,0,sizeof(pipelineCacheInfo));
     pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
-    err = m_devFuncs->vkCreatePipelineCache(dev,&pipelineCacheInfo,nullptr,&m_pipelineCache);
+    err = vkCreatePipelineCache(dev,&pipelineCacheInfo,nullptr,&m_pipelineCache);
     if(err != VK_SUCCESS)
         qFatal("Failed to create pipeline cache: %d",err);
 
@@ -232,7 +221,7 @@ void VulkanWindowRenderer::initResources()
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = 1;
     pipelineLayoutInfo.pSetLayouts = &m_descSetLayout;
-    err = m_devFuncs->vkCreatePipelineLayout(dev,&pipelineLayoutInfo,nullptr,&m_pipelineLayout);
+    err = vkCreatePipelineLayout(dev,&pipelineLayoutInfo,nullptr,&m_pipelineLayout);
     if(err != VK_SUCCESS)
         qFatal("Failed to create pipeline layout: %d",err);
 
@@ -338,14 +327,14 @@ void VulkanWindowRenderer::initResources()
     pipelineInfo.layout = m_pipelineLayout;
     pipelineInfo.renderPass = m_window->defaultRenderPass();
 
-    err = m_devFuncs->vkCreateGraphicsPipelines(dev,m_pipelineCache,1,&pipelineInfo,nullptr,&m_pipeline);
+    err = vkCreateGraphicsPipelines(dev,m_pipelineCache,1,&pipelineInfo,nullptr,&m_pipeline);
     if(err != VK_SUCCESS)
         qFatal("Failed to create graphics pipeline: %d",err);
 
     if(vertShaderModule)
-        m_devFuncs->vkDestroyShaderModule(dev,vertShaderModule,nullptr);
+        vkDestroyShaderModule(dev,vertShaderModule,nullptr);
     if(fragShaderModule)
-        m_devFuncs->vkDestroyShaderModule(dev,fragShaderModule,nullptr);
+        vkDestroyShaderModule(dev,fragShaderModule,nullptr);
 }
 
 void VulkanWindowRenderer::initSwapChainResources()
@@ -371,37 +360,37 @@ void VulkanWindowRenderer::releaseResources()
     VkDevice dev = m_window->device();
 
     if(m_pipeline) {
-        m_devFuncs->vkDestroyPipeline(dev,m_pipeline,nullptr);
+        vkDestroyPipeline(dev,m_pipeline,nullptr);
         m_pipeline = VK_NULL_HANDLE;
     }
 
     if(m_pipelineLayout) {
-        m_devFuncs->vkDestroyPipelineLayout(dev,m_pipelineLayout,nullptr);
+        vkDestroyPipelineLayout(dev,m_pipelineLayout,nullptr);
         m_pipelineLayout = VK_NULL_HANDLE;
     }
 
     if(m_pipelineCache) {
-        m_devFuncs->vkDestroyPipelineCache(dev,m_pipelineCache,nullptr);
+        vkDestroyPipelineCache(dev,m_pipelineCache,nullptr);
         m_pipelineCache = VK_NULL_HANDLE;
     }
 
     if(m_descSetLayout) {
-        m_devFuncs->vkDestroyDescriptorSetLayout(dev,m_descSetLayout,nullptr);
+        vkDestroyDescriptorSetLayout(dev,m_descSetLayout,nullptr);
         m_descSetLayout = VK_NULL_HANDLE;
     }
 
     if(m_descPool) {
-        m_devFuncs->vkDestroyDescriptorPool(dev,m_descPool,nullptr);
+        vkDestroyDescriptorPool(dev,m_descPool,nullptr);
         m_descPool = VK_NULL_HANDLE;
     }
 
     if(m_buf) {
-        m_devFuncs->vkDestroyBuffer(dev,m_buf,nullptr);
+        vkDestroyBuffer(dev,m_buf,nullptr);
         m_buf = VK_NULL_HANDLE;
     }
 
     if(m_bufMem) {
-        m_devFuncs->vkFreeMemory(dev,m_bufMem,nullptr);
+        vkFreeMemory(dev,m_bufMem,nullptr);
         m_bufMem = VK_NULL_HANDLE;
     }
 }
@@ -429,26 +418,26 @@ void VulkanWindowRenderer::startNextFrame()
     rpBeginInfo.clearValueCount = m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
     rpBeginInfo.pClearValues = clearValues;
     VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
-    m_devFuncs->vkCmdBeginRenderPass(cmdBuf,&rpBeginInfo,VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBeginRenderPass(cmdBuf,&rpBeginInfo,VK_SUBPASS_CONTENTS_INLINE);
 
     quint8 *p;
-    VkResult err = m_devFuncs->vkMapMemory(dev,m_bufMem,m_uniformBufInfo[m_window->currentFrame()].offset,
+    VkResult err = vkMapMemory(dev,m_bufMem,m_uniformBufInfo[m_window->currentFrame()].offset,
         UNIFORM_DATA_SIZE,0,reinterpret_cast<void **>(&p));
     if(err != VK_SUCCESS)
         qFatal("Failed to map memory: %d",err);
     QMatrix4x4 m = m_proj;
     m.rotate(m_rotation,0,1,0);
     memcpy(p,m.constData(),16 * sizeof(float));
-    m_devFuncs->vkUnmapMemory(dev,m_bufMem);
+    vkUnmapMemory(dev,m_bufMem);
 
     // Not exactly a real animation system, just advance on every frame for now.
     m_rotation += 1.0f;
 
-    m_devFuncs->vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipeline);
-    m_devFuncs->vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
+    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipeline);
+    vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
         &m_descSet[m_window->currentFrame()],0,nullptr);
     VkDeviceSize vbOffset = 0;
-    m_devFuncs->vkCmdBindVertexBuffers(cb,0,1,&m_buf,&vbOffset);
+    vkCmdBindVertexBuffers(cb,0,1,&m_buf,&vbOffset);
 
     VkViewport viewport;
     viewport.x = viewport.y = 0;
@@ -456,17 +445,17 @@ void VulkanWindowRenderer::startNextFrame()
     viewport.height = sz.height();
     viewport.minDepth = 0;
     viewport.maxDepth = 1;
-    m_devFuncs->vkCmdSetViewport(cb,0,1,&viewport);
+    vkCmdSetViewport(cb,0,1,&viewport);
 
     VkRect2D scissor;
     scissor.offset.x = scissor.offset.y = 0;
     scissor.extent.width = viewport.width;
     scissor.extent.height = viewport.height;
-    m_devFuncs->vkCmdSetScissor(cb,0,1,&scissor);
+    vkCmdSetScissor(cb,0,1,&scissor);
 
-    m_devFuncs->vkCmdDraw(cb,3,1,0,0);
+    vkCmdDraw(cb,3,1,0,0);
 
-    m_devFuncs->vkCmdEndRenderPass(cmdBuf);
+    vkCmdEndRenderPass(cmdBuf);
 
     m_window->frameReady();
     m_window->requestUpdate(); // render continuously, throttled by the presentation rate

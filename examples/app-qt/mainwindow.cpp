@@ -1,7 +1,10 @@
 #include "mainwindow.h"
 
+#include "qfiledialog.h"
 #include "qmenu.h"
 #include "qmenubar.h"
+
+#include "numgeom/loadfromvtk.h"
 
 #include "vulkanwidget.h"
 
@@ -30,6 +33,7 @@ void MainWindow::createActions()
         QAction* act = new QAction(icon, tr("&Open"), this);
         act->setShortcuts(QKeySequence::Open);
         act->setStatusTip(tr("Open a file"));
+        connect(act, SIGNAL(triggered()), this, SLOT(onOpenFile()));
         fileMenu->addAction(act);
     }
 
@@ -71,4 +75,19 @@ void MainWindow::onScreenshot()
 void MainWindow::onQuit()
 {
     this->close();
+}
+
+
+void MainWindow::onOpenFile()
+{
+    QString filename = QFileDialog::getOpenFileName(
+        this,
+        tr("Select open file")
+    );
+    if(filename.isEmpty())
+        return;
+
+    auto mesh = LoadTriMeshFromVtk(filename.toStdString());
+    std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
+    std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
 }

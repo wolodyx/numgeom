@@ -10,5 +10,5 @@ VulkanWindow::VulkanWindow()
 
 QVulkanWindowRenderer* VulkanWindow::createRenderer()
 {
-    return new VulkanWindowRenderer(this, true);
+    return new VulkanWindowRenderer(this);
 }

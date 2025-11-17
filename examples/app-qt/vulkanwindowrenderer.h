@@ -7,10 +7,15 @@
 
 #include <QVulkanWindowRenderer>
 
+#include "numgeom/trimesh.h"
+
+
 class VulkanWindowRenderer : public QVulkanWindowRenderer
 {
 public:
-    VulkanWindowRenderer(QVulkanWindow *w, bool msaa);
+    VulkanWindowRenderer(QVulkanWindow* w);
+
+    void setMesh(CTriMesh::Ptr);
 
     void initResources() override;
     void initSwapChainResources() override;
@@ -22,7 +27,8 @@ public:
 private:
     VkShaderModule createShader(const uint32_t*, size_t);
 
-    QVulkanWindow *m_window;
+private:
+    QVulkanWindow* m_window;
 
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
     VkBuffer m_buf = VK_NULL_HANDLE;

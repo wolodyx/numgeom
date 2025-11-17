@@ -18,9 +18,10 @@ static inline VkDeviceSize aligned(VkDeviceSize v,VkDeviceSize byteAlign)
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
-VulkanWindowRenderer::VulkanWindowRenderer(QVulkanWindow *w,bool msaa)
+VulkanWindowRenderer::VulkanWindowRenderer(QVulkanWindow* w)
     : m_window(w)
 {
+    bool msaa = true;
     if(msaa) {
         const QVector<int> counts = w->supportedSampleCounts();
         qDebug() << "Supported sample counts:" << counts;
@@ -38,11 +39,11 @@ VkShaderModule VulkanWindowRenderer::createShader(
     const uint32_t* pCode,
     size_t codeSize
 ) {
-    VkShaderModuleCreateInfo shaderInfo;
-    memset(&shaderInfo,0,sizeof(shaderInfo));
-    shaderInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    shaderInfo.codeSize = static_cast<uint32_t>(codeSize); //blob.size();
-    shaderInfo.pCode = pCode; //reinterpret_cast<const uint32_t *>(blob.constData());
+    VkShaderModuleCreateInfo shaderInfo {
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = static_cast<uint32_t>(codeSize),
+        .pCode = pCode,
+    };
     VkShaderModule shaderModule;
     VkResult err = vkCreateShaderModule(m_window->device(),&shaderInfo,nullptr,&shaderModule);
     if(err != VK_SUCCESS) {
@@ -79,44 +80,42 @@ void VulkanWindowRenderer::initResources()
     const VkPhysicalDeviceLimits *pdevLimits = &m_window->physicalDeviceProperties()->limits;
     const VkDeviceSize uniAlign = pdevLimits->minUniformBufferOffsetAlignment;
     qDebug("uniform buffer offset alignment is %u",(uint)uniAlign);
-    VkBufferCreateInfo bufInfo;
-    memset(&bufInfo,0,sizeof(bufInfo));
-    bufInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
     // Our internal layout is vertex, uniform, uniform, ... with each uniform buffer start offset aligned to uniAlign.
     const VkDeviceSize vertexAllocSize = aligned(sizeof(vertexData),uniAlign);
     const VkDeviceSize uniformAllocSize = aligned(UNIFORM_DATA_SIZE,uniAlign);
-    bufInfo.size = vertexAllocSize + concurrentFrameCount * uniformAllocSize;
-    bufInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-
-    VkResult err = vkCreateBuffer(dev,&bufInfo,nullptr,&m_buf);
+    VkBufferCreateInfo bufInfo {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = vertexAllocSize + concurrentFrameCount * uniformAllocSize,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+    };
+    VkResult err = vkCreateBuffer(dev, &bufInfo, nullptr, &m_buf);
     if(err != VK_SUCCESS)
         qFatal("Failed to create buffer: %d",err);
 
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(dev,m_buf,&memReq);
+    vkGetBufferMemoryRequirements(dev, m_buf, &memReq);
 
     VkMemoryAllocateInfo memAllocInfo = {
-        VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        nullptr,
-        memReq.size,
-        m_window->hostVisibleMemoryIndex()
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memReq.size,
+        .memoryTypeIndex = m_window->hostVisibleMemoryIndex()
     };
 
-    err = vkAllocateMemory(dev,&memAllocInfo,nullptr,&m_bufMem);
+    err = vkAllocateMemory(dev, &memAllocInfo, nullptr, &m_bufMem);
     if(err != VK_SUCCESS)
         qFatal("Failed to allocate memory: %d",err);
 
-    err = vkBindBufferMemory(dev,m_buf,m_bufMem,0);
+    err = vkBindBufferMemory(dev, m_buf, m_bufMem, 0);
     if(err != VK_SUCCESS)
         qFatal("Failed to bind buffer memory: %d",err);
 
     quint8 *p;
-    err = vkMapMemory(dev,m_bufMem,0,memReq.size,0,reinterpret_cast<void **>(&p));
+    err = vkMapMemory(dev, m_bufMem, 0, memReq.size, 0, reinterpret_cast<void **>(&p));
     if(err != VK_SUCCESS)
         qFatal("Failed to map memory: %d",err);
-    memcpy(p,vertexData,sizeof(vertexData));
+    memcpy(p, vertexData, sizeof(vertexData));
     QMatrix4x4 ident;
-    memset(m_uniformBufInfo,0,sizeof(m_uniformBufInfo));
+    memset(m_uniformBufInfo, 0, sizeof(m_uniformBufInfo));
     for(int i = 0; i < concurrentFrameCount; ++i) {
         const VkDeviceSize offset = vertexAllocSize + i * uniformAllocSize;
         memcpy(p + offset,ident.constData(),16 * sizeof(float));
@@ -124,12 +123,12 @@ void VulkanWindowRenderer::initResources()
         m_uniformBufInfo[i].offset = offset;
         m_uniformBufInfo[i].range = uniformAllocSize;
     }
-    vkUnmapMemory(dev,m_bufMem);
+    vkUnmapMemory(dev, m_bufMem);
 
     VkVertexInputBindingDescription vertexBindingDesc = {
-        0, // binding
-        5 * sizeof(float),
-        VK_VERTEX_INPUT_RATE_VERTEX
+        .binding = 0,
+        .stride = 5 * sizeof(float),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
     VkVertexInputAttributeDescription vertexAttrDesc[] = {
         { // position
@@ -146,81 +145,80 @@ void VulkanWindowRenderer::initResources()
         }
     };
 
-    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
-    vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-    vertexInputInfo.pNext = nullptr;
-    vertexInputInfo.flags = 0;
-    vertexInputInfo.vertexBindingDescriptionCount = 1;
-    vertexInputInfo.pVertexBindingDescriptions = &vertexBindingDesc;
-    vertexInputInfo.vertexAttributeDescriptionCount = 2;
-    vertexInputInfo.pVertexAttributeDescriptions = vertexAttrDesc;
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = 1,
+        .pVertexBindingDescriptions = &vertexBindingDesc,
+        .vertexAttributeDescriptionCount = 2,
+        .pVertexAttributeDescriptions = vertexAttrDesc,
+    };
 
     // Set up descriptor set and its layout.
-    VkDescriptorPoolSize descPoolSizes = {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uint32_t(concurrentFrameCount)};
-    VkDescriptorPoolCreateInfo descPoolInfo;
-    memset(&descPoolInfo,0,sizeof(descPoolInfo));
-    descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-    descPoolInfo.maxSets = concurrentFrameCount;
-    descPoolInfo.poolSizeCount = 1;
-    descPoolInfo.pPoolSizes = &descPoolSizes;
+    VkDescriptorPoolSize descPoolSizes {
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = static_cast<uint32_t>(concurrentFrameCount)
+    };
+    VkDescriptorPoolCreateInfo descPoolInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = static_cast<uint32_t>(concurrentFrameCount),
+        .poolSizeCount = 1,
+        .pPoolSizes = &descPoolSizes,
+    };
     err = vkCreateDescriptorPool(dev,&descPoolInfo,nullptr,&m_descPool);
     if(err != VK_SUCCESS)
         qFatal("Failed to create descriptor pool: %d",err);
 
     VkDescriptorSetLayoutBinding layoutBinding = {
-        0, // binding
-        VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        1,
-        VK_SHADER_STAGE_VERTEX_BIT,
-        nullptr
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
     };
-    VkDescriptorSetLayoutCreateInfo descLayoutInfo = {
-        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        nullptr,
-        0,
-        1,
-        &layoutBinding
+    VkDescriptorSetLayoutCreateInfo descLayoutInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &layoutBinding
     };
     err = vkCreateDescriptorSetLayout(dev,&descLayoutInfo,nullptr,&m_descSetLayout);
     if(err != VK_SUCCESS)
         qFatal("Failed to create descriptor set layout: %d",err);
 
     for(int i = 0; i < concurrentFrameCount; ++i) {
-        VkDescriptorSetAllocateInfo descSetAllocInfo = {
-            VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            nullptr,
-            m_descPool,
-            1,
-            &m_descSetLayout
+        VkDescriptorSetAllocateInfo descSetAllocInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .pNext = nullptr,
+            .descriptorPool = m_descPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &m_descSetLayout
         };
         err = vkAllocateDescriptorSets(dev,&descSetAllocInfo,&m_descSet[i]);
         if(err != VK_SUCCESS)
             qFatal("Failed to allocate descriptor set: %d",err);
 
-        VkWriteDescriptorSet descWrite;
-        memset(&descWrite,0,sizeof(descWrite));
-        descWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descWrite.dstSet = m_descSet[i];
-        descWrite.descriptorCount = 1;
-        descWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        descWrite.pBufferInfo = &m_uniformBufInfo[i];
+        VkWriteDescriptorSet descWrite {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descSet[i],
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &m_uniformBufInfo[i],
+        };
         vkUpdateDescriptorSets(dev,1,&descWrite,0,nullptr);
     }
 
     // Pipeline cache
-    VkPipelineCacheCreateInfo pipelineCacheInfo;
-    memset(&pipelineCacheInfo,0,sizeof(pipelineCacheInfo));
-    pipelineCacheInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO;
+    VkPipelineCacheCreateInfo pipelineCacheInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO
+    };
     err = vkCreatePipelineCache(dev,&pipelineCacheInfo,nullptr,&m_pipelineCache);
     if(err != VK_SUCCESS)
         qFatal("Failed to create pipeline cache: %d",err);
 
     // Pipeline layout
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo;
-    memset(&pipelineLayoutInfo,0,sizeof(pipelineLayoutInfo));
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &m_descSetLayout;
+    VkPipelineLayoutCreateInfo pipelineLayoutInfo {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = 1,
+        .pSetLayouts = &m_descSetLayout,
+    };
     err = vkCreatePipelineLayout(dev,&pipelineLayoutInfo,nullptr,&m_pipelineLayout);
     if(err != VK_SUCCESS)
         qFatal("Failed to create pipeline layout: %d",err);
@@ -266,62 +264,62 @@ void VulkanWindowRenderer::initResources()
 
     pipelineInfo.pVertexInputState = &vertexInputInfo;
 
-    VkPipelineInputAssemblyStateCreateInfo ia;
-    memset(&ia,0,sizeof(ia));
-    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    VkPipelineInputAssemblyStateCreateInfo ia {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+    };
     pipelineInfo.pInputAssemblyState = &ia;
 
     // The viewport and scissor will be set dynamically via vkCmdSetViewport/Scissor.
     // This way the pipeline does not need to be touched when resizing the window.
-    VkPipelineViewportStateCreateInfo vp;
-    memset(&vp,0,sizeof(vp));
-    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-    vp.viewportCount = 1;
-    vp.scissorCount = 1;
+    VkPipelineViewportStateCreateInfo vp {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
     pipelineInfo.pViewportState = &vp;
 
-    VkPipelineRasterizationStateCreateInfo rs;
-    memset(&rs,0,sizeof(rs));
-    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-    rs.polygonMode = VK_POLYGON_MODE_FILL;
-    rs.cullMode = VK_CULL_MODE_NONE; // we want the back face as well
-    rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
-    rs.lineWidth = 1.0f;
+    VkPipelineRasterizationStateCreateInfo rs {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_NONE, // we want the back face as wel,
+        .frontFace = VK_FRONT_FACE_CLOCKWISE,
+        .lineWidth = 1.0f,
+    };
     pipelineInfo.pRasterizationState = &rs;
 
-    VkPipelineMultisampleStateCreateInfo ms;
-    memset(&ms,0,sizeof(ms));
-    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-    // Enable multisampling.
-    ms.rasterizationSamples = m_window->sampleCountFlagBits();
+    VkPipelineMultisampleStateCreateInfo ms {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        // Enable multisampling.
+        .rasterizationSamples = m_window->sampleCountFlagBits(),
+    };
     pipelineInfo.pMultisampleState = &ms;
 
-    VkPipelineDepthStencilStateCreateInfo ds;
-    memset(&ds,0,sizeof(ds));
-    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    ds.depthTestEnable = VK_TRUE;
-    ds.depthWriteEnable = VK_TRUE;
-    ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+    VkPipelineDepthStencilStateCreateInfo ds {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+    };
     pipelineInfo.pDepthStencilState = &ds;
 
-    VkPipelineColorBlendStateCreateInfo cb;
-    memset(&cb,0,sizeof(cb));
-    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     // no blend, write out all of rgba
-    VkPipelineColorBlendAttachmentState att;
-    memset(&att,0,sizeof(att));
-    att.colorWriteMask = 0xF;
-    cb.attachmentCount = 1;
-    cb.pAttachments = &att;
+    VkPipelineColorBlendAttachmentState att{
+        .colorWriteMask = 0xF
+    };
+    VkPipelineColorBlendStateCreateInfo cb {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = &att,
+    };
     pipelineInfo.pColorBlendState = &cb;
 
     VkDynamicState dynEnable[] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR};
-    VkPipelineDynamicStateCreateInfo dyn;
-    memset(&dyn,0,sizeof(dyn));
-    dyn.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-    dyn.dynamicStateCount = sizeof(dynEnable) / sizeof(VkDynamicState);
-    dyn.pDynamicStates = dynEnable;
+    VkPipelineDynamicStateCreateInfo dyn {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = sizeof(dynEnable) / sizeof(VkDynamicState),
+        .pDynamicStates = dynEnable,
+    };
     pipelineInfo.pDynamicState = &dyn;
 
     pipelineInfo.layout = m_pipelineLayout;
@@ -398,26 +396,30 @@ void VulkanWindowRenderer::releaseResources()
 void VulkanWindowRenderer::startNextFrame()
 {
     VkDevice dev = m_window->device();
-    VkCommandBuffer cb = m_window->currentCommandBuffer();
+    VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
     const QSize sz = m_window->swapChainImageSize();
 
     VkClearColorValue clearColor = {0, 0, 0, 1};
-    VkClearDepthStencilValue clearDS = {1, 0};
-    VkClearValue clearValues[3];
-    memset(clearValues,0,sizeof(clearValues));
+    VkClearValue clearValues[3] = {};
     clearValues[0].color = clearValues[2].color = clearColor;
-    clearValues[1].depthStencil = clearDS;
+    clearValues[1].depthStencil = VkClearDepthStencilValue{
+        .depth = 1,
+        .stencil = 0
+    };
 
-    VkRenderPassBeginInfo rpBeginInfo;
-    memset(&rpBeginInfo,0,sizeof(rpBeginInfo));
-    rpBeginInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-    rpBeginInfo.renderPass = m_window->defaultRenderPass();
-    rpBeginInfo.framebuffer = m_window->currentFramebuffer();
-    rpBeginInfo.renderArea.extent.width = sz.width();
-    rpBeginInfo.renderArea.extent.height = sz.height();
-    rpBeginInfo.clearValueCount = m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2;
-    rpBeginInfo.pClearValues = clearValues;
-    VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
+    VkRenderPassBeginInfo rpBeginInfo {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = m_window->defaultRenderPass(),
+        .framebuffer = m_window->currentFramebuffer(),
+        .renderArea = VkRect2D {
+            .extent = VkExtent2D {
+                .width = static_cast<uint32_t>(sz.width()),
+                .height = static_cast<uint32_t>(sz.height())
+            },
+        },
+        .clearValueCount = static_cast<uint32_t>(m_window->sampleCountFlagBits() > VK_SAMPLE_COUNT_1_BIT ? 3 : 2),
+        .pClearValues = clearValues,
+    };
     vkCmdBeginRenderPass(cmdBuf,&rpBeginInfo,VK_SUBPASS_CONTENTS_INLINE);
 
     quint8 *p;
@@ -433,30 +435,43 @@ void VulkanWindowRenderer::startNextFrame()
     // Not exactly a real animation system, just advance on every frame for now.
     m_rotation += 1.0f;
 
-    vkCmdBindPipeline(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipeline);
-    vkCmdBindDescriptorSets(cb,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
+    vkCmdBindPipeline(cmdBuf,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipeline);
+    vkCmdBindDescriptorSets(cmdBuf,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
         &m_descSet[m_window->currentFrame()],0,nullptr);
     VkDeviceSize vbOffset = 0;
-    vkCmdBindVertexBuffers(cb,0,1,&m_buf,&vbOffset);
+    vkCmdBindVertexBuffers(cmdBuf, 0, 1, &m_buf, &vbOffset);
 
-    VkViewport viewport;
-    viewport.x = viewport.y = 0;
-    viewport.width = sz.width();
-    viewport.height = sz.height();
-    viewport.minDepth = 0;
-    viewport.maxDepth = 1;
-    vkCmdSetViewport(cb,0,1,&viewport);
+    VkViewport viewport {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(sz.width()),
+        .height = static_cast<float>(sz.height()),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+    vkCmdSetViewport(cmdBuf, 0, 1, &viewport);
 
-    VkRect2D scissor;
-    scissor.offset.x = scissor.offset.y = 0;
-    scissor.extent.width = viewport.width;
-    scissor.extent.height = viewport.height;
-    vkCmdSetScissor(cb,0,1,&scissor);
+    VkRect2D scissor {
+        .offset = VkOffset2D {
+            .x = 0,
+            .y = 0
+        },
+        .extent = VkExtent2D {
+            .width = static_cast<uint32_t>(viewport.width),
+            .height = static_cast<uint32_t>(viewport.height),
+        }
+    };
+    vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-    vkCmdDraw(cb,3,1,0,0);
+    vkCmdDraw(cmdBuf, 3, 1, 0, 0);
 
     vkCmdEndRenderPass(cmdBuf);
 
     m_window->frameReady();
-    m_window->requestUpdate(); // render continuously, throttled by the presentation rate
+    m_window->requestUpdate();
+}
+
+
+void VulkanWindowRenderer::setMesh(CTriMesh::Ptr mesh)
+{
 }

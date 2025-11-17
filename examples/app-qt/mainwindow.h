@@ -17,6 +17,7 @@ private:
 
 public slots:
     void onScreenshot();
+    void onOpenFile();
     void onQuit();
 
 private:

@@ -20,6 +20,7 @@ target_link_libraries(app-qt
   Qt::Widgets
   Qt::Gui
   numgeom::render
+  numgeom::numgeom
 )
 
 set(SHADER_FILES

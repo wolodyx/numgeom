@@ -1,4 +1,7 @@
-#include "vulkanwindowrenderer.h"
+﻿#include "vulkanwindowrenderer.h"
+
+#include <array>
+#include <vector>
 
 
 // Note that the vertex data and the projection matrix assume OpenGL. With
@@ -6,9 +9,15 @@
 // of -1/1. These will be corrected for by an extra transformation when
 // calculating the modelview-projection matrix.
 static float vertexData[] = {
-     0.0f,   0.5f,   1.0f, 0.0f, 0.0f,
-    -0.5f,  -0.5f,   0.0f, 1.0f, 0.0f,
-     0.5f,  -0.5f,   0.0f, 0.0f, 1.0f
+     0.0f,  0.5f, 0.0f,
+    -0.5f, -0.5f, 0.0f,
+     0.5f, -0.5f, 0.0f,
+    +1.0f, +0.5f, 0.0f,
+};
+
+static const std::vector<std::array<uint32_t,3>> triaIndices = {
+    {0, 1, 2},
+    {0, 2, 3},
 };
 
 static const int UNIFORM_DATA_SIZE = 16 * sizeof(float);
@@ -80,13 +89,23 @@ void VulkanWindowRenderer::initResources()
     const VkPhysicalDeviceLimits *pdevLimits = &m_window->physicalDeviceProperties()->limits;
     const VkDeviceSize uniAlign = pdevLimits->minUniformBufferOffsetAlignment;
     qDebug("uniform buffer offset alignment is %u",(uint)uniAlign);
-    // Our internal layout is vertex, uniform, uniform, ... with each uniform buffer start offset aligned to uniAlign.
+    // В памяти, связанной с буфером, выровненные по `uniAlign`
+    // данные размещаются следующим образом:
+    // * вершинные данные;
+    // * индексы;
+    // * uniform-переменные для каждого фрейма.
     const VkDeviceSize vertexAllocSize = aligned(sizeof(vertexData),uniAlign);
+    const VkDeviceSize indexAllocSize = aligned(sizeof(triaIndices.size() * sizeof(triaIndices[0])),uniAlign);
     const VkDeviceSize uniformAllocSize = aligned(UNIFORM_DATA_SIZE,uniAlign);
+    m_indexOffset = vertexAllocSize;
     VkBufferCreateInfo bufInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = vertexAllocSize + concurrentFrameCount * uniformAllocSize,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        .size = vertexAllocSize
+              + indexAllocSize
+              + concurrentFrameCount * uniformAllocSize,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+               | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+               | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     };
     VkResult err = vkCreateBuffer(dev, &bufInfo, nullptr, &m_buf);
     if(err != VK_SUCCESS)
@@ -114,10 +133,12 @@ void VulkanWindowRenderer::initResources()
     if(err != VK_SUCCESS)
         qFatal("Failed to map memory: %d",err);
     memcpy(p, vertexData, sizeof(vertexData));
+    memcpy(p + vertexAllocSize, triaIndices.data(), sizeof(triaIndices)*sizeof(triaIndices[0]));
     QMatrix4x4 ident;
     memset(m_uniformBufInfo, 0, sizeof(m_uniformBufInfo));
+    VkDeviceSize uniformStartOffset = vertexAllocSize + indexAllocSize;
     for(int i = 0; i < concurrentFrameCount; ++i) {
-        const VkDeviceSize offset = vertexAllocSize + i * uniformAllocSize;
+        const VkDeviceSize offset = uniformStartOffset + i * uniformAllocSize;
         memcpy(p + offset,ident.constData(),16 * sizeof(float));
         m_uniformBufInfo[i].buffer = m_buf;
         m_uniformBufInfo[i].offset = offset;
@@ -127,29 +148,23 @@ void VulkanWindowRenderer::initResources()
 
     VkVertexInputBindingDescription vertexBindingDesc = {
         .binding = 0,
-        .stride = 5 * sizeof(float),
+        .stride = 3 * sizeof(float),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
     };
     VkVertexInputAttributeDescription vertexAttrDesc[] = {
         { // position
             0, // location
             0, // binding
-            VK_FORMAT_R32G32_SFLOAT,
+            VK_FORMAT_R32G32B32_SFLOAT,
             0
         },
-        { // color
-            1,
-            0,
-            VK_FORMAT_R32G32B32_SFLOAT,
-            2 * sizeof(float)
-        }
     };
 
     VkPipelineVertexInputStateCreateInfo vertexInputInfo {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
         .vertexBindingDescriptionCount = 1,
         .pVertexBindingDescriptions = &vertexBindingDesc,
-        .vertexAttributeDescriptionCount = 2,
+        .vertexAttributeDescriptionCount = 1,
         .pVertexAttributeDescriptions = vertexAttrDesc,
     };
 
@@ -441,6 +456,13 @@ void VulkanWindowRenderer::startNextFrame()
     VkDeviceSize vbOffset = 0;
     vkCmdBindVertexBuffers(cmdBuf, 0, 1, &m_buf, &vbOffset);
 
+    vkCmdBindIndexBuffer(
+        cmdBuf,
+        m_buf,
+        m_indexOffset,
+        VK_INDEX_TYPE_UINT32
+    );
+
     VkViewport viewport {
         .x = 0,
         .y = 0,
@@ -463,7 +485,7 @@ void VulkanWindowRenderer::startNextFrame()
     };
     vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-    vkCmdDraw(cmdBuf, 3, 1, 0, 0);
+    vkCmdDrawIndexed(cmdBuf, 3 * triaIndices.size(), 1, 0, 0, 0);
 
     vkCmdEndRenderPass(cmdBuf);
 

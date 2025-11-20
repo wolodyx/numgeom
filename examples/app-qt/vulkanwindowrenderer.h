@@ -44,6 +44,7 @@ private:
 
     QMatrix4x4 m_proj;
     float m_rotation = 0.0f;
+    VkDeviceSize m_indexOffset;
 };
 
 #endif // !numgeom_app_vulkanwindowrenderer_h

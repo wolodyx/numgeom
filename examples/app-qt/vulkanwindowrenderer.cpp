@@ -3,33 +3,26 @@
 #include <array>
 #include <vector>
 
+#include "numgeom/loadfromvtk.h"
 
-// Note that the vertex data and the projection matrix assume OpenGL. With
-// Vulkan Y is negated in clip space and the near/far plane is at 0/1 instead
-// of -1/1. These will be corrected for by an extra transformation when
-// calculating the modelview-projection matrix.
-static float vertexData[] = {
-     0.0f,  0.5f, 0.0f,
-    -0.5f, -0.5f, 0.0f,
-     0.5f, -0.5f, 0.0f,
-    +1.0f, +0.5f, 0.0f,
-};
+#include "gpumemory.h"
 
-static const std::vector<std::array<uint32_t,3>> triaIndices = {
-    {0, 1, 2},
-    {0, 2, 3},
-};
 
 static const int UNIFORM_DATA_SIZE = 16 * sizeof(float);
+
 
 static inline VkDeviceSize aligned(VkDeviceSize v,VkDeviceSize byteAlign)
 {
     return (v + byteAlign - 1) & ~(byteAlign - 1);
 }
 
+
 VulkanWindowRenderer::VulkanWindowRenderer(QVulkanWindow* w)
     : m_window(w)
 {
+    m_model = LoadTriMeshFromVtk("d:/projects/numgeom/tests/data/polydata-cube.vtk");
+    m_beUpdateModel = true;
+
     bool msaa = true;
     if(msaa) {
         const QVector<int> counts = w->supportedSampleCounts();
@@ -43,6 +36,7 @@ VulkanWindowRenderer::VulkanWindowRenderer(QVulkanWindow* w)
         }
     }
 }
+
 
 VkShaderModule VulkanWindowRenderer::createShader(
     const uint32_t* pCode,
@@ -63,88 +57,53 @@ VkShaderModule VulkanWindowRenderer::createShader(
     return shaderModule;
 }
 
+
 void VulkanWindowRenderer::initResources()
 {
     qDebug("initResources");
 
     VkDevice dev = m_window->device();
-
-    // Prepare the vertex and uniform data. The vertex data will never
-    // change so one buffer is sufficient regardless of the value of
-    // QVulkanWindow::CONCURRENT_FRAME_COUNT. Uniform data is changing per
-    // frame however so active frames have to have a dedicated copy.
-
-    // Use just one memory allocation and one buffer. We will then specify the
-    // appropriate offsets for uniform buffers in the VkDescriptorBufferInfo.
-    // Have to watch out for
-    // VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment, though.
-
-    // The uniform buffer is not strictly required in this example, we could
-    // have used push constants as well since our single matrix (64 bytes) fits
-    // into the spec mandated minimum limit of 128 bytes. However, once that
-    // limit is not sufficient, the per-frame buffers, as shown below, will
-    // become necessary.
-
     const int concurrentFrameCount = m_window->concurrentFrameCount();
-    const VkPhysicalDeviceLimits *pdevLimits = &m_window->physicalDeviceProperties()->limits;
-    const VkDeviceSize uniAlign = pdevLimits->minUniformBufferOffsetAlignment;
-    qDebug("uniform buffer offset alignment is %u",(uint)uniAlign);
-    // В памяти, связанной с буфером, выровненные по `uniAlign`
-    // данные размещаются следующим образом:
-    // * вершинные данные;
-    // * индексы;
-    // * uniform-переменные для каждого фрейма.
-    const VkDeviceSize vertexAllocSize = aligned(sizeof(vertexData),uniAlign);
-    const VkDeviceSize indexAllocSize = aligned(sizeof(triaIndices.size() * sizeof(triaIndices[0])),uniAlign);
-    const VkDeviceSize uniformAllocSize = aligned(UNIFORM_DATA_SIZE,uniAlign);
-    m_indexOffset = vertexAllocSize;
-    VkBufferCreateInfo bufInfo {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = vertexAllocSize
-              + indexAllocSize
-              + concurrentFrameCount * uniformAllocSize,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-               | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-               | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+
+    m_mem = new GpuMemory(
+        VulkanState{
+            dev,
+            m_window->physicalDevice()
+        }
+    );
+
+    // Set up descriptor set and its layout.
+    VkDescriptorPoolSize descPoolSizes {
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = static_cast<uint32_t>(concurrentFrameCount)
     };
-    VkResult err = vkCreateBuffer(dev, &bufInfo, nullptr, &m_buf);
-    if(err != VK_SUCCESS)
-        qFatal("Failed to create buffer: %d",err);
-
-    VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(dev, m_buf, &memReq);
-
-    VkMemoryAllocateInfo memAllocInfo = {
-        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-        .allocationSize = memReq.size,
-        .memoryTypeIndex = m_window->hostVisibleMemoryIndex()
+    VkDescriptorPoolCreateInfo descPoolInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .maxSets = static_cast<uint32_t>(concurrentFrameCount),
+        .poolSizeCount = 1,
+        .pPoolSizes = &descPoolSizes,
     };
-
-    err = vkAllocateMemory(dev, &memAllocInfo, nullptr, &m_bufMem);
+    VkResult err = vkCreateDescriptorPool(dev,&descPoolInfo,nullptr,&m_descPool);
     if(err != VK_SUCCESS)
-        qFatal("Failed to allocate memory: %d",err);
+        qFatal("Failed to create descriptor pool: %d",err);
 
-    err = vkBindBufferMemory(dev, m_buf, m_bufMem, 0);
+    VkDescriptorSetLayoutBinding layoutBinding = {
+        .binding = 0,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = 1,
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+    };
+    VkDescriptorSetLayoutCreateInfo descLayoutInfo {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = 1,
+        .pBindings = &layoutBinding
+    };
+    err = vkCreateDescriptorSetLayout(dev,&descLayoutInfo,nullptr,&m_descSetLayout);
     if(err != VK_SUCCESS)
-        qFatal("Failed to bind buffer memory: %d",err);
+        qFatal("Failed to create descriptor set layout: %d",err);
 
-    quint8 *p;
-    err = vkMapMemory(dev, m_bufMem, 0, memReq.size, 0, reinterpret_cast<void **>(&p));
-    if(err != VK_SUCCESS)
-        qFatal("Failed to map memory: %d",err);
-    memcpy(p, vertexData, sizeof(vertexData));
-    memcpy(p + vertexAllocSize, triaIndices.data(), sizeof(triaIndices)*sizeof(triaIndices[0]));
-    QMatrix4x4 ident;
-    memset(m_uniformBufInfo, 0, sizeof(m_uniformBufInfo));
-    VkDeviceSize uniformStartOffset = vertexAllocSize + indexAllocSize;
-    for(int i = 0; i < concurrentFrameCount; ++i) {
-        const VkDeviceSize offset = uniformStartOffset + i * uniformAllocSize;
-        memcpy(p + offset,ident.constData(),16 * sizeof(float));
-        m_uniformBufInfo[i].buffer = m_buf;
-        m_uniformBufInfo[i].offset = offset;
-        m_uniformBufInfo[i].range = uniformAllocSize;
-    }
-    vkUnmapMemory(dev, m_bufMem);
+    this->updateModel(m_model);
+    m_beUpdateModel = false;
 
     VkVertexInputBindingDescription vertexBindingDesc = {
         .binding = 0,
@@ -167,58 +126,6 @@ void VulkanWindowRenderer::initResources()
         .vertexAttributeDescriptionCount = 1,
         .pVertexAttributeDescriptions = vertexAttrDesc,
     };
-
-    // Set up descriptor set and its layout.
-    VkDescriptorPoolSize descPoolSizes {
-        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = static_cast<uint32_t>(concurrentFrameCount)
-    };
-    VkDescriptorPoolCreateInfo descPoolInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-        .maxSets = static_cast<uint32_t>(concurrentFrameCount),
-        .poolSizeCount = 1,
-        .pPoolSizes = &descPoolSizes,
-    };
-    err = vkCreateDescriptorPool(dev,&descPoolInfo,nullptr,&m_descPool);
-    if(err != VK_SUCCESS)
-        qFatal("Failed to create descriptor pool: %d",err);
-
-    VkDescriptorSetLayoutBinding layoutBinding = {
-        .binding = 0,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = 1,
-        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-    };
-    VkDescriptorSetLayoutCreateInfo descLayoutInfo {
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-        .bindingCount = 1,
-        .pBindings = &layoutBinding
-    };
-    err = vkCreateDescriptorSetLayout(dev,&descLayoutInfo,nullptr,&m_descSetLayout);
-    if(err != VK_SUCCESS)
-        qFatal("Failed to create descriptor set layout: %d",err);
-
-    for(int i = 0; i < concurrentFrameCount; ++i) {
-        VkDescriptorSetAllocateInfo descSetAllocInfo {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .pNext = nullptr,
-            .descriptorPool = m_descPool,
-            .descriptorSetCount = 1,
-            .pSetLayouts = &m_descSetLayout
-        };
-        err = vkAllocateDescriptorSets(dev,&descSetAllocInfo,&m_descSet[i]);
-        if(err != VK_SUCCESS)
-            qFatal("Failed to allocate descriptor set: %d",err);
-
-        VkWriteDescriptorSet descWrite {
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = m_descSet[i],
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-            .pBufferInfo = &m_uniformBufInfo[i],
-        };
-        vkUpdateDescriptorSets(dev,1,&descWrite,0,nullptr);
-    }
 
     // Pipeline cache
     VkPipelineCacheCreateInfo pipelineCacheInfo {
@@ -397,19 +304,17 @@ void VulkanWindowRenderer::releaseResources()
         m_descPool = VK_NULL_HANDLE;
     }
 
-    if(m_buf) {
-        vkDestroyBuffer(dev,m_buf,nullptr);
-        m_buf = VK_NULL_HANDLE;
-    }
-
-    if(m_bufMem) {
-        vkFreeMemory(dev,m_bufMem,nullptr);
-        m_bufMem = VK_NULL_HANDLE;
-    }
+    delete m_mem;
+    m_mem = nullptr;
 }
 
 void VulkanWindowRenderer::startNextFrame()
 {
+    if(m_beUpdateModel) {
+        this->updateModel(m_model);
+        m_beUpdateModel = false;
+    }
+
     VkDevice dev = m_window->device();
     VkCommandBuffer cmdBuf = m_window->currentCommandBuffer();
     const QSize sz = m_window->swapChainImageSize();
@@ -437,15 +342,16 @@ void VulkanWindowRenderer::startNextFrame()
     };
     vkCmdBeginRenderPass(cmdBuf,&rpBeginInfo,VK_SUBPASS_CONTENTS_INLINE);
 
-    quint8 *p;
-    VkResult err = vkMapMemory(dev,m_bufMem,m_uniformBufInfo[m_window->currentFrame()].offset,
-        UNIFORM_DATA_SIZE,0,reinterpret_cast<void **>(&p));
-    if(err != VK_SUCCESS)
-        qFatal("Failed to map memory: %d",err);
-    QMatrix4x4 m = m_proj;
-    m.rotate(m_rotation,0,1,0);
-    memcpy(p,m.constData(),16 * sizeof(float));
-    vkUnmapMemory(dev,m_bufMem);
+    {
+        auto map = m_mem->access();
+        std::byte* p = map.data(
+            m_uniformBufInfo[m_window->currentFrame()].offset,
+            UNIFORM_DATA_SIZE
+        );
+        QMatrix4x4 m = m_proj;
+        m.rotate(m_rotation,0,1,0);
+        memcpy(p,m.constData(),16 * sizeof(float));
+    }
 
     // Not exactly a real animation system, just advance on every frame for now.
     m_rotation += 1.0f;
@@ -454,11 +360,12 @@ void VulkanWindowRenderer::startNextFrame()
     vkCmdBindDescriptorSets(cmdBuf,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
         &m_descSet[m_window->currentFrame()],0,nullptr);
     VkDeviceSize vbOffset = 0;
-    vkCmdBindVertexBuffers(cmdBuf, 0, 1, &m_buf, &vbOffset);
+    VkBuffer buf = m_mem->buffer();
+    vkCmdBindVertexBuffers(cmdBuf, 0, 1, &buf, &vbOffset);
 
     vkCmdBindIndexBuffer(
         cmdBuf,
-        m_buf,
+        m_mem->buffer(),
         m_indexOffset,
         VK_INDEX_TYPE_UINT32
     );
@@ -485,7 +392,7 @@ void VulkanWindowRenderer::startNextFrame()
     };
     vkCmdSetScissor(cmdBuf, 0, 1, &scissor);
 
-    vkCmdDrawIndexed(cmdBuf, 3 * triaIndices.size(), 1, 0, 0, 0);
+    vkCmdDrawIndexed(cmdBuf, m_indexCount, 1, 0, 0, 0);
 
     vkCmdEndRenderPass(cmdBuf);
 
@@ -494,6 +401,145 @@ void VulkanWindowRenderer::startNextFrame()
 }
 
 
-void VulkanWindowRenderer::setMesh(CTriMesh::Ptr mesh)
+void VulkanWindowRenderer::setModel(CTriMesh::Ptr mesh)
 {
+    m_model = mesh;
+    m_beUpdateModel = true;
+}
+
+
+void VulkanWindowRenderer::updateModel(CTriMesh::Ptr mesh)
+{
+    // Note that the vertex data and the projection matrix assume OpenGL. With
+    // Vulkan Y is negated in clip space and the near/far plane is at 0/1 instead
+    // of -1/1. These will be corrected for by an extra transformation when
+    // calculating the modelview-projection matrix.
+
+    VkDevice dev = m_window->device();
+
+    // Prepare the vertex and uniform data. The vertex data will never
+    // change so one buffer is sufficient regardless of the value of
+    // QVulkanWindow::CONCURRENT_FRAME_COUNT. Uniform data is changing per
+    // frame however so active frames have to have a dedicated copy.
+
+    // Use just one memory allocation and one buffer. We will then specify the
+    // appropriate offsets for uniform buffers in the VkDescriptorBufferInfo.
+    // Have to watch out for
+    // VkPhysicalDeviceLimits::minUniformBufferOffsetAlignment, though.
+
+    // The uniform buffer is not strictly required in this example, we could
+    // have used push constants as well since our single matrix (64 bytes) fits
+    // into the spec mandated minimum limit of 128 bytes. However, once that
+    // limit is not sufficient, the per-frame buffers, as shown below, will
+    // become necessary.
+
+    const int concurrentFrameCount = m_window->concurrentFrameCount();
+    const VkPhysicalDeviceLimits *pdevLimits = &m_window->physicalDeviceProperties()->limits;
+    const VkDeviceSize uniAlign = pdevLimits->minUniformBufferOffsetAlignment;
+    qDebug("uniform buffer offset alignment is %u",(uint)uniAlign);
+    // В памяти, связанной с буфером, выровненные по `uniAlign`
+    // данные размещаются следующим образом:
+    // * вершинные данные;
+    // * индексы;
+    // * uniform-переменные для каждого фрейма.
+    size_t nodesCount = mesh->NbNodes();
+    size_t cellsCount = mesh->NbCells();
+    const VkDeviceSize vertexAllocSize =
+        aligned(3 * sizeof(float) * nodesCount, uniAlign);
+    const VkDeviceSize indexAllocSize =
+        aligned(3 * sizeof(uint32_t) * cellsCount, uniAlign);
+    const VkDeviceSize uniformAllocSize = aligned(UNIFORM_DATA_SIZE, uniAlign);
+    m_indexOffset = vertexAllocSize;
+    m_indexCount = 3 * cellsCount;
+    m_mem->resize(
+          vertexAllocSize
+        + indexAllocSize
+        + concurrentFrameCount * uniformAllocSize
+    );
+    VkBufferCreateInfo bufInfo {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = vertexAllocSize
+              + indexAllocSize
+              + concurrentFrameCount * uniformAllocSize,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+               | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+               | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    };
+
+    {
+        auto map = m_mem->access();
+        std::byte* data = map.data();
+
+        // Копируем в память координаты вершин.
+        float* xyzData = reinterpret_cast<float*>(data);
+        for(size_t i = 0; i < nodesCount; ++i) {
+            gp_Pnt pt = mesh->GetNode(i);
+            *xyzData = static_cast<float>(pt.X()); ++xyzData;
+            *xyzData = static_cast<float>(pt.Y()); ++xyzData;
+            *xyzData = static_cast<float>(pt.Z()); ++xyzData;
+        }
+
+        uint32_t* ijkData = reinterpret_cast<uint32_t*>(data + vertexAllocSize);
+        for(size_t i = 0; i < cellsCount; ++i) {
+            const auto& tr = mesh->GetCell(i);
+            *ijkData = static_cast<uint32_t>(tr.na); ++ijkData;
+            *ijkData = static_cast<uint32_t>(tr.nb); ++ijkData;
+            *ijkData = static_cast<uint32_t>(tr.nc); ++ijkData;
+        }
+
+        QMatrix4x4 ident;
+        memset(m_uniformBufInfo, 0, sizeof(m_uniformBufInfo));
+        VkDeviceSize uniformStartOffset = vertexAllocSize + indexAllocSize;
+        for(int i = 0; i < concurrentFrameCount; ++i) {
+            const VkDeviceSize offset = uniformStartOffset + i * uniformAllocSize;
+            memcpy(data + offset, ident.constData(), 16 * sizeof(float));
+            m_uniformBufInfo[i].buffer = m_mem->buffer();
+            m_uniformBufInfo[i].offset = offset;
+            m_uniformBufInfo[i].range = uniformAllocSize;
+        }
+    }
+
+    // Освобождаем пул от ранее выделенных наборов дескрипторов.
+    vkResetDescriptorPool(
+        dev,
+        m_descPool,
+        0
+    );
+
+    // Создаем наборы дескрипторов и связываем их с памятью буфера.
+    for(int i = 0; i < concurrentFrameCount; ++i) {
+        VkDescriptorSetAllocateInfo descSetAllocInfo {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = m_descPool,
+            .descriptorSetCount = 1,
+            .pSetLayouts = &m_descSetLayout
+        };
+        VkResult r = vkAllocateDescriptorSets(
+            dev,
+            &descSetAllocInfo,
+            &m_descSet[i]
+        );
+        if(r != VK_SUCCESS) {
+            auto msg = std::format(
+                "Failed to allocate descriptor set: {}",
+                static_cast<int>(r)
+            );
+            throw std::runtime_error(msg);
+        }
+
+        VkWriteDescriptorSet descWrite {
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = m_descSet[i],
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .pBufferInfo = &m_uniformBufInfo[i],
+        };
+        vkUpdateDescriptorSets(
+            dev,
+            1,
+            &descWrite,
+            0,
+            nullptr
+        );
+    }
 }

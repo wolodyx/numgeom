@@ -90,4 +90,5 @@ void MainWindow::onOpenFile()
     auto mesh = LoadTriMeshFromVtk(filename.toStdString());
     std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
     std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
+    m_sceneWidget->updateGeometry(mesh);
 }

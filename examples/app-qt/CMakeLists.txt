@@ -1,4 +1,5 @@
 set(SOURCE_FILES
+  gpumemory.cpp             gpumemory.h
   main.cpp
   mainwindow.cpp            mainwindow.h
   vulkanwidget.cpp          vulkanwidget.h

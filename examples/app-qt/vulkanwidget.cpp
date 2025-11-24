@@ -18,9 +18,9 @@ VulkanWidget::VulkanWidget(QWidget* parent)
     if(!vulkanInstance.create())
         qFatal("Vulkan instance creating error");
 
-    auto vulkanWindow = new VulkanWindow();
-    vulkanWindow->setVulkanInstance(&vulkanInstance);
-    QWidget* vulkanContainer = QWidget::createWindowContainer(vulkanWindow, this);
+    m_vulkanWindow = new VulkanWindow();
+    m_vulkanWindow->setVulkanInstance(&vulkanInstance);
+    QWidget* vulkanContainer = QWidget::createWindowContainer(m_vulkanWindow, this);
     layout->addWidget(vulkanContainer);
 }
 
@@ -36,4 +36,10 @@ void VulkanWidget::saveAsPng(const QString& filename)
         this->height()
     );
     screenshot.save(filename, "PNG");
+}
+
+
+void VulkanWidget::updateGeometry(CTriMesh::Ptr mesh)
+{
+    m_vulkanWindow->updateGeometry(mesh);
 }

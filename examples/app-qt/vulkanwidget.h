@@ -4,6 +4,10 @@
 #include "QWidget"
 #include "QVulkanInstance"
 
+#include "numgeom/trimesh.h"
+
+class VulkanWindow;
+
 
 class VulkanWidget : public QWidget
 {
@@ -13,7 +17,10 @@ public:
 
     void saveAsPng(const QString& filename);
 
+    void updateGeometry(CTriMesh::Ptr);
+
 private:
     QVulkanInstance vulkanInstance;
+    VulkanWindow* m_vulkanWindow;
 };
 #endif // !numgeom_app_vulkanwidget_h

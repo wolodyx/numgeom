@@ -17,11 +17,13 @@ add_executable(app-qt
 )
 
 target_link_libraries(app-qt
+  glm::glm
   Qt::Core
   Qt::Widgets
   Qt::Gui
   numgeom::render
   numgeom::numgeom
+  numgeom::framework
 )
 
 set(SHADER_FILES

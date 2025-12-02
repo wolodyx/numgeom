@@ -5,7 +5,9 @@
 // чтобы воспользоваться непосредственно функциями vulkan.
 #include <vulkan/vulkan.h>
 
-#include <QVulkanWindowRenderer>
+#include "glm/mat4x4.hpp"
+
+#include "QVulkanWindowRenderer"
 
 #include "numgeom/trimesh.h"
 
@@ -35,6 +37,7 @@ private:
 
     bool m_beUpdateModel;
     CTriMesh::Ptr m_model;
+    glm::vec3 m_modelMin, m_modelMax;
 
     GpuMemory* m_mem = nullptr;
     VkDescriptorBufferInfo m_uniformBufInfo[QVulkanWindow::MAX_CONCURRENT_FRAME_COUNT];
@@ -47,7 +50,7 @@ private:
     VkPipelineLayout m_pipelineLayout = VK_NULL_HANDLE;
     VkPipeline m_pipeline = VK_NULL_HANDLE;
 
-    QMatrix4x4 m_proj;
+    glm::mat4 m_projectionMatrix;
     float m_rotation = 0.0f;
     VkDeviceSize m_indexOffset;
     uint32_t m_indexCount;

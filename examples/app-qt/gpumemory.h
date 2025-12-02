@@ -1,4 +1,4 @@
-#ifndef numgeom_app_gpumemory_h
+п»ї#ifndef numgeom_app_gpumemory_h
 #define numgeom_app_gpumemory_h
 
 #include <cstddef>
@@ -58,7 +58,7 @@ private:
 
     const VulkanState m_vkState;
 
-    //! Количество выделенной памяти в байтах.
+    //! РљРѕР»РёС‡РµСЃС‚РІРѕ РІС‹РґРµР»РµРЅРЅРѕР№ РїР°РјСЏС‚Рё РІ Р±Р°Р№С‚Р°С….
     size_t m_bytesCount = 0;
 
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;

@@ -3,6 +3,12 @@
 #include <array>
 #include <vector>
 
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#include "glm/gtc/type_ptr.hpp"
+#include "glm/gtx/rotate_vector.hpp"
+
 #include "numgeom/loadfromvtk.h"
 
 #include "gpumemory.h"
@@ -261,11 +267,22 @@ void VulkanWindowRenderer::initSwapChainResources()
 {
     qDebug("initSwapChainResources");
 
-    // Projection matrix
-    m_proj = m_window->clipCorrectionMatrix(); // adjust for Vulkan-OpenGL clip space differences
+    // Формируем проективную матрицу.
+    // adjust for Vulkan-OpenGL clip space differences
+    QMatrix4x4 ccm = m_window->clipCorrectionMatrix();
+    const float* src = ccm.constData();
+    float* dst = glm::value_ptr(m_projectionMatrix);
+    for(int i = 0; i < 16; ++i)
+        dst[i] = src[i];
+
     const QSize sz = m_window->swapChainImageSize();
-    m_proj.perspective(45.0f,sz.width() / (float)sz.height(),0.01f,100.0f);
-    m_proj.translate(0,0,-4);
+    glm::mat4 perspective = glm::perspective(
+        glm::radians(45.0f),
+        sz.width() / (float)sz.height(),
+        0.01f,
+        100.0f
+    );
+    m_projectionMatrix *= perspective;
 }
 
 void VulkanWindowRenderer::releaseSwapChainResources()
@@ -308,6 +325,33 @@ void VulkanWindowRenderer::releaseResources()
     m_mem = nullptr;
 }
 
+
+namespace {;
+
+float computeCameraDistance(float radius, float fovY, float aspect)
+{
+    float distanceVertical = radius / std::tan(fovY * 0.5f);
+    float fovX = 2.0f * std::atan(std::tan(fovY * 0.5f) * aspect);
+    float distanceHorizontal = radius / std::tan(fovX * 0.5f);
+    return std::max(distanceVertical, distanceHorizontal) * 1.1f;
+}
+
+
+glm::mat4 calcViewMatrix(
+    const glm::vec3& worldMin,
+    const glm::vec3& worldMax,
+    float aspect)
+{
+    glm::vec3 size = worldMax - worldMin;
+    float radius = glm::length(size) * 0.5f;
+    glm::vec3 center = (worldMin + worldMax) * 0.5f;
+    float distance = computeCameraDistance(radius, glm::radians(45.0), aspect);
+    glm::vec3 cameraPos = center + glm::vec3(0.0f, 0.0f, distance);
+    return glm::lookAt(cameraPos, center, glm::vec3(0.0f,1.0f,0.0f));
+}
+}
+
+
 void VulkanWindowRenderer::startNextFrame()
 {
     if(m_beUpdateModel) {
@@ -342,15 +386,28 @@ void VulkanWindowRenderer::startNextFrame()
     };
     vkCmdBeginRenderPass(cmdBuf,&rpBeginInfo,VK_SUBPASS_CONTENTS_INLINE);
 
+    // Передаем вершинному шейдеру матрицу MVP.
     {
+        const QSize sz = m_window->swapChainImageSize();
+        float aspect = sz.width() / static_cast<float>(sz.height());
+        glm::mat4 viewMatrix = calcViewMatrix(m_modelMin, m_modelMax, aspect);
+        viewMatrix = glm::rotate(
+            viewMatrix,
+            glm::radians(m_rotation),
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+        glm::mat4 mvp = m_projectionMatrix * viewMatrix;
+
         auto map = m_mem->access();
         std::byte* p = map.data(
             m_uniformBufInfo[m_window->currentFrame()].offset,
             UNIFORM_DATA_SIZE
         );
-        QMatrix4x4 m = m_proj;
-        m.rotate(m_rotation,0,1,0);
-        memcpy(p,m.constData(),16 * sizeof(float));
+        memcpy(
+            p,
+            glm::value_ptr(mvp),
+            16 * sizeof(float)
+        );
     }
 
     // Not exactly a real animation system, just advance on every frame for now.
@@ -541,5 +598,17 @@ void VulkanWindowRenderer::updateModel(CTriMesh::Ptr mesh)
             0,
             nullptr
         );
+    }
+
+    m_modelMin = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
+    m_modelMax = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    for(size_t i = 0; i < mesh->NbNodes(); ++i) {
+        gp_Pnt pt = mesh->GetNode(i);
+        m_modelMin.x = std::min(m_modelMin.x, static_cast<float>(pt.X()));
+        m_modelMin.y = std::min(m_modelMin.y, static_cast<float>(pt.Y()));
+        m_modelMin.z = std::min(m_modelMin.z, static_cast<float>(pt.Z()));
+        m_modelMax.x = std::max(m_modelMax.x, static_cast<float>(pt.X()));
+        m_modelMax.y = std::max(m_modelMax.y, static_cast<float>(pt.Y()));
+        m_modelMax.z = std::max(m_modelMax.z, static_cast<float>(pt.Z()));
     }
 }

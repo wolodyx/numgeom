@@ -3,24 +3,35 @@
 
 #include <QMainWindow>
 
+class Application;
 class VulkanWidget;
 
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
 public:
-    MainWindow();
+
+    MainWindow(Application* app);
+
+    ~MainWindow();
+
 
 private:
+
     void createActions();
+
 
 public slots:
     void onScreenshot();
     void onOpenFile();
     void onQuit();
+    void onFitScreen();
+
 
 private:
     VulkanWidget* m_sceneWidget;
+    Application* m_app;
 };
 #endif // !numgeom_app_mainwindow_h

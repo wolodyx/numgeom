@@ -1,20 +1,28 @@
 #include "mainwindow.h"
 
+#include "qevent.h"
 #include "qfiledialog.h"
 #include "qmenu.h"
 #include "qmenubar.h"
 
+#include "numgeom/application.h"
 #include "numgeom/loadfromvtk.h"
 
 #include "vulkanwidget.h"
 
 
-MainWindow::MainWindow()
+MainWindow::MainWindow(Application* app)
 {
+    m_app = app;
     this->createActions();
 
-    m_sceneWidget = new VulkanWidget;
+    m_sceneWidget = new VulkanWidget(this, m_app);
     this->setCentralWidget(m_sceneWidget);
+}
+
+
+MainWindow::~MainWindow()
+{
 }
 
 
@@ -62,6 +70,19 @@ void MainWindow::createActions()
         connect(act, SIGNAL(triggered()), this, SLOT(onQuit()));
         fileMenu->addAction(act);
     }
+
+    {
+        QIcon icon;
+        icon.addFile(
+            QString::fromUtf8(":/resources/icons/fitscreen-16.png"),
+            QSize(),
+            QIcon::Normal,
+            QIcon::Off
+        );
+        QAction* act = new QAction(icon, tr("Fit screen"), this);
+        connect(act, SIGNAL(triggered()), this, SLOT(onFitScreen()));
+        fileMenu->addAction(act);
+    }
 }
 
 
@@ -91,4 +112,10 @@ void MainWindow::onOpenFile()
     std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
     std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
     m_sceneWidget->updateGeometry(mesh);
+}
+
+
+void MainWindow::onFitScreen()
+{
+    std::cout << "Fit screen" << std::endl;
 }

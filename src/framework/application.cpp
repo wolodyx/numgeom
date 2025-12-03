@@ -6,6 +6,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
+#include "numgeom/gpumanager.h"
 #include "numgeom/trimesh.h"
 
 
@@ -50,7 +51,7 @@ public:
 
 
 /**
-\brief Ôîğìèğóåì ïğîåêòèâíóş ìàòğèöó.
+\brief Ğ¤Ğ¾Ñ€Ğ¼Ğ¸Ñ€ÑƒĞµĞ¼ Ğ¿Ñ€Ğ¾ĞµĞºÑ‚Ğ¸Ğ²Ğ½ÑƒÑ Ğ¼Ğ°Ñ‚Ñ€Ğ¸Ñ†Ñƒ.
 `fovy = glm::radians(45.0f)`.
 */
 glm::mat4 computeProjectionMatrix(float fovy, int width, int height)
@@ -83,6 +84,7 @@ struct Application::Impl
     int windowHeight = 0;
 
     TriMesh::Ptr scene;
+    GpuManager* gpuManager = nullptr;
 };
 
 
@@ -152,4 +154,12 @@ void Application::changeWindowSize(int width, int height)
 
 void Application::update()
 {
+}
+
+
+void Application::connectWithWindow(QWindow* window)
+{
+    if(m_pimpl->gpuManager)
+        return;
+    m_pimpl->gpuManager = new GpuManager(this, window);
 }

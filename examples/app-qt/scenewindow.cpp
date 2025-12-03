@@ -1,4 +1,4 @@
-#include "vulkanwindow.h"
+#include "scenewindow.h"
 
 #include "qevent.h"
 
@@ -8,34 +8,34 @@
 #include "numgeom/userinputcontroller.h"
 
 
-VulkanWindow::VulkanWindow(Application* app)
+SceneWindow::SceneWindow(Application* app)
 {
     m_app = app;
     m_userInputController = new UserInputController(app);
 }
 
 
-VulkanWindow::~VulkanWindow()
+SceneWindow::~SceneWindow()
 {
     delete m_userInputController;
 }
 
 
-QVulkanWindowRenderer* VulkanWindow::createRenderer()
+QVulkanWindowRenderer* SceneWindow::createRenderer()
 {
     m_renderer = new VulkanWindowRenderer(this);
     return m_renderer;
 }
 
 
-void VulkanWindow::updateGeometry(CTriMesh::Ptr mesh)
+void SceneWindow::updateGeometry(CTriMesh::Ptr mesh)
 {
     if(m_renderer)
         m_renderer->setModel(mesh);
 }
 
 
-void VulkanWindow::keyPressEvent(QKeyEvent* event)
+void SceneWindow::keyPressEvent(QKeyEvent* event)
 {
     int key = event->key();
     m_userInputController->keyPressed(key);
@@ -43,7 +43,7 @@ void VulkanWindow::keyPressEvent(QKeyEvent* event)
 }
 
 
-void VulkanWindow::keyReleaseEvent(QKeyEvent* event)
+void SceneWindow::keyReleaseEvent(QKeyEvent* event)
 {
     int key = event->key();
     m_userInputController->keyReleased(key);
@@ -51,7 +51,7 @@ void VulkanWindow::keyReleaseEvent(QKeyEvent* event)
 }
 
 
-void VulkanWindow::mousePressEvent(QMouseEvent* event)
+void SceneWindow::mousePressEvent(QMouseEvent* event)
 {
     QPoint pt = event->pos();
     if(event->button() == Qt::LeftButton)
@@ -69,7 +69,7 @@ void VulkanWindow::mousePressEvent(QMouseEvent* event)
 }
 
 
-void VulkanWindow::mouseReleaseEvent(QMouseEvent* event)
+void SceneWindow::mouseReleaseEvent(QMouseEvent* event)
 {
     QPoint pt = event->pos();
     if(event->button() == Qt::LeftButton)
@@ -87,7 +87,7 @@ void VulkanWindow::mouseReleaseEvent(QMouseEvent* event)
 }
 
 
-void VulkanWindow::mouseMoveEvent(QMouseEvent* event)
+void SceneWindow::mouseMoveEvent(QMouseEvent* event)
 {
     QPoint pt = event->pos();
     m_userInputController->mouseMove(pt.x(), pt.y());
@@ -95,8 +95,9 @@ void VulkanWindow::mouseMoveEvent(QMouseEvent* event)
 }
 
 
-void VulkanWindow::wheelEvent(QWheelEvent* event)
+void SceneWindow::wheelEvent(QWheelEvent* event)
 {
-    m_userInputController->mouseWheelRotate(event->delta());
+    QPoint angleDelta = event->angleDelta();
+    m_userInputController->mouseWheelRotate(angleDelta.y());
     event->accept();
 }

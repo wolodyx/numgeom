@@ -26,7 +26,8 @@ static inline VkDeviceSize aligned(VkDeviceSize v,VkDeviceSize byteAlign)
 VulkanWindowRenderer::VulkanWindowRenderer(QVulkanWindow* w)
     : m_window(w)
 {
-    m_model = LoadTriMeshFromVtk("d:/projects/numgeom/tests/data/polydata-cube.vtk");
+    std::filesystem::path projectDir = "/home/tim/projects/numgeom";
+    m_model = LoadTriMeshFromVtk(projectDir/"tests/data/polydata-cube.vtk");
     m_beUpdateModel = true;
 
     bool msaa = true;

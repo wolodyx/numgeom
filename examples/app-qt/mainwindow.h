@@ -1,10 +1,11 @@
 #ifndef numgeom_app_mainwindow_h
 #define numgeom_app_mainwindow_h
 
-#include <QMainWindow>
+#include "qmainwindow.h"
+#include "qvulkaninstance.h"
 
 class Application;
-class VulkanWidget;
+class SceneWindow;
 
 
 class MainWindow : public QMainWindow
@@ -31,7 +32,8 @@ public slots:
 
 
 private:
-    VulkanWidget* m_sceneWidget;
+    QVulkanInstance m_vulkanInstance;
+    SceneWindow* m_sceneWindow;
     Application* m_app;
 };
 #endif // !numgeom_app_mainwindow_h

@@ -1,17 +1,19 @@
-#ifndef numgeom_framework_application_h
+п»ї#ifndef numgeom_framework_application_h
 #define numgeom_framework_application_h
 
 #include "numgeom/framework_export.h"
 
+class QWindow;
+
 
 /** \class Application
-\brief Сущность, в которой содержится все состояние приложения.
+\brief РЎСѓС‰РЅРѕСЃС‚СЊ, РІ РєРѕС‚РѕСЂРѕР№ СЃРѕРґРµСЂР¶РёС‚СЃСЏ РІСЃРµ СЃРѕСЃС‚РѕСЏРЅРёРµ РїСЂРёР»РѕР¶РµРЅРёСЏ.
 
-Класс Application:
-* связывает камеру с событиями от мыши;
-* управляет выборкой рисуемых объектов;
-* управляет модулями приложения;
-* управляет моделями данных;
+РљР»Р°СЃСЃ Application:
+* СЃРІСЏР·С‹РІР°РµС‚ РєР°РјРµСЂСѓ СЃ СЃРѕР±С‹С‚РёСЏРјРё РѕС‚ РјС‹С€Рё;
+* СѓРїСЂР°РІР»СЏРµС‚ РІС‹Р±РѕСЂРєРѕР№ СЂРёСЃСѓРµРјС‹С… РѕР±СЉРµРєС‚РѕРІ;
+* СѓРїСЂР°РІР»СЏРµС‚ РјРѕРґСѓР»СЏРјРё РїСЂРёР»РѕР¶РµРЅРёСЏ;
+* СѓРїСЂР°РІР»СЏРµС‚ РјРѕРґРµР»СЏРјРё РґР°РЅРЅС‹С…;
 
 */
 class FRAMEWORK_EXPORT Application
@@ -23,7 +25,7 @@ public:
     ~Application();
 
     //!@{
-    //! Методы для управления камерой.
+    //! РњРµС‚РѕРґС‹ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ РєР°РјРµСЂРѕР№.
     void fitScene();
     void zoomCamera();
     void translateCamera(int x, int y, int dx, int dy);
@@ -32,7 +34,9 @@ public:
 
 
     //!@{
-    //! Методы для управления рисованием.
+    //! РњРµС‚РѕРґС‹ РґР»СЏ СѓРїСЂР°РІР»РµРЅРёСЏ СЂРёСЃРѕРІР°РЅРёРµРј.
+
+    void connectWithWindow(QWindow*);
 
     void changeWindowSize(int width, int height);
 

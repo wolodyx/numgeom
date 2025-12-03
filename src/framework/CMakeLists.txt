@@ -1,5 +1,6 @@
 set(PUBLIC_HEADERS
   include/numgeom/application.h
+  include/numgeom/gpumanager.h
   include/numgeom/userinputcontroller.h
 )
 
@@ -7,6 +8,7 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   application.cpp
   camera.h                  camera.cpp
+  gpumanager.cpp
   userinputcontroller.cpp
 )
 

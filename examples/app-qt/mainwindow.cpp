@@ -1,14 +1,16 @@
 #include "mainwindow.h"
 
+#include "qapplication.h"
 #include "qevent.h"
 #include "qfiledialog.h"
 #include "qmenu.h"
 #include "qmenubar.h"
+#include "qscreen.h"
 
 #include "numgeom/application.h"
 #include "numgeom/loadfromvtk.h"
 
-#include "vulkanwidget.h"
+#include "scenewindow.h"
 
 
 MainWindow::MainWindow(Application* app)
@@ -16,8 +18,15 @@ MainWindow::MainWindow(Application* app)
     m_app = app;
     this->createActions();
 
-    m_sceneWidget = new VulkanWidget(this, m_app);
-    this->setCentralWidget(m_sceneWidget);
+    m_vulkanInstance.setExtensions({"VK_KHR_surface", "VK_KHR_xcb_surface"});
+    m_vulkanInstance.setLayers({"VK_LAYER_KHRONOS_validation"});
+    if(!m_vulkanInstance.create())
+        qFatal("Vulkan instance creating error");
+    m_sceneWindow = new SceneWindow(m_app);
+    m_sceneWindow->setVulkanInstance(&m_vulkanInstance);
+    QWidget* widget = QWidget::createWindowContainer(m_sceneWindow, this);
+    this->setCentralWidget(widget);
+    m_app->connectWithWindow(m_sceneWindow);
 }
 
 
@@ -89,7 +98,15 @@ void MainWindow::createActions()
 void MainWindow::onScreenshot()
 {
     QString filename = "screen.png";
-    m_sceneWidget->saveAsPng(filename);
+    QScreen* screen = QApplication::primaryScreen();
+    QPixmap screenshot = screen->grabWindow(
+        0,
+        this->mapToGlobal(QPoint(0,0)).x(),
+        this->mapToGlobal(QPoint(0,0)).y(),
+        this->width(),
+        this->height()
+    );
+    screenshot.save(filename, "PNG");
 }
 
 
@@ -111,7 +128,7 @@ void MainWindow::onOpenFile()
     auto mesh = LoadTriMeshFromVtk(filename.toStdString());
     std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
     std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
-    m_sceneWidget->updateGeometry(mesh);
+    m_sceneWindow->updateGeometry(mesh);
 }
 
 

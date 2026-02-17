@@ -7,7 +7,7 @@
 #include "numgeom/trimesh.h"
 
 
-class NUMGEOM_EXPORT TriMeshConnectivity
+class CORE_EXPORT TriMeshConnectivity
 {
 public:
 
@@ -17,14 +17,14 @@ public:
 public:
 
     TriMeshConnectivity(
-        Standard_Integer nbNodes,
-        Standard_Integer nbTrias,
+        size_t nbNodes,
+        size_t nbTrias,
         const Tria* trias
     );
 
-    Standard_Integer NbNodes() const;
+    size_t NbNodes() const;
 
-    Standard_Integer NbTrias() const;
+    size_t NbTrias() const;
 
 
     /** \brief Является ли узел граничным?
@@ -35,21 +35,21 @@ public:
     Узел граничный, если он входит в состав граничного ребра или никуда.
     Ребро граничное, если оно входит в состав только одной грани.
     */
-    Standard_Boolean IsBoundaryNode(
-        Standard_Integer iNode,
+    bool IsBoundaryNode(
+        size_t iNode,
         Edge* incomingEdge = nullptr,
         Edge* outcomingEdge2 = nullptr
     ) const;
 
 
     void Node2Nodes(
-        Standard_Integer iNode,
-        std::vector<Standard_Integer>& nodes
+        size_t iNode,
+        std::vector<size_t>& nodes
     ) const;
 
     void Node2Trias(
-        Standard_Integer iNode,
-        std::vector<Standard_Integer>& trias
+        size_t iNode,
+        std::vector<size_t>& trias
     ) const;
 
 
@@ -60,13 +60,13 @@ public:
     */
     void Edge2Trias(
         const Edge& edge,
-        Standard_Integer& tr1,
-        Standard_Integer& tr2
+        size_t& tr1,
+        size_t& tr2
     ) const;
 
     void Tria2Trias(
-        Standard_Integer iTria,
-        std::array<Standard_Integer, 3>& adjTrias
+        size_t iTria,
+        std::array<size_t, 3>& adjTrias
     ) const;
 
 private:
@@ -75,8 +75,8 @@ private:
 
 private:
     const Tria* myTrias;
-    Standard_Integer myNbNodes, myNbTrias;
-    std::vector<std::array<Standard_Integer,3>> myTria2Trias;
+    size_t myNbNodes, myNbTrias;
+    std::vector<std::array<size_t,3>> myTria2Trias;
     StaticJaggedArray myNode2Nodes;
     StaticJaggedArray myNode2Trias;
 };

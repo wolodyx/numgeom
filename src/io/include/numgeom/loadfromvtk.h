@@ -3,10 +3,11 @@
 
 #include <filesystem>
 
+#include "numgeom/numgeomio_export.h"
 #include "numgeom/trimesh.h"
 
 
-NUMGEOM_EXPORT TriMesh::Ptr LoadTriMeshFromVtk(
+IO_EXPORT TriMesh::Ptr LoadTriMeshFromVtk(
     const std::filesystem::path&
 );
 

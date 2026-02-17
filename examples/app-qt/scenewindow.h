@@ -32,6 +32,7 @@ private:
 
 private:
     Application* m_app;
+    QVulkanInstance m_vulkanInstance;
     UserInputController* m_userInputController;
     VulkanWindowRenderer* m_renderer = nullptr;
 };

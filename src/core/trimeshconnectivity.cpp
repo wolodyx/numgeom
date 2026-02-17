@@ -1,5 +1,6 @@
 ﻿#include "numgeom/trimeshconnectivity.h"
 
+#include <algorithm>
 #include <cassert>
 
 
@@ -29,10 +30,10 @@ std::pair<size_t, size_t> GetMatchingElements(
 \brief Сортировка треугольников `trs`, инцидентных вершине `node`.
 \return true, если узел внутренний.
 */
-Standard_Boolean SortTriangles(
+bool SortTriangles(
     size_t* trs,
     size_t nbTrs,
-    Standard_Integer node,
+    size_t node,
     const TriMesh::Cell* allTrias
 )
 {
@@ -42,7 +43,7 @@ Standard_Boolean SortTriangles(
     {
         const TriMesh::Cell& tr = allTrias[trs[firstTriaIndex]];
         TriMesh::Edge e = tr.GetOutcomingEdge(node).Reversed();
-        Standard_Boolean eIsBoundary = Standard_True;
+        bool eIsBoundary = true;
         for(size_t i2 = 0; i2 < nbTrs; ++i2)
         {
             if(i2 == firstTriaIndex)
@@ -50,7 +51,7 @@ Standard_Boolean SortTriangles(
             const TriMesh::Cell& tr2 = allTrias[trs[i2]];
             if(tr2.Has(e))
             {
-                eIsBoundary = Standard_False;
+                eIsBoundary = false;
                 break;
             }
         }
@@ -84,8 +85,8 @@ Standard_Boolean SortTriangles(
 
 
 TriMeshConnectivity::TriMeshConnectivity(
-    Standard_Integer nbNodes,
-    Standard_Integer nbTrias,
+    size_t nbNodes,
+    size_t nbTrias,
     const Tria* trias
 )
 {
@@ -94,7 +95,7 @@ TriMeshConnectivity::TriMeshConnectivity(
     myTrias = trias;
 
     std::vector<size_t> rowSizes(nbNodes, 0);
-    Standard_Integer iTria = 0;
+    size_t iTria = 0;
     for(const Tria* tptr = trias; iTria < nbTrias; ++tptr, ++iTria)
     {
         ++rowSizes[tptr->na];
@@ -112,9 +113,9 @@ TriMeshConnectivity::TriMeshConnectivity(
     }
 
     // Сортируем треугольники в списках по смежности.
-    for(Standard_Integer iNode = 0; iNode < nbNodes; ++iNode)
+    for(size_t iNode = 0; iNode < nbNodes; ++iNode)
     {
-        Standard_Boolean nodeIsInner = 
+        bool nodeIsInner = 
             SortTriangles(myNode2Trias[iNode],
                           myNode2Trias.Size(iNode),
                           iNode,
@@ -127,7 +128,7 @@ TriMeshConnectivity::TriMeshConnectivity(
 
     myNode2Nodes.Initialize(rowSizes);
     iTria = 0;
-    for(Standard_Integer iNode = 0; iNode < nbNodes; ++iNode)
+    for(size_t iNode = 0; iNode < nbNodes; ++iNode)
     {
         size_t* trs = myNode2Trias[iNode];
         size_t* adjNodes = myNode2Nodes[iNode];
@@ -146,7 +147,7 @@ TriMeshConnectivity::TriMeshConnectivity(
     iTria = 0;
     for(const Tria* tptr = trias; iTria < nbTrias; ++tptr, ++iTria)
     {
-        for(Standard_Integer i = 0; i < 3; ++i)
+        for(size_t i = 0; i < 3; ++i)
         {
             Edge e = tptr->GetEdge(i);
             size_t t1, t2;
@@ -160,32 +161,32 @@ TriMeshConnectivity::TriMeshConnectivity(
 }
 
 
-Standard_Integer TriMeshConnectivity::NbNodes() const
+size_t TriMeshConnectivity::NbNodes() const
 {
     return myNode2Nodes.Size();
 }
 
 
-Standard_Integer TriMeshConnectivity::NbTrias() const
+size_t TriMeshConnectivity::NbTrias() const
 {
     return myTria2Trias.size();
 }
 
 
-Standard_Boolean TriMeshConnectivity::IsBoundaryNode(
-    Standard_Integer iNode,
+bool TriMeshConnectivity::IsBoundaryNode(
+    size_t iNode,
     Edge* incomingEdge,
     Edge* outcomingEdge
 ) const
 {
-    std::vector<Standard_Integer> nodes;
+    std::vector<size_t> nodes;
     this->Node2Nodes(iNode, nodes);
-    Standard_Boolean isBoundary = Standard_False,
-                     incomingEdgeSpecified = Standard_False,
-                     outcomingEdgeSpecified = Standard_False;
-    for(Standard_Integer iNode2 : nodes)
+    bool isBoundary = false,
+                     incomingEdgeSpecified = false,
+                     outcomingEdgeSpecified = false;
+    for(size_t iNode2 : nodes)
     {
-        Standard_Integer tr1 = NONE_INDEX, tr2 = NONE_INDEX;
+        size_t tr1 = NONE_INDEX, tr2 = NONE_INDEX;
         Edge boundaryEdge(iNode2, iNode);
         this->Edge2Trias(boundaryEdge, tr1, tr2);
 
@@ -193,28 +194,28 @@ Standard_Boolean TriMeshConnectivity::IsBoundaryNode(
             continue;
 
         if(!incomingEdge && !outcomingEdge)
-            return Standard_True;
+            return true;
 
-        isBoundary = Standard_True;
+        isBoundary = true;
 
         if(tr1 != NONE_INDEX)
         {
             assert(!incomingEdgeSpecified);
-            incomingEdgeSpecified = Standard_True;
+            incomingEdgeSpecified = true;
             if(incomingEdge)
                 (*incomingEdge) = boundaryEdge;
         }
         else // tr2 != NONE_INDEX
         {
             assert(!outcomingEdgeSpecified);
-            outcomingEdgeSpecified = Standard_True;
+            outcomingEdgeSpecified = true;
             if(outcomingEdge)
                 (*outcomingEdge) = boundaryEdge.Reversed();
         }
 
         if(    (!incomingEdge || incomingEdgeSpecified)
             && (!outcomingEdge || outcomingEdgeSpecified))
-            return Standard_True;
+            return true;
     }
 
     return isBoundary;
@@ -222,8 +223,8 @@ Standard_Boolean TriMeshConnectivity::IsBoundaryNode(
 
 
 void TriMeshConnectivity::Node2Nodes(
-    Standard_Integer iNode,
-    std::vector<Standard_Integer>& nodes
+    size_t iNode,
+    std::vector<size_t>& nodes
 ) const
 {
     auto n = myNode2Nodes.Size(iNode);
@@ -233,8 +234,8 @@ void TriMeshConnectivity::Node2Nodes(
 
 
 void TriMeshConnectivity::Node2Trias(
-    Standard_Integer iNode,
-    std::vector<Standard_Integer>& trias
+    size_t iNode,
+    std::vector<size_t>& trias
 ) const
 {
     auto n = myNode2Trias.Size(iNode);
@@ -245,12 +246,12 @@ void TriMeshConnectivity::Node2Trias(
 
 void TriMeshConnectivity::Edge2Trias(
     const Edge& edge,
-    Standard_Integer& tr1,
-    Standard_Integer& tr2
+    size_t& tr1,
+    size_t& tr2
 ) const
 {
     size_t n = myNode2Trias.Size(edge.na);
-    Standard_Boolean tr1Found = Standard_False, tr2Found = Standard_False;
+    bool tr1Found = false, tr2Found = false;
     for(const size_t* tptr = myNode2Trias[edge.na]; n != 0; ++tptr, --n)
     {
         Tria t = myTrias[*tptr];
@@ -259,14 +260,14 @@ void TriMeshConnectivity::Edge2Trias(
             || edge.na == t.nc && edge.nb == t.na)
         {
             tr1 = *tptr;
-            tr1Found = Standard_True;
+            tr1Found = true;
         }
         else if(edge.na == t.nb && edge.nb == t.na
              || edge.na == t.nc && edge.nb == t.nb
              || edge.na == t.na && edge.nb == t.nc)
         {
             tr2 = *tptr;
-            tr2Found = Standard_True;
+            tr2Found = true;
         }
 
         if(tr1Found && tr2Found)
@@ -276,8 +277,8 @@ void TriMeshConnectivity::Edge2Trias(
 
 
 void TriMeshConnectivity::Tria2Trias(
-    Standard_Integer iTria,
-    std::array<Standard_Integer, 3>& trs
+    size_t iTria,
+    std::array<size_t, 3>& trs
 ) const
 {
     std::copy_n(myTria2Trias[iTria].begin(), 3, trs.begin());

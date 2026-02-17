@@ -12,7 +12,6 @@
 
 struct vkcube_buffer {
     struct gbm_bo *gbm_bo;
-    VkDeviceMemory mem;
     VkImage image;
     VkImageView view;
     VkFramebuffer framebuffer;

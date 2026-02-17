@@ -1,8 +1,11 @@
-#include "gpumemory.h"
+#include "numgeom/gpumemory.h"
 
 #include <cassert>
 #include <format>
 #include <stdexcept>
+#include <unordered_map>
+
+#include "vkutilities.h"
 
 
 namespace {;
@@ -26,16 +29,37 @@ uint32_t getHostVisibleMemoryIndex(VkPhysicalDevice physicalDevice)
     }
     return hostVisibleMemIndex;
 }
+
+uint32_t findMemoryType(
+    VkPhysicalDevice physicalDevice,
+    uint32_t typeFilter,
+    VkMemoryPropertyFlags properties)
+{
+    VkPhysicalDeviceMemoryProperties memProperties;
+    vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
+
+    for(uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
+        if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
+            return i;
+        }
+    }
+    throw std::runtime_error("failed to find suitable memory type!");
+}
+
 }
 
 
 GpuMemory::GpuMemory(
-    const VulkanState& state,
+    VkPhysicalDevice physicalDevice,
+    VkDevice device,
+    VkBufferUsageFlags usage,
     size_t bytesCount)
-: m_vkState(state)
 {
-    assert(state.device != VK_NULL_HANDLE);
-    assert(state.physicalDevice != VK_NULL_HANDLE);
+    assert(physicalDevice != VK_NULL_HANDLE);
+    assert(device != VK_NULL_HANDLE);
+    m_physicalDevice = physicalDevice;
+    m_device = device;
+    m_usage = usage;
 
     if(bytesCount != 0)
         this->resize(bytesCount);
@@ -60,12 +84,10 @@ void GpuMemory::resize(size_t bytesCount)
     VkBufferCreateInfo bufferInfo {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = bytesCount,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-               | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-               | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+        .usage = m_usage
     };
     r = vkCreateBuffer(
-        m_vkState.device,
+        m_device,
         &bufferInfo,
         nullptr,
         &m_buf
@@ -74,18 +96,24 @@ void GpuMemory::resize(size_t bytesCount)
         throw std::runtime_error("Failed to create buffer");
 
     VkMemoryRequirements memReq;
-    vkGetBufferMemoryRequirements(m_vkState.device, m_buf, &memReq);
+    vkGetBufferMemoryRequirements(m_device, m_buf, &memReq);
 
     VkMemoryAllocateInfo allocInfo {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memReq.size,
-        .memoryTypeIndex = getHostVisibleMemoryIndex(m_vkState.physicalDevice)
+        .memoryTypeIndex =
+            findMemoryType(
+                m_physicalDevice,
+                memReq.memoryTypeBits,
+                  VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+                | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            ),//getHostVisibleMemoryIndex(m_physicalDevice)
     };
-    r = vkAllocateMemory(m_vkState.device, &allocInfo, nullptr, &m_bufMem);
+    r = vkAllocateMemory(m_device, &allocInfo, nullptr, &m_bufMem);
     if(r != VK_SUCCESS)
         throw std::runtime_error("Failed to allocate memory");
 
-    r = vkBindBufferMemory(m_vkState.device, m_buf, m_bufMem, 0);
+    r = vkBindBufferMemory(m_device, m_buf, m_bufMem, 0);
     if(r != VK_SUCCESS) {
         auto msg = std::format(
             "Failed to bind buffer memory: {}",
@@ -101,12 +129,12 @@ void GpuMemory::resize(size_t bytesCount)
 void GpuMemory::clear()
 {
     if(m_buf != VK_NULL_HANDLE) {
-        vkDestroyBuffer(m_vkState.device, m_buf, nullptr);
+        vkDestroyBuffer(m_device, m_buf, nullptr);
         m_buf = VK_NULL_HANDLE;
     }
 
     if(m_bufMem != VK_NULL_HANDLE) {
-        vkFreeMemory(m_vkState.device, m_bufMem, nullptr);
+        vkFreeMemory(m_device, m_bufMem, nullptr);
         m_bufMem = VK_NULL_HANDLE;
     }
 
@@ -118,7 +146,7 @@ GpuMemory::Mapping GpuMemory::access()
 {
     if(m_bytesCount == 0)
         return Mapping();
-    return Mapping(m_vkState.device, m_bufMem);
+    return Mapping(m_device, m_bufMem);
 }
 
 
@@ -127,7 +155,7 @@ GpuMemory::Mapping::Mapping()
 }
 
 
-GpuMemory::Mapping::Mapping(VkDevice device, VkDeviceMemory memory)
+    GpuMemory::Mapping::Mapping(VkDevice device, VkDeviceMemory memory)
     : m_dev(device), m_bufMem(memory)
 {
 }
@@ -141,7 +169,7 @@ GpuMemory::Mapping::~Mapping()
 
 std::byte* GpuMemory::Mapping::data(size_t offset, size_t size)
 {
-    vkUnmapMemory(m_dev, m_bufMem);
+    //vkUnmapMemory(m_dev, m_bufMem);
 
     std::byte* data;
     VkResult r = vkMapMemory(
@@ -160,4 +188,18 @@ std::byte* GpuMemory::Mapping::data(size_t offset, size_t size)
         throw std::runtime_error(msg);
     }
     return data;
+}
+
+
+VkDeviceSize GpuMemory::uniformBlockSize(VkDeviceSize bytesCount) const
+{
+    static std::unordered_map<VkPhysicalDevice,VkPhysicalDeviceProperties> s_cachedProperties;
+    auto it = s_cachedProperties.find(m_physicalDevice);
+    if(it == s_cachedProperties.end()) {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(m_physicalDevice, &properties);
+        it = s_cachedProperties.insert(std::make_pair(m_physicalDevice,properties)).first;
+    }
+    VkDeviceSize uniAlign = it->second.limits.minUniformBufferOffsetAlignment;
+    return Aligned(bytesCount, uniAlign);
 }

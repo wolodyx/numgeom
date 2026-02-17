@@ -3,75 +3,10 @@
 #include <format>
 #include <iostream>
 
-#include "glm/glm.hpp"
-#include "glm/gtc/matrix_transform.hpp"
-
 #include "numgeom/gpumanager.h"
 #include "numgeom/trimesh.h"
 
-
-namespace
-{;
-class Camera
-{
-    glm::vec3 m_position;
-    glm::vec3 m_direction;
-    glm::vec3 m_up;
-public:
-
-    Camera()
-    {
-        m_position = glm::vec3(0.0f, 0.0f, 0.0f);
-        m_direction = glm::vec3(0.0f, 0.0f, 1.0f);
-        m_up = glm::vec3(0.0f, 1.0f, 0.0f);
-    }
-
-    Camera(
-        const glm::vec3& pos,
-        const glm::vec3& dir,
-        const glm::vec3& up)
-        : m_position(pos), m_direction(dir), m_up(up)
-    {
-    }
-
-    glm::mat4 viewMatrix() const
-    {
-        return glm::lookAt(
-            m_position,
-            m_position + m_direction,
-            m_up
-        );
-    }
-
-    void translate(const glm::vec3& v)
-    {
-        m_position += v;
-    }
-};
-
-
-/**
-\brief Формируем проективную матрицу.
-`fovy = glm::radians(45.0f)`.
-*/
-glm::mat4 computeProjectionMatrix(float fovy, int width, int height)
-{
-    // Adjust for Vulkan-OpenGL clip space differences.
-    glm::mat4 m {
-        1.0f,  0.0f, 0.0f, 0.0f,
-        0.0f, -1.0f, 0.0f, 0.0f,
-        0.0f,  0.0f, 0.5f, 0.5f,
-        0.0f,  0.0f, 0.0f, 1.0f
-    };
-    glm::mat4 p = glm::perspective(
-        fovy,
-        width / static_cast<float>(height),
-        0.01f,
-        100.0f
-    );
-    return m * p;
-}
-}
+#include "camera.h"
 
 
 struct Application::Impl
@@ -80,17 +15,39 @@ struct Application::Impl
 
     const float fovy = glm::radians(45.0f);
 
-    int windowWidth = 0;
-    int windowHeight = 0;
+    CTriMesh::Ptr scene;
+    glm::vec3 worldMin, worldMax;
 
-    TriMesh::Ptr scene;
-    GpuManager* gpuManager = nullptr;
+    GpuManager* gpuManager;
+
+    void updateScene(CTriMesh::Ptr newScene)
+    {
+        if(scene == newScene)
+            return;
+        scene = newScene;
+
+        worldMin = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
+        worldMax = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+        if(!scene)
+            return;
+        for(size_t i = 0; i < scene->NbNodes(); ++i) {
+            auto pt = scene->GetNode(i);
+            worldMin.x = std::min(worldMin.x, static_cast<float>(pt.x));
+            worldMin.y = std::min(worldMin.y, static_cast<float>(pt.y));
+            worldMin.z = std::min(worldMin.z, static_cast<float>(pt.z));
+            worldMax.x = std::max(worldMax.x, static_cast<float>(pt.x));
+            worldMax.y = std::max(worldMax.y, static_cast<float>(pt.y));
+            worldMax.z = std::max(worldMax.z, static_cast<float>(pt.z));
+        }
+        camera.fitBox(worldMin, worldMax);
+    }
 };
 
 
 Application::Application(int argc, char* argv[])
 {
     m_pimpl = new Impl();
+    m_pimpl->gpuManager = new GpuManager(this);
 }
 
 
@@ -102,13 +59,15 @@ Application::~Application()
 
 void Application::fitScene()
 {
-    std::cout << "Fit scene" << std::endl;
+    m_pimpl->camera.fitBox(m_pimpl->worldMin, m_pimpl->worldMax);
+    this->update();
 }
 
 
-void Application::zoomCamera()
+void Application::zoomCamera(float k)
 {
-    std::cout << "Zoom camera" << std::endl;
+    m_pimpl->camera.zoom(k);
+    this->update();
 }
 
 
@@ -127,12 +86,6 @@ void Application::translateCamera(int x, int y, int dx, int dy)
     //float k = 2.0f * std::tan(0.5f*fov)
     //    * std::fabs();
     //trans *= k;
-
-    std::cout <<
-        std::format(
-            "Translate camera: point({},{}), delta({},{})",
-            x, y, dx, dy
-        ) << std::endl;
 }
 
 
@@ -142,24 +95,61 @@ void Application::rotateCamera()
 }
 
 
-void Application::changeWindowSize(int width, int height)
+glm::mat4 Application::getViewMatrix() const
 {
-    if(m_pimpl->windowWidth == width && m_pimpl->windowHeight == height)
-        return;
+    auto x = m_pimpl->camera.viewMatrix();
+    // std::cout << std::endl;
+    // for(int i = 0; i < 4; ++i) {
+    //     for(int j = 0; j < 4; ++j) {
+    //         std::cout << x[i][j] << ' ';
+    //     }
+    //     std::cout << std::endl;
+    // }
+    return x;
+}
 
-    m_pimpl->windowWidth = width;
-    m_pimpl->windowHeight = height;
+
+glm::mat4 Application::getProjectionMatrix() const
+{
+    return m_pimpl->camera.projectionMatrix();
 }
 
 
 void Application::update()
 {
+    m_pimpl->gpuManager->update();
 }
 
 
-void Application::connectWithWindow(QWindow* window)
+GpuManager* Application::gpuManager()
 {
-    if(m_pimpl->gpuManager)
+    return m_pimpl->gpuManager;
+}
+
+
+CTriMesh::Ptr Application::geometry() const
+{
+    return m_pimpl->scene;
+}
+
+
+void Application::add(CTriMesh::Ptr mesh)
+{
+    m_pimpl->updateScene(mesh);
+    this->update();
+}
+
+
+void Application::clearScene()
+{
+    if(!m_pimpl->scene)
         return;
-    m_pimpl->gpuManager = new GpuManager(this, window);
+    m_pimpl->updateScene(TriMesh::Ptr());
+    this->update();
+}
+
+
+void Application::set_aspect_function(std::function<float()> func)
+{
+    m_pimpl->camera.setAspectFunction(func);
 }

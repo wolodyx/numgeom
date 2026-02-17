@@ -1,7 +1,13 @@
 #ifndef numgeom_framework_gpumanager_h
 #define numgeom_framework_gpumanager_h
 
-class QWindow;
+#include <any>
+#include <cstdint>
+#include <functional>
+
+#include "vulkan/vulkan.h"
+
+#include "glm/glm.hpp"
 
 class Application;
 
@@ -13,23 +19,34 @@ class Application;
 class GpuManager
 {
 public:
+    struct Impl;
 
-    GpuManager(Application*, QWindow*);
+public:
+
+    GpuManager(Application*);
 
     ~GpuManager();
 
     //! Запрос на обновление изображения в окне приложения.
     bool update();
 
-private:
+    //! Возвращает экземпляр vulkan:
+    //! существующий или, если отсутствует, то вновь созданный.
+    VkInstance instance() const;
+
+    //! Задает внешнюю поверхность vulkan.
+    void setSurface(VkSurfaceKHR);
+
+    //! Инициализация объектов vulkan и всей подсистемы взаимодействия с GPU.
     bool initialize();
+
+    void setImageExtentFunction(std::function<std::tuple<uint32_t,uint32_t>()>);
 
 private:
     GpuManager(const GpuManager&) = delete;
     GpuManager& operator=(const GpuManager&) = delete;
 
 private:
-    struct Impl;
     Impl* m_pimpl;
 };
 #endif // !numgeom_framework_gpumanager_h

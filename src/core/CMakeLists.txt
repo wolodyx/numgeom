@@ -1,11 +1,18 @@
 set(PUBLIC_HEADERS
+  include/numgeom/circularlist.h
   include/numgeom/iterator.h
   include/numgeom/outcome.h
+  include/numgeom/staticjaggedarray.h
+  include/numgeom/trimesh.h
+  include/numgeom/trimeshconnectivity.h
 )
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   outcome.cpp
+  staticjaggedarray.cpp
+  trimesh.cpp
+  trimeshconnectivity.cpp
 )
 
 add_library(core ${SOURCE_FILES})
@@ -21,4 +28,9 @@ target_include_directories(core
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}/include
+)
+
+target_link_libraries(core
+  PUBLIC
+    glm::glm
 )

@@ -1,5 +1,7 @@
 #include "mainwindow.h"
 
+#include <iostream>
+
 #include "qapplication.h"
 #include "qevent.h"
 #include "qfiledialog.h"
@@ -8,9 +10,10 @@
 #include "qscreen.h"
 
 #include "numgeom/application.h"
+#include "numgeom/gpumanager.h"
 #include "numgeom/loadfromvtk.h"
 
-#include "scenewindow.h"
+#include "scenewindow2.h"
 
 
 MainWindow::MainWindow(Application* app)
@@ -18,20 +21,54 @@ MainWindow::MainWindow(Application* app)
     m_app = app;
     this->createActions();
 
-    m_vulkanInstance.setExtensions({"VK_KHR_surface", "VK_KHR_xcb_surface"});
-    m_vulkanInstance.setLayers({"VK_LAYER_KHRONOS_validation"});
-    if(!m_vulkanInstance.create())
-        qFatal("Vulkan instance creating error");
-    m_sceneWindow = new SceneWindow(m_app);
-    m_sceneWindow->setVulkanInstance(&m_vulkanInstance);
+    m_sceneWindow = new SceneWindow2(m_app);
+    m_sceneWindow->setSurfaceType(QSurface::VulkanSurface);
+
     QWidget* widget = QWidget::createWindowContainer(m_sceneWindow, this);
     this->setCentralWidget(widget);
-    m_app->connectWithWindow(m_sceneWindow);
 }
 
 
 MainWindow::~MainWindow()
 {
+}
+
+
+void MainWindow::initVulkan()
+{
+    GpuManager* gpuManager = m_app->gpuManager();
+    m_vulkanInstance.setVkInstance(gpuManager->instance());
+    if(!m_vulkanInstance.create())
+        qFatal("Vulkan instance creating error");
+    m_sceneWindow->setVulkanInstance(&m_vulkanInstance);
+
+    VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(m_sceneWindow);
+    assert(surface != VK_NULL_HANDLE);
+    gpuManager->setSurface(surface);
+
+    m_app->set_aspect_function(
+        [this]() -> float {
+            QSize sz = m_sceneWindow->size();
+            qreal r = m_sceneWindow->devicePixelRatio();
+            uint32_t width = static_cast<uint32_t>(sz.width() * r);
+            uint32_t height = static_cast<uint32_t>(sz.height() * r);
+            return width / static_cast<float>(height);
+        }
+    );
+    gpuManager->setImageExtentFunction(
+        [this]() -> std::tuple<uint32_t,uint32_t> {
+            QSize sz = m_sceneWindow->size();
+            qreal r = m_sceneWindow->devicePixelRatio();
+            uint32_t width = static_cast<uint32_t>(sz.width() * r);
+            uint32_t height = static_cast<uint32_t>(sz.height() * r);
+            return std::make_tuple(width, height);
+        }
+    );
+
+    gpuManager->initialize(); //< Продолжить начатую выше инициализацию.
+    auto mesh = LoadTriMeshFromVtk("/home/tim/projects/numgeom/tests/data/polydata-cube.vtk");
+    m_app->add(mesh);
+    m_app->update();
 }
 
 
@@ -88,8 +125,9 @@ void MainWindow::createActions()
             QIcon::Normal,
             QIcon::Off
         );
-        QAction* act = new QAction(icon, tr("Fit screen"), this);
-        connect(act, SIGNAL(triggered()), this, SLOT(onFitScreen()));
+        QAction* act = new QAction(icon, tr("Fit scene"), this);
+        connect(act, SIGNAL(triggered()), this, SLOT(onFitScene()));
+        act->setShortcut(QKeySequence(tr("F5")));
         fileMenu->addAction(act);
     }
 }
@@ -128,11 +166,11 @@ void MainWindow::onOpenFile()
     auto mesh = LoadTriMeshFromVtk(filename.toStdString());
     std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
     std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
-    m_sceneWindow->updateGeometry(mesh);
+    m_app->add(mesh);
 }
 
 
-void MainWindow::onFitScreen()
+void MainWindow::onFitScene()
 {
-    std::cout << "Fit screen" << std::endl;
+    m_app->fitScene();
 }

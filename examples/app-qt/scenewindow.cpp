@@ -12,6 +12,12 @@ SceneWindow::SceneWindow(Application* app)
 {
     m_app = app;
     m_userInputController = new UserInputController(app);
+
+    m_vulkanInstance.setExtensions({"VK_KHR_surface", "VK_KHR_xcb_surface"});
+    m_vulkanInstance.setLayers({"VK_LAYER_KHRONOS_validation"});
+    if(!m_vulkanInstance.create())
+        qFatal("Vulkan instance creating error");
+    this->setVulkanInstance(&m_vulkanInstance);
 }
 
 

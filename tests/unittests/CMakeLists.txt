@@ -24,7 +24,7 @@ target_include_directories(unittests
 
 target_link_libraries(unittests
   GTest::gtest_main
-  numgeom
+  numgeom::core
 )
 
 include(GoogleTest)

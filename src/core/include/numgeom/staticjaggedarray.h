@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-#include "numgeom/numgeom_export.h"
+#include "numgeom/numgeomcore_export.h"
 
 
 /**\class StaticJaggedArray
@@ -12,7 +12,7 @@
 
 Jagged arrays on [wiki](https://en.wikipedia.org/wiki/Jagged_array).
 */
-class NUMGEOM_EXPORT StaticJaggedArray
+class CORE_EXPORT StaticJaggedArray
 {
 public:
 

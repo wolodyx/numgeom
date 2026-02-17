@@ -5,7 +5,7 @@
 #include "qvulkaninstance.h"
 
 class Application;
-class SceneWindow;
+class SceneWindow2;
 
 
 class MainWindow : public QMainWindow
@@ -18,22 +18,21 @@ public:
 
     ~MainWindow();
 
+    void initVulkan();
+
 
 private:
-
     void createActions();
-
 
 public slots:
     void onScreenshot();
     void onOpenFile();
     void onQuit();
-    void onFitScreen();
-
+    void onFitScene();
 
 private:
-    QVulkanInstance m_vulkanInstance;
-    SceneWindow* m_sceneWindow;
+    SceneWindow2* m_sceneWindow;
     Application* m_app;
+    QVulkanInstance m_vulkanInstance;
 };
 #endif // !numgeom_app_mainwindow_h

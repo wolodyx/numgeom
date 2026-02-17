@@ -1,8 +1,8 @@
 set(SOURCE_FILES
-  gpumemory.cpp             gpumemory.h
   main.cpp
   mainwindow.cpp            mainwindow.h
   scenewindow.cpp           scenewindow.h
+  scenewindow2.cpp          scenewindow2.h
   vulkanwindowrenderer.cpp  vulkanwindowrenderer.h
 )
 
@@ -20,9 +20,8 @@ target_link_libraries(app-qt
   Qt::Core
   Qt::Widgets
   Qt::Gui
-  numgeom::render
-  numgeom::numgeom
   numgeom::framework
+  numgeom::io
 )
 
 set(SHADER_FILES

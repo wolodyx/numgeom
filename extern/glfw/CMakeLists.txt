@@ -4,4 +4,6 @@ FetchContent_Declare(
   GIT_TAG 3.4
 )
 
+set(GLFW_BUILD_WAYLAND ${ENABLE_WAYLAND})
+set(GLFW_BUILD_X11 ${ENABLE_XCB})
 FetchContent_MakeAvailable(glfw)

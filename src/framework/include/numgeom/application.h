@@ -1,9 +1,14 @@
 ﻿#ifndef numgeom_framework_application_h
 #define numgeom_framework_application_h
 
+#include <functional>
+
 #include "numgeom/framework_export.h"
+#include "numgeom/trimesh.h"
 
 class QWindow;
+
+class GpuManager;
 
 
 /** \class Application
@@ -24,24 +29,46 @@ public:
 
     ~Application();
 
+
     //!@{
-    //! Методы для управления камерой.
+    //! Манипуляции камерой и запрос ее состояния.
+
     void fitScene();
-    void zoomCamera();
+
+    void zoomCamera(float k);
+
+    //! Перемещение камеры вдоль плоскости экрана
+    //! в направлении экранного вектора `(dx,dy)`.
     void translateCamera(int x, int y, int dx, int dy);
+
     void rotateCamera();
+
+    glm::mat4 getViewMatrix() const;
+
+    glm::mat4 getProjectionMatrix() const;
+
     //!@}
 
 
     //!@{
     //! Методы для управления рисованием.
 
-    void connectWithWindow(QWindow*);
-
-    void changeWindowSize(int width, int height);
-
     void update();
     //!@}
+
+    //!@{
+    //! Взаимодействие со сценой.
+
+    CTriMesh::Ptr geometry() const;
+
+    void add(CTriMesh::Ptr);
+
+    void clearScene();
+    //!@}
+
+    GpuManager* gpuManager();
+
+    void set_aspect_function(std::function<float()>);
 
 private:
     Application(const Application&) = delete;

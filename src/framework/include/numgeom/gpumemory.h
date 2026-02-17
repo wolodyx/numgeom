@@ -1,16 +1,9 @@
-﻿#ifndef numgeom_app_gpumemory_h
-#define numgeom_app_gpumemory_h
+﻿#ifndef numgeom_framework_gpumemory_h
+#define numgeom_framework_gpumemory_h
 
 #include <cstddef>
 
 #include <vulkan/vulkan.h>
-
-
-struct VulkanState
-{
-    VkDevice device = VK_NULL_HANDLE;
-    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
-};
 
 
 class GpuMemory
@@ -34,7 +27,12 @@ public:
 
 public:
 
-    GpuMemory(const VulkanState& state, size_t bytesCount = 0);
+    GpuMemory(
+        VkPhysicalDevice physicalDevice,
+        VkDevice logicalDevice,
+        VkBufferUsageFlags usage,
+        size_t bytesCount = 0
+    );
 
     ~GpuMemory();
 
@@ -46,6 +44,10 @@ public:
 
     Mapping access();
 
+    //! Возвращает размер в байтах блока uniform-памяти, вмещающей данных
+    //! размером `bytesCount`.
+    VkDeviceSize uniformBlockSize(VkDeviceSize bytesCount) const;
+
 
 private:
 
@@ -56,7 +58,9 @@ private:
 
 private:
 
-    const VulkanState m_vkState;
+    VkPhysicalDevice m_physicalDevice;
+    VkDevice m_device;
+    VkBufferUsageFlags m_usage;
 
     //! Количество выделенной памяти в байтах.
     size_t m_bytesCount = 0;
@@ -64,4 +68,4 @@ private:
     VkDeviceMemory m_bufMem = VK_NULL_HANDLE;
     VkBuffer m_buf = VK_NULL_HANDLE;
 };
-#endif // !numgeom_app_gpumemory_h
+#endif // !numgeom_framework_gpumemory_h

@@ -1,6 +1,7 @@
 #include "numgeom/trimesh.h"
 
 #include <algorithm>
+#include <fstream>
 
 #include "numgeom/trimeshconnectivity.h"
 
@@ -11,50 +12,50 @@ CTriMesh::~CTriMesh()
 }
 
 
-CTriMesh::CTriMesh(Standard_Integer nbNodes, Standard_Integer nbCells)
+CTriMesh::CTriMesh(size_t nbNodes, size_t nbCells)
     : myNodes(nbNodes), myCells(nbCells)
 {
     myConnectivity = nullptr;
 }
 
 
-Standard_Integer CTriMesh::NbNodes() const
+size_t CTriMesh::NbNodes() const
 {
     return myNodes.size();
 }
 
 
-Standard_Integer CTriMesh::NbCells() const
+size_t CTriMesh::NbCells() const
 {
     return myCells.size();
 }
 
 
-const gp_Pnt& CTriMesh::GetNode(Standard_Integer index) const
+const glm::dvec3& CTriMesh::GetNode(size_t index) const
 {
     return myNodes[index];
 }
 
 
-const CTriMesh::Cell& CTriMesh::GetCell(Standard_Integer index) const
+const CTriMesh::Cell& CTriMesh::GetCell(size_t index) const
 {
     return myCells[index];
 }
 
 
-gp_Pnt& TriMesh::GetNode(Standard_Integer index)
+glm::dvec3& TriMesh::GetNode(size_t index)
 {
     return myNodes[index];
 }
 
 
-CTriMesh::Cell& TriMesh::GetCell(Standard_Integer index)
+CTriMesh::Cell& TriMesh::GetCell(size_t index)
 {
     return myCells[index];
 }
 
 
-TriMesh::Ptr TriMesh::Create(Standard_Integer nbNodes, Standard_Integer nbCells)
+TriMesh::Ptr TriMesh::Create(size_t nbNodes, size_t nbCells)
 {
     if(nbNodes == 0 || nbCells == 0)
         return Ptr();
@@ -73,7 +74,7 @@ TriMeshConnectivity* CTriMesh::Connectivity() const
 }
 
 
-TriMesh::TriMesh(Standard_Integer nbNodes, Standard_Integer nbCells)
+TriMesh::TriMesh(size_t nbNodes, size_t nbCells)
     : CTriMesh(nbNodes, nbCells)
 {
 }
@@ -84,31 +85,31 @@ TriMesh::~TriMesh()
 }
 
 
-Standard_Boolean CTriMesh::Dump(
+bool CTriMesh::Dump(
     const std::filesystem::path& fileName
 ) const
 {
     std::ofstream file(fileName);
     if(!file.is_open())
-        return Standard_False;
+        return false;
 
     file << "# vtk DataFile Version 3.0" << std::endl;
     file << "numgeom output" << std::endl;
     file << "ASCII" << std::endl;
     file << "DATASET UNSTRUCTURED_GRID" << std::endl;
 
-    Standard_Integer nbNodes = this->NbNodes();
+    size_t nbNodes = this->NbNodes();
     file << "POINTS " << nbNodes << " double" << std::endl;
-    for(Standard_Integer i = 0; i < nbNodes; ++i)
+    for(size_t i = 0; i < nbNodes; ++i)
     {
-        const gp_Pnt& pt = this->GetNode(i);
-        file << pt.X() << ' ' << pt.Y() << ' ' << pt.Z() << ' ';
+        const glm::dvec3& pt = this->GetNode(i);
+        file << pt.x << ' ' << pt.y << ' ' << pt.z << ' ';
     }
     file << std::endl;
 
-    Standard_Integer nbCells = this->NbCells();
+    size_t nbCells = this->NbCells();
     file << "CELLS " << nbCells << ' ' << 4 * nbCells << std::endl;
-    for(Standard_Integer i = 0; i < nbCells; ++i)
+    for(size_t i = 0; i < nbCells; ++i)
     {
         const CTriMesh::Cell& cell = this->GetCell(i);
         file << "3 " << cell.na << ' ' << cell.nb << ' ' << cell.nc << ' ';
@@ -120,12 +121,12 @@ Standard_Boolean CTriMesh::Dump(
         file << "5 "; //< VTK_TRIANGLE
     file << std::endl;
 
-    return Standard_True;
+    return true;
 }
 
 
 TriMesh::Ptr TriMesh::Create(
-    const std::vector<gp_Pnt>& nodes,
+    const std::vector<glm::dvec3>& nodes,
     const std::vector<Cell>& cells
 )
 {
@@ -136,15 +137,15 @@ TriMesh::Ptr TriMesh::Create(
 }
 
 
-void TriMesh::Transform(const gp_Trsf& tr)
+void TriMesh::Transform(const glm::dmat4& tr)
 {
     std::transform(
         myNodes.begin(),
         myNodes.end(),
         myNodes.begin(),
-        [&](const gp_Pnt& pt)
+        [&](const glm::dvec3& pt)
         {
-            return pt.Transformed(tr);
+            return tr * glm::dvec4(pt,0.0);
         }
     );
 }

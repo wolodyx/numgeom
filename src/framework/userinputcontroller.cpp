@@ -124,8 +124,9 @@ void UserInputController::mouseMove(int x, int y)
 }
 
 
-void UserInputController::mouseWheelRotate(int count)
+void UserInputController::mouseWheelRotate(int numDegrees)
 {
+    m_pimpl->app->zoomCamera(numDegrees/30.0f);
 }
 
 

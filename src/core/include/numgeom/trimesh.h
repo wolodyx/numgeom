@@ -5,16 +5,16 @@
 #include <memory>
 #include <vector>
 
-#include <gp_Pnt.hxx>
+#include "glm/glm.hpp"
 
-#include "numgeom/numgeom_export.h"
+#include "numgeom/numgeomcore_export.h"
 
 #define NONE_INDEX -1
 
 class TriMeshConnectivity;
 
 
-class NUMGEOM_EXPORT CTriMesh
+class CORE_EXPORT CTriMesh
 {
 public:
 
@@ -24,18 +24,18 @@ public:
     {
         Edge() : na(NONE_INDEX), nb(NONE_INDEX) {}
 
-        Edge(Standard_Integer a, Standard_Integer b) : na(a), nb(b) {}
+        Edge(size_t a, size_t b) : na(a), nb(b) {}
 
-        Standard_Boolean empty() const { return na == NONE_INDEX; }
+        bool empty() const { return na == NONE_INDEX; }
 
-        Standard_Boolean operator!() const { return this->empty(); }
+        bool operator!() const { return this->empty(); }
 
-        Standard_Boolean operator==(const Edge& other) const
+        bool operator==(const Edge& other) const
         {
             return na == other.na && nb == other.nb;
         }
 
-        Standard_Boolean operator!=(const Edge& other) const
+        bool operator!=(const Edge& other) const
         {
             return !this->operator==(other);
         }
@@ -44,25 +44,25 @@ public:
 
         void Reverse() { std::swap(na,nb); }
 
-        Standard_Integer na, nb;
+        size_t na, nb;
     };
 
     struct Cell
     {
         Cell() : na(NONE_INDEX) {}
 
-        Cell(const Standard_Integer* nodes)
+        Cell(const size_t* nodes)
             : na(nodes[0]), nb(nodes[1]), nc(nodes[2]) {}
 
-        Cell(Standard_Integer a, Standard_Integer b, Standard_Integer c)
+        Cell(size_t a, size_t b, size_t c)
             : na(a), nb(b), nc(c) {}
 
-        Edge GetEdge(Standard_Integer i) const
+        Edge GetEdge(size_t i) const
         {
             return Edge(*(&na + i%3), *(&na + (i+1)%3));
         }
 
-        Edge GetIncomingEdge(Standard_Integer node) const
+        Edge GetIncomingEdge(size_t node) const
         {
             if(node == na)
                 return Edge(nc, na);
@@ -73,7 +73,7 @@ public:
             return Edge();
         }
 
-        Edge GetOutcomingEdge(Standard_Integer node) const
+        Edge GetOutcomingEdge(size_t node) const
         {
             if(node == na)
                 return Edge(na, nb);
@@ -84,41 +84,41 @@ public:
             return Edge();
         }
 
-        Standard_Boolean Has(const Edge& edge) const
+        bool Has(const Edge& edge) const
         {
             return edge.na == na && edge.nb == nb
                 || edge.na == nb && edge.nb == nc
                 || edge.na == nc && edge.nb == na;
         }
 
-        Standard_Integer na, nb, nc;
+        size_t na, nb, nc;
     };
 
 public:
 
     virtual ~CTriMesh();
 
-    Standard_Integer NbNodes() const;
+    size_t NbNodes() const;
 
-    Standard_Integer NbCells() const;
+    size_t NbCells() const;
 
-    const gp_Pnt& GetNode(Standard_Integer) const;
+    const glm::dvec3& GetNode(size_t) const;
 
-    const Cell& GetCell(Standard_Integer) const;
+    const Cell& GetCell(size_t) const;
 
-    Standard_Boolean Dump(const std::filesystem::path&) const;
+    bool Dump(const std::filesystem::path&) const;
 
     TriMeshConnectivity* Connectivity() const;
 
 protected:
-    CTriMesh(Standard_Integer nbNodes, Standard_Integer nbCells);
+    CTriMesh(size_t nbNodes, size_t nbCells);
 
 private:
     CTriMesh(const CTriMesh&) = delete;
     void operator=(const CTriMesh&) = delete;
 
 protected:
-    std::vector<gp_Pnt> myNodes;
+    std::vector<glm::dvec3> myNodes;
     std::vector<Cell> myCells;
     mutable TriMeshConnectivity* myConnectivity;
 };
@@ -133,12 +133,12 @@ public:
 public:
 
     static Ptr Create(
-        Standard_Integer nbNodes,
-        Standard_Integer nbCells
+        size_t nbNodes,
+        size_t nbCells
     );
 
     static Ptr Create(
-        const std::vector<gp_Pnt>& nodes,
+        const std::vector<glm::dvec3>& nodes,
         const std::vector<Cell>& cells
     );
 
@@ -146,13 +146,13 @@ public:
 
     virtual ~TriMesh();
 
-    gp_Pnt& GetNode(Standard_Integer);
+    glm::dvec3& GetNode(size_t);
 
-    Cell& GetCell(Standard_Integer);
+    Cell& GetCell(size_t);
 
-    void Transform(const gp_Trsf&);
+    void Transform(const glm::dmat4&);
 
 private:
-    TriMesh(Standard_Integer nbNodes, Standard_Integer nbCells);
+    TriMesh(size_t nbNodes, size_t nbCells);
 };
 #endif // !numgeom_numgeom_trimesh_h

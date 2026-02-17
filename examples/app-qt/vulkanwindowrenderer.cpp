@@ -9,9 +9,8 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/rotate_vector.hpp"
 
+#include "numgeom/gpumemory.h"
 #include "numgeom/loadfromvtk.h"
-
-#include "gpumemory.h"
 
 
 static const int UNIFORM_DATA_SIZE = 16 * sizeof(float);
@@ -73,10 +72,11 @@ void VulkanWindowRenderer::initResources()
     const int concurrentFrameCount = m_window->concurrentFrameCount();
 
     m_mem = new GpuMemory(
-        VulkanState{
-            dev,
-            m_window->physicalDevice()
-        }
+        m_window->physicalDevice(),
+        dev,
+          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+        | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+        | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
     );
 
     // Set up descriptor set and its layout.
@@ -415,8 +415,16 @@ void VulkanWindowRenderer::startNextFrame()
     m_rotation += 1.0f;
 
     vkCmdBindPipeline(cmdBuf,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipeline);
-    vkCmdBindDescriptorSets(cmdBuf,VK_PIPELINE_BIND_POINT_GRAPHICS,m_pipelineLayout,0,1,
-        &m_descSet[m_window->currentFrame()],0,nullptr);
+    vkCmdBindDescriptorSets(
+        cmdBuf,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        m_pipelineLayout,
+        0,
+        1,
+        &m_descSet[m_window->currentFrame()],
+        0,
+        nullptr
+    );
     VkDeviceSize vbOffset = 0;
     VkBuffer buf = m_mem->buffer();
     vkCmdBindVertexBuffers(cmdBuf, 0, 1, &buf, &vbOffset);
@@ -531,10 +539,10 @@ void VulkanWindowRenderer::updateModel(CTriMesh::Ptr mesh)
         // Копируем в память координаты вершин.
         float* xyzData = reinterpret_cast<float*>(data);
         for(size_t i = 0; i < nodesCount; ++i) {
-            gp_Pnt pt = mesh->GetNode(i);
-            *xyzData = static_cast<float>(pt.X()); ++xyzData;
-            *xyzData = static_cast<float>(pt.Y()); ++xyzData;
-            *xyzData = static_cast<float>(pt.Z()); ++xyzData;
+            auto pt = mesh->GetNode(i);
+            *xyzData = static_cast<float>(pt.x); ++xyzData;
+            *xyzData = static_cast<float>(pt.y); ++xyzData;
+            *xyzData = static_cast<float>(pt.z); ++xyzData;
         }
 
         uint32_t* ijkData = reinterpret_cast<uint32_t*>(data + vertexAllocSize);
@@ -604,12 +612,12 @@ void VulkanWindowRenderer::updateModel(CTriMesh::Ptr mesh)
     m_modelMin = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
     m_modelMax = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
     for(size_t i = 0; i < mesh->NbNodes(); ++i) {
-        gp_Pnt pt = mesh->GetNode(i);
-        m_modelMin.x = std::min(m_modelMin.x, static_cast<float>(pt.X()));
-        m_modelMin.y = std::min(m_modelMin.y, static_cast<float>(pt.Y()));
-        m_modelMin.z = std::min(m_modelMin.z, static_cast<float>(pt.Z()));
-        m_modelMax.x = std::max(m_modelMax.x, static_cast<float>(pt.X()));
-        m_modelMax.y = std::max(m_modelMax.y, static_cast<float>(pt.Y()));
-        m_modelMax.z = std::max(m_modelMax.z, static_cast<float>(pt.Z()));
+        auto pt = mesh->GetNode(i);
+        m_modelMin.x = std::min(m_modelMin.x, static_cast<float>(pt.x));
+        m_modelMin.y = std::min(m_modelMin.y, static_cast<float>(pt.y));
+        m_modelMin.z = std::min(m_modelMin.z, static_cast<float>(pt.z));
+        m_modelMax.x = std::max(m_modelMax.x, static_cast<float>(pt.x));
+        m_modelMax.y = std::max(m_modelMax.y, static_cast<float>(pt.y));
+        m_modelMax.z = std::max(m_modelMax.z, static_cast<float>(pt.z));
     }
 }

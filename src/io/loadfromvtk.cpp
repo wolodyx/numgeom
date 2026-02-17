@@ -28,7 +28,7 @@ void vtkerror(const char* str)
 
 struct VtkGridData
 {
-    std::vector<gp_Pnt> points;
+    std::vector<glm::dvec3> points;
     StaticJaggedArray cells;
     size_t index, index2;
     size_t num;
@@ -83,15 +83,15 @@ void InsertNextValue(double val)
     if(s_fileData.loadPointArray)
     {
         size_t idx = s_fileData.index / 3;
-        size_t comp = s_fileData.index % 3 + 1;
-        s_fileData.points[idx].SetCoord(comp, val);
+        size_t comp = s_fileData.index % 3;
+        s_fileData.points[idx][comp] = val;
         ++s_fileData.index;
     }
     else if(s_fileData.loadPolydataArray)
     {
         if(s_fileData.num == 0)
         {
-            s_fileData.num = static_cast<Standard_Integer>(val);
+            s_fileData.num = static_cast<size_t>(val);
             s_fileData.cells.Offsets()[s_fileData.index2 + 1] =
                    s_fileData.cells.Offsets()[s_fileData.index2]
                  + s_fileData.num;
@@ -99,7 +99,7 @@ void InsertNextValue(double val)
         }
         else
         {
-            s_fileData.cells.Data()[s_fileData.index] = static_cast<Standard_Integer>(val);
+            s_fileData.cells.Data()[s_fileData.index] = static_cast<size_t>(val);
             ++s_fileData.index;
             --s_fileData.num;
         }

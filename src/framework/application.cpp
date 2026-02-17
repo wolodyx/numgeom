@@ -76,16 +76,12 @@ void Application::translateCamera(int x, int y, int dx, int dy)
     if(dx == 0 && dy == 0)
         return;
 
-    glm::vec3 trans(
-        -static_cast<float>(dx),
-        +static_cast<float>(dy),
-        0.0f
+    glm::vec2 screenOffset(
+        static_cast<float>(dx),
+        static_cast<float>(dy)
     );
-
-    float fov = glm::radians(45.0);
-    //float k = 2.0f * std::tan(0.5f*fov)
-    //    * std::fabs();
-    //trans *= k;
+    m_pimpl->camera.translate(screenOffset);
+    this->update();
 }
 
 

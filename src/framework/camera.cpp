@@ -62,8 +62,26 @@ void Camera::translate(const glm::vec3& v)
 }
 
 
-void Camera::translate(const glm::vec2& v)
+void Camera::translate(const glm::vec2& screenOffset)
 {
+    static const float baseSpeed = 0.1f;
+    static const float sensitivity = 0.3f;
+
+    // Коррекция для разных соотношений сторон: замедляем
+    // * горизонтальное движение для широких экранов;
+    // * вертикальное движение для высоких экранов.
+    glm::vec2 scaledOffset = screenOffset * sensitivity;
+    glm::vec2 correctedOffset = scaledOffset;
+    float aspect = m_aspectFunction();
+    if(aspect > 1.0f)
+        correctedOffset.x /= aspect;
+    else
+        correctedOffset.y *= aspect;
+
+    glm::vec3 xScreenAxis = glm::normalize(glm::cross(m_direction, m_up));
+    glm::vec3 yScreenAxis = glm::normalize(glm::cross(xScreenAxis, m_direction));
+    glm::vec3 offset = correctedOffset.x * xScreenAxis + correctedOffset.y * yScreenAxis;
+    m_position += (offset * baseSpeed);
 }
 
 

@@ -75,7 +75,6 @@ void Application::translateCamera(int x, int y, int dx, int dy)
 {
     if(dx == 0 && dy == 0)
         return;
-
     glm::vec2 screenOffset(
         static_cast<float>(dx),
         static_cast<float>(dy)
@@ -85,9 +84,17 @@ void Application::translateCamera(int x, int y, int dx, int dy)
 }
 
 
-void Application::rotateCamera()
+void Application::rotateCamera(int x, int y, int dx, int dy)
 {
-    std::cout << "Rotate camera" << std::endl;
+    if(dx == 0 && dy == 0)
+        return;
+    glm::vec2 screenOffset(
+        static_cast<float>(dx),
+        static_cast<float>(dy)
+    );
+    glm::vec3 pivotPoint = 0.5f * (m_pimpl->worldMin + m_pimpl->worldMax);
+    m_pimpl->camera.rotateAroundPivot(pivotPoint, screenOffset);
+    this->update();
 }
 
 
@@ -107,7 +114,7 @@ glm::mat4 Application::getViewMatrix() const
 
 glm::mat4 Application::getProjectionMatrix() const
 {
-    return m_pimpl->camera.projectionMatrix();
+    return m_pimpl->camera.projectionMatrix(m_pimpl->worldMin, m_pimpl->worldMax);
 }
 
 

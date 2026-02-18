@@ -1,14 +1,15 @@
 ﻿#include "gtest/gtest.h"
 
-#include <Bnd_Box2d.hxx>
-#include <BRepClass_FaceClassifier.hxx>
-#include <gp_Pnt2d.hxx>
-#include <TopoDS.hxx>
-#include <TopoDS_Face.hxx>
-#include <TopExp_Explorer.hxx>
+#include "Bnd_Box2d.hxx"
+#include "BRepClass_FaceClassifier.hxx"
+#include "gp_Pnt2d.hxx"
+#include "TopoDS.hxx"
+#include "TopoDS_Face.hxx"
+#include "TopExp_Explorer.hxx"
 
 #include "numgeom/classificate.h"
 #include "numgeom/utilities.h"
+#include "numgeom/utilities_occ.h"
 
 #include "utilities.h"
 

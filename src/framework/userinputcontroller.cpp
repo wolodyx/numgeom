@@ -86,6 +86,13 @@ void UserInputController::mouseMiddleButtonUp(int x, int y)
 
 void UserInputController::mouseRightButtonUp(int x, int y)
 {
+    if(!m_pimpl->mouseRightButtonState.down)
+        return;
+
+    m_pimpl->mouseRightButtonState.down = false;
+
+    bool beClicked = m_pimpl->mouseRightButtonState.xDown == x
+                  && m_pimpl->mouseRightButtonState.yDown == y;
 }
 
 
@@ -116,7 +123,7 @@ void UserInputController::mouseMove(int x, int y)
         const int dx = x - m_pimpl->mouseRightButtonState.xPrev;
         const int dy = y - m_pimpl->mouseRightButtonState.yPrev;
 
-        // ...
+        m_pimpl->app->rotateCamera(x, y, dx, dy);
 
         m_pimpl->mouseRightButtonState.xPrev = x;
         m_pimpl->mouseRightButtonState.yPrev = y;

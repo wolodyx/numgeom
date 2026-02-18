@@ -41,7 +41,7 @@ public:
     //! в направлении экранного вектора `(dx,dy)`.
     void translateCamera(int x, int y, int dx, int dy);
 
-    void rotateCamera();
+    void rotateCamera(int x, int y, int dx, int dy);
 
     glm::mat4 getViewMatrix() const;
 

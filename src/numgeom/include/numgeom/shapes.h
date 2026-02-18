@@ -8,12 +8,12 @@
 
 
 NUMGEOM_EXPORT TriMesh::Ptr MakeBox(
-    const std::array<gp_Pnt,8>& corners
+    const std::array<TriMesh::NodeType,8>& corners
 );
 
 
 NUMGEOM_EXPORT TriMesh::Ptr MakeSphere(
-    const gp_Pnt& center,
+    const TriMesh::NodeType& center,
     double radius,
     size_t nSlices,
     size_t nStacks
@@ -21,16 +21,16 @@ NUMGEOM_EXPORT TriMesh::Ptr MakeSphere(
 
 
 NUMGEOM_EXPORT TriMesh::Ptr MakeCylinder(
-    const gp_Pnt& s,
-    const gp_Pnt& t,
+    const TriMesh::NodeType& s,
+    const TriMesh::NodeType& t,
     double radius,
     size_t nSlices
 );
 
 
 NUMGEOM_EXPORT TriMesh::Ptr MakeCone(
-    const gp_Pnt& s,
-    const gp_Pnt& t,
+    const TriMesh::NodeType& s,
+    const TriMesh::NodeType& t,
     double radius,
     size_t nSlices
 );

@@ -1,10 +1,12 @@
 set(PUBLIC_HEADERS
   include/numgeom/loadfromvtk.h
+  include/numgeom/writetovtk.h
 )
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   loadfromvtk.cpp
+  writetovtk.cpp
 )
 
 add_library(io ${SOURCE_FILES})

@@ -27,12 +27,15 @@ public:
     glm::mat4 viewMatrix() const;
 
     //! Матрица проекции.
-    glm::mat4 projectionMatrix() const;
+    glm::mat4 projectionMatrix(const glm::vec3&, const glm::vec3&) const;
 
     void translate(const glm::vec3& v);
 
-    //! Перемещение камеры вдоль экранных координат.
+    //! Смещение камеры вдоль экранных координат.
     void translate(const glm::vec2& v);
+
+    //! Поворот камеры вокруг точки опоры.
+    void rotateAroundPivot(const glm::vec3& pivotPoint, const glm::vec2& screenOffset);
 
     void zoom(float k);
 

@@ -44,15 +44,47 @@ glm::mat4 Camera::viewMatrix() const
 }
 
 
-glm::mat4 Camera::projectionMatrix() const
+namespace
+{
+float distanceBetweenPointAndCube(
+    const glm::vec3& pt,
+    const glm::vec3& cubeMinPt,
+    const glm::vec3& cubeMaxPt)
+{
+    glm::vec3 closestPoint(
+        std::max(cubeMinPt.x, std::min(pt.x, cubeMaxPt.x)),
+        std::max(cubeMinPt.y, std::min(pt.y, cubeMaxPt.y)),
+        std::max(cubeMinPt.z, std::min(pt.z, cubeMaxPt.z))
+    );
+    glm::vec3 diff = pt - closestPoint;
+    return glm::length(diff);
+}
+}
+
+#include <iostream>
+#include <format>
+glm::mat4 Camera::projectionMatrix(const glm::vec3& minPoint, const glm::vec3& maxPoint) const
 {
     float aspect = m_aspectFunction();
+
+    // Calculate dynamic near and far planes based on camera distance
+    float distanceToScene = distanceBetweenPointAndCube(m_position, minPoint, maxPoint);
+    std::cout << "distance to scene = " << distanceToScene << std::endl;
+    float farPlane = 1000.0f;
+
+    // Adjust near plane based on camera distance to avoid clipping
+    float nearPlane = std::max(0.1f, distanceToScene * 0.5f);
+
+    std::cout << std::format("nearPlane = {}, farPlane = {}", nearPlane, farPlane) << std::endl;
+
     return glm::perspective(
         glm::radians(45.0f),
         aspect,
-        0.01f,
-        100.0f
+        nearPlane,
+        farPlane
     );
+
+    // return glm::ortho(-10.0f, +10.0f, -10.0f, +10.0f, -100.0f, +100.0f);
 }
 
 
@@ -93,17 +125,52 @@ void Camera::zoom(float k)
 
 void Camera::fitBox(const glm::vec3& minPoint, const glm::vec3& maxPoint)
 {
+    glm::vec3 center = (minPoint + maxPoint) * 0.5f;
     glm::vec3 size = maxPoint - minPoint;
     float radius = glm::length(size) * 0.5f;
-    glm::vec3 center = (minPoint + maxPoint) * 0.5f;
     float distance = computeCameraDistance(radius);
-    m_direction = glm::vec3(0.0f, 0.0f, distance);
-    m_position = center - m_direction;
-    m_up = glm::vec3(0.0f, 1.0f, 0.0f);
+    m_position = center - m_direction * distance;
+    m_up = glm::normalize(m_up);
 }
 
 
 void Camera::setAspectFunction(std::function<float()> func)
 {
     m_aspectFunction = func;
+}
+
+
+void Camera::rotateAroundPivot(const glm::vec3& pivotPoint, const glm::vec2& screenOffset)
+{
+    static const float baseSensitivity = 0.01f;
+    static const float minPitch = -glm::half_pi<float>() + 0.01f;
+    static const float maxPitch = glm::half_pi<float>() - 0.01f;
+
+    // Вычисляем вектор от точки опоры до камеры
+    glm::vec3 vecToCamera = m_position - pivotPoint;
+
+    // Создаем локальную систему координат
+    glm::vec3 right = glm::normalize(glm::cross(m_direction, m_up));
+    glm::vec3 up = m_up;
+
+    // Применяем повороты
+    float pitch = -screenOffset.y * baseSensitivity;
+    float yaw = -screenOffset.x * baseSensitivity;
+
+    // Ограничиваем pitch для предотвращения переворота
+    pitch = glm::clamp(pitch, minPitch, maxPitch);
+
+    // Поворот вокруг right axis (pitch)
+    glm::mat4 pitchRot = glm::rotate(glm::mat4(1.0f), pitch, right);
+    vecToCamera = glm::vec3(pitchRot * glm::vec4(vecToCamera, 0.0f));
+    up = glm::vec3(pitchRot * glm::vec4(up, 0.0f));
+
+    // Поворот вокруг up axis (yaw)
+    glm::mat4 yawRot = glm::rotate(glm::mat4(1.0f), yaw, up);
+    vecToCamera = glm::vec3(yawRot * glm::vec4(vecToCamera, 0.0f));
+
+    // Обновляем позицию и направление
+    m_position = pivotPoint + vecToCamera;
+    m_direction = glm::normalize(pivotPoint - m_position);
+    m_up = glm::normalize(up);
 }

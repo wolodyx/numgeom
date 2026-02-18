@@ -18,6 +18,7 @@ class CORE_EXPORT CTriMesh
 {
 public:
 
+    typedef glm::dvec3 NodeType;
     typedef std::shared_ptr<CTriMesh> Ptr;
 
     struct Edge
@@ -102,7 +103,7 @@ public:
 
     size_t NbCells() const;
 
-    const glm::dvec3& GetNode(size_t) const;
+    const NodeType& GetNode(size_t) const;
 
     const Cell& GetCell(size_t) const;
 
@@ -118,7 +119,7 @@ private:
     void operator=(const CTriMesh&) = delete;
 
 protected:
-    std::vector<glm::dvec3> myNodes;
+    std::vector<NodeType> myNodes;
     std::vector<Cell> myCells;
     mutable TriMeshConnectivity* myConnectivity;
 };
@@ -138,7 +139,7 @@ public:
     );
 
     static Ptr Create(
-        const std::vector<glm::dvec3>& nodes,
+        const std::vector<NodeType>& nodes,
         const std::vector<Cell>& cells
     );
 
@@ -146,7 +147,7 @@ public:
 
     virtual ~TriMesh();
 
-    glm::dvec3& GetNode(size_t);
+    NodeType& GetNode(size_t);
 
     Cell& GetCell(size_t);
 

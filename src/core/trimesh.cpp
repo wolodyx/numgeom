@@ -31,7 +31,7 @@ size_t CTriMesh::NbCells() const
 }
 
 
-const glm::dvec3& CTriMesh::GetNode(size_t index) const
+const CTriMesh::NodeType& CTriMesh::GetNode(size_t index) const
 {
     return myNodes[index];
 }
@@ -43,7 +43,7 @@ const CTriMesh::Cell& CTriMesh::GetCell(size_t index) const
 }
 
 
-glm::dvec3& TriMesh::GetNode(size_t index)
+TriMesh::NodeType& TriMesh::GetNode(size_t index)
 {
     return myNodes[index];
 }
@@ -102,7 +102,7 @@ bool CTriMesh::Dump(
     file << "POINTS " << nbNodes << " double" << std::endl;
     for(size_t i = 0; i < nbNodes; ++i)
     {
-        const glm::dvec3& pt = this->GetNode(i);
+        const NodeType& pt = this->GetNode(i);
         file << pt.x << ' ' << pt.y << ' ' << pt.z << ' ';
     }
     file << std::endl;
@@ -126,7 +126,7 @@ bool CTriMesh::Dump(
 
 
 TriMesh::Ptr TriMesh::Create(
-    const std::vector<glm::dvec3>& nodes,
+    const std::vector<NodeType>& nodes,
     const std::vector<Cell>& cells
 )
 {
@@ -143,7 +143,7 @@ void TriMesh::Transform(const glm::dmat4& tr)
         myNodes.begin(),
         myNodes.end(),
         myNodes.begin(),
-        [&](const glm::dvec3& pt)
+        [&](const NodeType& pt)
         {
             return tr * glm::dvec4(pt,0.0);
         }

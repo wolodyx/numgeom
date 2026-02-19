@@ -5,7 +5,7 @@
 #include "qvulkaninstance.h"
 
 class Application;
-class SceneWindow2;
+class SceneWindow;
 
 
 class MainWindow : public QMainWindow
@@ -31,7 +31,7 @@ public slots:
     void onFitScene();
 
 private:
-    SceneWindow2* m_sceneWindow;
+    SceneWindow* m_sceneWindow;
     Application* m_app;
     QVulkanInstance m_vulkanInstance;
 };

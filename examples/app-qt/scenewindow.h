@@ -1,39 +1,38 @@
 #ifndef numgeom_app_scenewindow_h
 #define numgeom_app_scenewindow_h
 
-#include "qvulkanwindow.h"
+#include "qwindow.h"
 
 #include "numgeom/trimesh.h"
 
 class Application;
+class GpuManager;
 class UserInputController;
-class VulkanWindowRenderer;
 
 
 /** \class SceneWindow
 \brief Окно графического приложения, в котором отображается сцена.
 */
-class SceneWindow : public QVulkanWindow
+class SceneWindow : public QWindow
 {
 public:
     SceneWindow(Application*);
     ~SceneWindow();
-    QVulkanWindowRenderer* createRenderer() override;
-
-    void updateGeometry(CTriMesh::Ptr);
 
 private:
-    void keyPressEvent(QKeyEvent*) override;      //!< Событие о нажатии клавиши.
-    void keyReleaseEvent(QKeyEvent*) override;    //!< Событие об отжатии клавиши.
-    void mousePressEvent(QMouseEvent*) override;  //!< Событие о нажатии кнопки мыши.
-    void mouseReleaseEvent(QMouseEvent*) override;//!< Событие об отжатии кнопки мыши.
-    void mouseMoveEvent(QMouseEvent*) override;   //!< Событие о перемещении указателя мыши.
-    void wheelEvent(QWheelEvent*) override;       //!< Событие о прокрутке колесика мыши.
+    void keyPressEvent(QKeyEvent*) override;
+    void keyReleaseEvent(QKeyEvent*) override;
+    void mousePressEvent(QMouseEvent*) override;
+    void mouseReleaseEvent(QMouseEvent*) override;
+    void mouseMoveEvent(QMouseEvent*) override;
+    void wheelEvent(QWheelEvent*) override;
+
+    void resizeEvent(QResizeEvent*) override;
+    void exposeEvent(QExposeEvent*) override;
+    bool event(QEvent*) override;
 
 private:
     Application* m_app;
-    QVulkanInstance m_vulkanInstance;
     UserInputController* m_userInputController;
-    VulkanWindowRenderer* m_renderer = nullptr;
 };
 #endif // !numgeom_app_scenewindow_h

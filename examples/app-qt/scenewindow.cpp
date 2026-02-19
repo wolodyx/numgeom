@@ -1,10 +1,12 @@
 #include "scenewindow.h"
 
-#include "qevent.h"
+#include <iostream>
 
-#include "vulkanwindowrenderer.h"
+#include "qevent.h"
+#include "qvulkaninstance.h"
 
 #include "numgeom/application.h"
+#include "numgeom/gpumanager.h"
 #include "numgeom/userinputcontroller.h"
 
 
@@ -12,12 +14,6 @@ SceneWindow::SceneWindow(Application* app)
 {
     m_app = app;
     m_userInputController = new UserInputController(app);
-
-    m_vulkanInstance.setExtensions({"VK_KHR_surface", "VK_KHR_xcb_surface"});
-    m_vulkanInstance.setLayers({"VK_LAYER_KHRONOS_validation"});
-    if(!m_vulkanInstance.create())
-        qFatal("Vulkan instance creating error");
-    this->setVulkanInstance(&m_vulkanInstance);
 }
 
 
@@ -27,25 +23,11 @@ SceneWindow::~SceneWindow()
 }
 
 
-QVulkanWindowRenderer* SceneWindow::createRenderer()
-{
-    m_renderer = new VulkanWindowRenderer(this);
-    return m_renderer;
-}
-
-
-void SceneWindow::updateGeometry(CTriMesh::Ptr mesh)
-{
-    if(m_renderer)
-        m_renderer->setModel(mesh);
-}
-
-
 void SceneWindow::keyPressEvent(QKeyEvent* event)
 {
     int key = event->key();
     m_userInputController->keyPressed(key);
-    QVulkanWindow::keyPressEvent(event);
+    QWindow::keyPressEvent(event);
 }
 
 
@@ -53,7 +35,7 @@ void SceneWindow::keyReleaseEvent(QKeyEvent* event)
 {
     int key = event->key();
     m_userInputController->keyReleased(key);
-    QVulkanWindow::keyPressEvent(event);
+    QWindow::keyPressEvent(event);
 }
 
 
@@ -104,6 +86,69 @@ void SceneWindow::mouseMoveEvent(QMouseEvent* event)
 void SceneWindow::wheelEvent(QWheelEvent* event)
 {
     QPoint angleDelta = event->angleDelta();
-    m_userInputController->mouseWheelRotate(angleDelta.y());
+    int numDegrees = angleDelta.y() / 8;
+    m_userInputController->mouseWheelRotate(numDegrees);
     event->accept();
+}
+
+
+void SceneWindow::resizeEvent(QResizeEvent* event)
+{
+    QSize sz = event->size();
+    std::cout << "Window size is (" << sz.width() << ", " << sz.height() << ")" << std::endl;
+    m_app->update();
+}
+
+
+void SceneWindow::exposeEvent(QExposeEvent* event)
+{
+    if(!this->isExposed()) {
+        QWindow::exposeEvent(event);
+        return;
+    }
+    static int i = 0;
+    //std::cout << std::format("{}. expose event {}", i++, isExposed())  << std::endl;
+    QWindow::exposeEvent(event);
+}
+
+
+bool SceneWindow::event(QEvent* e)
+{
+    switch(e->type()) {
+    case QEvent::Paint:
+        std::cout << "Paint" << std::endl;
+        break;
+    case QEvent::UpdateRequest:
+        std::cout << "UpdateRequest" << std::endl;
+        break;
+    case QEvent::PlatformSurface:
+    {
+        auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
+        std::cout << "PlatformSurface: ";
+        switch(pse->surfaceEventType()) {
+        case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
+            std::cout << "SurfaceAboutToBeDestroyed" << std::endl;
+            break;
+        case QPlatformSurfaceEvent::SurfaceCreated:
+            std::cout << "SurfaceCreated" << std::endl;
+            break;
+        }
+        break;
+    }
+    case QEvent::MouseMove:
+        break;
+    case QEvent::Enter:
+        //std::cout << "Enter event." << std::endl;
+        break;
+    case QEvent::Leave:
+        //std::cout << "Leave event." << std::endl;
+        break;
+    case QEvent::Expose:
+        //std::cout << "Expose event." << std::endl;
+        break;
+    default:
+        //std::cout << "e->type() = " << e->type() << std::endl;
+        break;
+    }
+    return QWindow::event(e);
 }

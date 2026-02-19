@@ -13,7 +13,7 @@
 #include "numgeom/gpumanager.h"
 #include "numgeom/loadfromvtk.h"
 
-#include "scenewindow2.h"
+#include "scenewindow.h"
 
 
 MainWindow::MainWindow(Application* app)
@@ -21,7 +21,7 @@ MainWindow::MainWindow(Application* app)
     m_app = app;
     this->createActions();
 
-    m_sceneWindow = new SceneWindow2(m_app);
+    m_sceneWindow = new SceneWindow(m_app);
     m_sceneWindow->setSurfaceType(QSurface::VulkanSurface);
 
     QWidget* widget = QWidget::createWindowContainer(m_sceneWindow, this);

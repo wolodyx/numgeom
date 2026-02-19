@@ -9,6 +9,54 @@
 #include "camera.h"
 
 
+namespace
+{
+void ComputeBoundBox(
+    CTriMesh::Ptr scene,
+    glm::vec3& bbMinPoint,
+    glm::vec3& bbMaxPoint)
+{
+    assert(scene != nullptr);
+
+    bbMinPoint = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
+    bbMaxPoint = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+    for(size_t i = 0; i < scene->NbCells(); ++i) {
+        const auto& cell = scene->GetCell(i);
+        for(size_t j = 0; j < 3; ++j) {
+            auto pt = scene->GetNode(cell.GetNodeIndex(j));
+            bbMinPoint.x = std::min(bbMinPoint.x,static_cast<float>(pt.x));
+            bbMinPoint.y = std::min(bbMinPoint.y,static_cast<float>(pt.y));
+            bbMinPoint.z = std::min(bbMinPoint.z,static_cast<float>(pt.z));
+            bbMaxPoint.x = std::max(bbMaxPoint.x,static_cast<float>(pt.x));
+            bbMaxPoint.y = std::max(bbMaxPoint.y,static_cast<float>(pt.y));
+            bbMaxPoint.z = std::max(bbMaxPoint.z,static_cast<float>(pt.z));
+        }
+    }
+
+    glm::vec3 center = 0.5f * (bbMinPoint + bbMaxPoint);
+    glm::vec3 size = bbMaxPoint - bbMinPoint;
+    float maxLenght = std::max(size.x, std::max(size.y, size.z));
+    for(int i = 0; i < 3; ++i) {
+        float& cMin = *(&bbMinPoint.x + i);
+        float& cMax = *(&bbMaxPoint.x + i);
+        if(cMin == cMax) {
+            cMin = *(&center.x + i) - 0.5 * maxLenght;
+            cMax = *(&center.x + i) + 0.5 * maxLenght;
+        }
+    }
+
+    //for(size_t i = 0; i < scene->NbNodes(); ++i) {
+    //    auto pt = scene->GetNode(i);
+    //    worldMin.x = std::min(worldMin.x, static_cast<float>(pt.x));
+    //    worldMin.y = std::min(worldMin.y, static_cast<float>(pt.y));
+    //    worldMin.z = std::min(worldMin.z, static_cast<float>(pt.z));
+    //    worldMax.x = std::max(worldMax.x, static_cast<float>(pt.x));
+    //    worldMax.y = std::max(worldMax.y, static_cast<float>(pt.y));
+    //    worldMax.z = std::max(worldMax.z, static_cast<float>(pt.z));
+    //}
+}
+}
+
 struct Application::Impl
 {
     Camera camera;
@@ -25,20 +73,7 @@ struct Application::Impl
         if(scene == newScene)
             return;
         scene = newScene;
-
-        worldMin = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
-        worldMax = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
-        if(!scene)
-            return;
-        for(size_t i = 0; i < scene->NbNodes(); ++i) {
-            auto pt = scene->GetNode(i);
-            worldMin.x = std::min(worldMin.x, static_cast<float>(pt.x));
-            worldMin.y = std::min(worldMin.y, static_cast<float>(pt.y));
-            worldMin.z = std::min(worldMin.z, static_cast<float>(pt.z));
-            worldMax.x = std::max(worldMax.x, static_cast<float>(pt.x));
-            worldMax.y = std::max(worldMax.y, static_cast<float>(pt.y));
-            worldMax.z = std::max(worldMax.z, static_cast<float>(pt.z));
-        }
+        ComputeBoundBox(scene, worldMin, worldMax);
         camera.fitBox(worldMin, worldMax);
     }
 };

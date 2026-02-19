@@ -59,6 +59,12 @@ public:
         Cell(size_t a, size_t b, size_t c)
             : na(a), nb(b), nc(c) {}
 
+        size_t GetNodeIndex(size_t i) const
+        {
+            assert(i < 3);
+            return *(&na + i);
+        }
+
         Edge GetEdge(size_t i) const
         {
             return Edge(*(&na + i%3), *(&na + (i+1)%3));

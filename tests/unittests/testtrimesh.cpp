@@ -1,7 +1,6 @@
 #include "gtest/gtest.h"
 
 #include "numgeom/loadfromvtk.h"
-#include "numgeom/writetovtk.h"
 #include "numgeom/trimeshconnectivity.h"
 
 #include "utilities.h"
@@ -10,7 +9,7 @@
 #include <format>
 TEST(TriMesh, LoadFromVtk)
 {
-    TriMesh::Ptr mesh = LoadTriMeshFromVtk(TestData("bunny.vtk"));
+    TriMesh::Ptr mesh = LoadTriMeshFromVtk(TestData("polydata-cube.vtk"));
     ASSERT_TRUE(mesh != TriMesh::Ptr());
 }
 

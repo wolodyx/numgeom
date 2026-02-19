@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <format>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <vector>
@@ -19,6 +20,10 @@
 #if defined(USE_PLATFORM_XCB_KHR)
 #  include "xcb/xcb.h"
 #  include "vulkan/vulkan_xcb.h"
+#endif
+#if defined(_WIN32)
+#  include "windows.h"
+#  include "vulkan/vulkan_win32.h"
 #endif
 
 #include "glm/glm.hpp"
@@ -69,6 +74,7 @@ struct FrameResources
 //! Состояние vulkan и его объектов.
 struct VulkanState
 {
+    bool stopRendering = true;
     VkInstance instance = VK_NULL_HANDLE;
     VkDebugUtilsMessengerEXT debugMessenger;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
@@ -381,7 +387,7 @@ bool createGraphicsPipeline(VulkanState* state)
 
     VkPipelineInputAssemblyStateCreateInfo ci_inputAssemblyState {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
         .primitiveRestartEnable = false,
     };
 
@@ -946,6 +952,9 @@ bool initInstance(VulkanState* state)
 #if defined(USE_PLATFORM_XCB_KHR)
         VK_KHR_XCB_SURFACE_EXTENSION_NAME,
 #endif
+#if defined(_WIN32)
+        VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#endif
 #ifdef ENABLE_VALIDATION_LAYERS
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
@@ -1460,6 +1469,16 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s)
     for(uint32_t i = 0; i < state->frameCount; ++i)
         initFrame(state, &state->frameRes[i]);
 
+    // Память под данные фреймов.
+    state->frameMemory = new GpuMemory(
+        state->physicalDevice,
+        state->device,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    );
+    state->frameMemory->resize(state->frameCount * 16 * sizeof(float));
+
+    state->stopRendering = false;
+
     return true;
 }
 
@@ -1487,81 +1506,94 @@ bool GpuManager::initialize()
 }
 
 
-bool GpuManager::update()
+namespace
 {
-    VulkanState* state = &m_pimpl->vulkanState;
+void updateScene()
+{
+}
+
+void updateDataForFrame(Application* app, VulkanState* state)
+{
     FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
-    // Обновляем матрицу вида и проекции.
-    // ...
-
-    // Обновляем сцену, если надо.
-    static void* s_predGeometry = nullptr;
-    auto geometry = m_pimpl->app->geometry();
-    if(s_predGeometry != geometry.get()) {
-        s_predGeometry = geometry.get();
-        if(!state->memory) {
+    // Если следует обновить сцену, то ожидаем завершения заданий в очередях
+    // и блокируем рендеринг до обновления вершинных и индексных буферов.
+    static void* s_oldSceneHash = nullptr;
+    {
+        static std::mutex mtx;
+        std::lock_guard<std::mutex> lock(mtx);
+        auto scene = app->geometry();
+        void* nowSceneHash = scene.get();
+        if(s_oldSceneHash != nowSceneHash) {
+            state->stopRendering = true;
+            vkQueueWaitIdle(state->queue);
+            s_oldSceneHash = nowSceneHash;
+            if(state->memory) {
+                delete state->memory;
+                state->memory = nullptr;
+                delete state->mesh;
+                state->mesh = nullptr;
+            }
             state->memory = new GpuMemory(
                 state->physicalDevice,
                 state->device,
-                  VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-                | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+                    VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+                  | VK_BUFFER_USAGE_INDEX_BUFFER_BIT
             );
-
-        }
-        state->mesh = new MeshChunk(state->memory, geometry);
-
-        if(!state->frameMemory) {
-            state->frameMemory = new GpuMemory(
-                state->physicalDevice,
-                state->device,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-            );
-            state->frameMemory->resize(state->frameCount * 16 * sizeof(float));
+            state->mesh = new MeshChunk(state->memory, scene);
+            state->stopRendering = false;
         }
     }
-        auto mapping = state->frameMemory->access();
-        float* data = reinterpret_cast<float*>(mapping.data());
+    auto mapping = state->frameMemory->access();
+    float* data = reinterpret_cast<float*>(mapping.data());
+    data += (16 * state->currentFrameIndex);
 
-        glm::mat4 mvp = m_pimpl->app->getProjectionMatrix()
-                        * m_pimpl->app->getViewMatrix();
-        for(int i = 0; i < state->frameCount; ++i) {
-            const float* mptr = glm::value_ptr(mvp);
-            for(int j = 0; j < 16; ++j) {
-                *data = mptr[j];
-                ++data;
-            }
-        }
+    glm::mat4 mvp = app->getProjectionMatrix() * app->getViewMatrix();
+    const float* mptr = glm::value_ptr(mvp);
+    for(int j = 0; j < 16; ++j) {
+        *data = mptr[j];
+        ++data;
+    }
 
-        for(int i = 0; i < state->frameCount; ++i) {
-            const auto& frame = state->frameRes[i];
-            VkDescriptorBufferInfo bufferInfo {
-                .buffer = state->frameMemory->buffer(),
-                .offset = i * sizeof(float) * 16,
-                .range = 16 * sizeof(float)
-            };
-            VkWriteDescriptorSet descWrite {
-                .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                .dstSet = frame.descSet,
-                .descriptorCount = 1,
-                .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .pBufferInfo = &bufferInfo,
-            };
-            vkUpdateDescriptorSets(
-                state->device,
-                1,
-                &descWrite,
-                0,
-                nullptr
-            );
-        }
+    VkDescriptorBufferInfo bufferInfo {
+        .buffer = state->frameMemory->buffer(),
+        .offset = state->currentFrameIndex * sizeof(float) * 16,
+        .range = 16 * sizeof(float)
+    };
+    VkWriteDescriptorSet descWrite {
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo,
+    };
+    vkUpdateDescriptorSets(
+        state->device,
+        1,
+        &descWrite,
+        0,
+        nullptr
+    );
+}
+}
+
+
+bool GpuManager::update()
+{
+    VulkanState* state = &m_pimpl->vulkanState;
+    if(state->stopRendering)
+        return false;
+
+    FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
     // Ожидаем освобождения последнего фрейма.
     if(frame.cmdFenceWaitable) {
-        vkWaitForFences(state->device, 1, &frame.cmdFence, VK_TRUE, UINT64_MAX);
+        vkWaitForFences(state->device, 1, &frame.cmdFence, VK_TRUE,UINT64_MAX);
         vkResetFences(state->device, 1, &frame.cmdFence);
         frame.cmdFenceWaitable = false;
     }
+
+    updateDataForFrame(m_pimpl->app, state);
 
     while(true) {
         uint32_t index;

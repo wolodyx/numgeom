@@ -61,30 +61,15 @@ float distanceBetweenPointAndCube(
 }
 }
 
-#include <iostream>
-#include <format>
+
 glm::mat4 Camera::projectionMatrix(const glm::vec3& minPoint, const glm::vec3& maxPoint) const
 {
-    float aspect = m_aspectFunction();
-
-    // Calculate dynamic near and far planes based on camera distance
-    float distanceToScene = distanceBetweenPointAndCube(m_position, minPoint, maxPoint);
-    std::cout << "distance to scene = " << distanceToScene << std::endl;
-    float farPlane = 1000.0f;
-
-    // Adjust near plane based on camera distance to avoid clipping
-    float nearPlane = std::max(0.1f, distanceToScene * 0.5f);
-
-    std::cout << std::format("nearPlane = {}, farPlane = {}", nearPlane, farPlane) << std::endl;
-
     return glm::perspective(
         glm::radians(45.0f),
-        aspect,
-        nearPlane,
-        farPlane
+        m_aspectFunction(),
+        0.001f,
+        1000.0f
     );
-
-    // return glm::ortho(-10.0f, +10.0f, -10.0f, +10.0f, -100.0f, +100.0f);
 }
 
 

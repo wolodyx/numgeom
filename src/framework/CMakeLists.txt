@@ -27,7 +27,6 @@ add_library(numgeom::framework ALIAS framework)
 target_link_libraries(framework
   PUBLIC
     Vulkan::Vulkan
-    xcb::xcb
     Boost::log
     numgeom::core
 )
@@ -66,3 +65,6 @@ if(DEFINED SHADER_FILES)
   target_include_directories(framework PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 endif()
 
+if(ENABLE_XCB)
+  target_link_libraries(framework PRIVATE xcb::xcb)
+endif()

@@ -119,12 +119,14 @@ enum VulkanInitState
 struct GpuManager::Impl
 {
     Application* app;
+#ifdef LINUX
     struct Xcb
     {
         xcb_connection_t* connection = nullptr;
         xcb_window_t window = 0;
     };
     Xcb xcb;
+#endif
     VulkanState vulkanState;
     std::function<std::tuple<uint32_t,uint32_t>()> getImageExtent;
 };
@@ -941,7 +943,9 @@ bool initInstance(VulkanState* state)
     std::vector<const char*> extensionNames {
         //VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_SURFACE_EXTENSION_NAME,
+#if defined(USE_PLATFORM_XCB_KHR)
         VK_KHR_XCB_SURFACE_EXTENSION_NAME,
+#endif
 #ifdef ENABLE_VALIDATION_LAYERS
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
@@ -1240,6 +1244,7 @@ bool createLogicalDevice(VulkanState* state)
 }
 
 
+#ifdef LINUX
 bool createSurface(VulkanState* state, GpuManager::Impl::Xcb* xcb)
 {
     int screenNum = 0;
@@ -1292,6 +1297,7 @@ bool createSurface(VulkanState* state, GpuManager::Impl::Xcb* xcb)
 
     return true;
 }
+#endif
 
 
 bool chooseSwapchainSettings(VulkanState* state)
@@ -1383,8 +1389,8 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s)
     CHECK_STATE(s, VulkanInitState::Instance);
 
     // Создаем поверхность vulkan.
-    auto* xcb = &gpm->xcb;
-    if(state->surface == VK_NULL_HANDLE && !createSurface(state,xcb))
+    //auto* xcb = &gpm->xcb;
+    if(state->surface == VK_NULL_HANDLE /*&& !createSurface(state,xcb)*/)
         return false;
     CHECK_STATE(s, VulkanInitState::Surface);
 

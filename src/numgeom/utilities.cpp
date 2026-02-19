@@ -291,9 +291,9 @@ TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape& initShape)
             mesh->GetCell(cellIndex++) =
                 TriMesh::Cell
                 {
-                    na + nodeOffset - 1,
-                    nb + nodeOffset - 1,
-                    nc + nodeOffset - 1
+                    static_cast<TriMesh::IndexType>(na + nodeOffset - 1),
+                    static_cast<TriMesh::IndexType>(nb + nodeOffset - 1),
+                    static_cast<TriMesh::IndexType>(nc + nodeOffset - 1)
                 };
         }
 

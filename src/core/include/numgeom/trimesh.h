@@ -19,6 +19,7 @@ class CORE_EXPORT CTriMesh
 public:
 
     typedef glm::dvec3 NodeType;
+    typedef size_t IndexType;
     typedef std::shared_ptr<CTriMesh> Ptr;
 
     struct Edge

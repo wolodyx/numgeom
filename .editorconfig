@@ -1,0 +1,11 @@
+root = true
+
+[*]
+insert_final_newline = true
+charset = utf-8
+indent_style = space
+indent_size = 4
+guidelines = 80 1px dotted black, 100 5px solid red
+
+[*.cmake, CMakeLists.txt]
+indent_size = 2

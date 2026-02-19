@@ -1,15 +1,38 @@
 #ifndef numgeom_app_mainwindow_h
 #define numgeom_app_mainwindow_h
 
-#include <QMainWindow>
+#include "qmainwindow.h"
+#include "qvulkaninstance.h"
+
+class Application;
+class SceneWindow2;
+
 
 class MainWindow : public QMainWindow
 {
     Q_OBJECT
+
 public:
-    MainWindow();
+
+    MainWindow(Application* app);
+
+    ~MainWindow();
+
+    void initVulkan();
+
 
 private:
     void createActions();
+
+public slots:
+    void onScreenshot();
+    void onOpenFile();
+    void onQuit();
+    void onFitScene();
+
+private:
+    SceneWindow2* m_sceneWindow;
+    Application* m_app;
+    QVulkanInstance m_vulkanInstance;
 };
 #endif // !numgeom_app_mainwindow_h

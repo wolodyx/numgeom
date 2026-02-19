@@ -15,7 +15,7 @@ if exist "bld\" (
 
 mkdir bld
 cd bld
-cmake --preset=windows-release .. ^
+cmake --preset=windows-vcpkg-release .. ^
                     || (echo "CMake configure error" & exit /b 1)
 cmake --build . ^
       --config=Release ^

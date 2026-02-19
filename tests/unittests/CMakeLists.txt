@@ -1,11 +1,7 @@
 set(SOURCE_FILES
   main.cpp
   testcircularlist.cpp
-  testclassificate.cpp
   testexample.cpp
-  testoctree.cpp
-  testquadtree.cpp
-  testremovefaces.cpp
   testtrimesh.cpp
   utilities.cpp             utilities.h
 )
@@ -24,8 +20,19 @@ target_include_directories(unittests
 
 target_link_libraries(unittests
   GTest::gtest_main
-  numgeom
+  numgeom::core
+  numgeom::io
 )
+
+if(TARGET numgeom)
+  list(APPEND SOURCE_FILES
+    testclassificate.cpp
+    testoctree.cpp
+    testquadtree.cpp
+    testremovefaces.cpp
+  )
+  target_link_libraries(unittests numgeom::numgeom)
+endif()
 
 include(GoogleTest)
 gtest_discover_tests(unittests)

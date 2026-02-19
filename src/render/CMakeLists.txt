@@ -38,7 +38,6 @@ target_include_directories(render
 target_link_libraries(render
   PUBLIC
     numgeom::core
-    TKMath
   PRIVATE
     Vulkan::Vulkan
     glm::glm

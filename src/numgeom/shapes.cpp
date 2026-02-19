@@ -3,10 +3,12 @@
 #include <cassert>
 #include <cmath>
 
-#include <gp_Ax1.hxx>
+#include "glm/gtx/quaternion.hpp"
+
+#include "gp_Ax1.hxx"
 
 
-TriMesh::Ptr MakeBox(const std::array<gp_Pnt,8>& corners)
+TriMesh::Ptr MakeBox(const std::array<TriMesh::NodeType,8>& corners)
 {
     TriMesh::Ptr mesh = TriMesh::Create(8, 12);
     size_t iNode = 0;
@@ -31,7 +33,7 @@ TriMesh::Ptr MakeBox(const std::array<gp_Pnt,8>& corners)
 
 
 TriMesh::Ptr MakeSphere(
-    const gp_Pnt& center,
+    const TriMesh::NodeType& center,
     double radius,
     size_t nSlices,
     size_t nStacks)
@@ -44,7 +46,7 @@ TriMesh::Ptr MakeSphere(
 
     size_t iNode = 0;
     // Add point of (u,v) = (-pi/2,0).
-    mesh->GetNode(iNode++) = center.Translated(gp_Vec(0,0,-radius));
+    mesh->GetNode(iNode++) = center + TriMesh::NodeType(0,0,-radius);
     for(size_t iStack = 0; iStack < nStacks - 1; ++iStack)
     {
         double u = (iStack + 1) * M_PI / nStacks - M_PI_2;
@@ -57,15 +59,15 @@ TriMesh::Ptr MakeSphere(
             double cos_v = std::cos(v);
             double sin_v = std::sin(v);
 
-            gp_Vec p(
+            TriMesh::NodeType p(
                 radius * cos_u * cos_v,
                 radius * cos_u * sin_v,
                 radius * sin_u);
-            mesh->GetNode(iNode++) = center.Translated(p);
+            mesh->GetNode(iNode++) = center + p;
         }
     }
     // Add point of (u,v) = (pi/2,0).
-    mesh->GetNode(iNode++) = center.Translated(gp_Vec(0,0,+radius));
+    mesh->GetNode(iNode++) = center + TriMesh::NodeType(0,0,+radius);
     assert(iNode == nNodes);
 
     size_t iTria = 0;
@@ -130,35 +132,32 @@ gp_Dir OrthoDir(const gp_Dir& dir)
 }
 
 
-gp_Trsf MakeTransformFromZAxis(
-    const gp_Pnt& s,
-    const gp_Pnt& t
-)
+glm::mat4 CreateTransformFromLineToZ(
+    const glm::vec3& pointA,
+    const glm::vec3& pointB)
 {
-    gp_Trsf tr;
-    tr.SetTranslation(gp_Vec(s.Coord()));
-    gp_Dir dir1(0, 0, 1);
-    gp_Dir dir2(gp_Vec(s,t));
-    Standard_Real angle = dir1.Angle(dir2);
-    gp_Dir n;
-    if(angle < M_PI/180.0)
-        n = dir1.Crossed(dir2);
-    else
-        n = OrthoDir(dir2);
-    gp_Ax1 ax(s, n);
-    tr.SetRotation(ax, angle);
-    return tr;
+    glm::vec3 direction = glm::normalize(pointB - pointA);
+    glm::vec3 targetZ(0.0f, 0.0f, 1.0f);
+
+    // Создаём кватернион для поворота direction в targetZ
+    glm::quat rotation = glm::rotation(direction, targetZ);
+
+    // Строим матрицу: сначала перенос, потом поворот
+    glm::mat4 transformation = glm::translate(glm::mat4(1.0f), -pointA);
+    transformation = transformation * glm::toMat4(rotation);
+
+    return transformation;
 }
 }
 
 
 TriMesh::Ptr MakeCylinder(
-    const gp_Pnt& s,
-    const gp_Pnt& t,
+    const TriMesh::NodeType& s,
+    const TriMesh::NodeType& t,
     double radius,
     size_t nSlices)
 {
-    double height = s.Distance(t);
+    double height = (s - t).length();
 
     size_t nNodes = 2 * nSlices;
     size_t nTrias = 2 * nSlices;
@@ -170,8 +169,8 @@ TriMesh::Ptr MakeCylinder(
         double t = iSlice * 2 * M_PI / nSlices;
         double x = radius * std::cos(t);
         double y = radius * std::sin(t);
-        mesh->GetNode(iSlice) = gp_Pnt(x, y, 0.0);
-        mesh->GetNode(iSlice + nSlices) = gp_Pnt(x, y, height);
+        mesh->GetNode(iSlice) = TriMesh::NodeType(x, y, 0.0);
+        mesh->GetNode(iSlice + nSlices) = TriMesh::NodeType(x, y, height);
     }
 
     size_t iTria = 0;
@@ -185,7 +184,7 @@ TriMesh::Ptr MakeCylinder(
         mesh->GetCell(iTria++) = TriMesh::Cell(p00, p11, p10);
     }
 
-    gp_Trsf tr = MakeTransformFromZAxis(s, t);
+    auto tr = CreateTransformFromLineToZ(s, t);
     mesh->Transform(tr);
 
     return mesh;
@@ -193,8 +192,8 @@ TriMesh::Ptr MakeCylinder(
 
 
 TriMesh::Ptr MakeCone(
-    const gp_Pnt& s,
-    const gp_Pnt& t,
+    const TriMesh::NodeType& s,
+    const TriMesh::NodeType& t,
     double radius,
     size_t nSlices)
 {
@@ -202,16 +201,16 @@ TriMesh::Ptr MakeCone(
     size_t nTrias = nSlices;
     TriMesh::Ptr mesh = TriMesh::Create(nNodes, nTrias);
     size_t iNode = 0;
-    mesh->GetNode(iNode++) = gp_Pnt(0,0,0); //< We'll update it later.
+    mesh->GetNode(iNode++) = TriMesh::NodeType(0,0,0); //< We'll update it later.
     for(size_t iSlice = 0; iSlice < nSlices; ++iSlice)
     {
         double t = iSlice * 2 * M_PI / nSlices;
         double x = radius * std::cos(t);
         double y = radius * std::sin(t);
-        mesh->GetNode(iNode++) = gp_Pnt(x, y, 0);
+        mesh->GetNode(iNode++) = TriMesh::NodeType(x, y, 0);
     }
 
-    gp_Trsf tr = MakeTransformFromZAxis(s, t);
+    auto tr = CreateTransformFromLineToZ(s, t);
     mesh->Transform(tr);
     mesh->GetNode(0) = t;
 

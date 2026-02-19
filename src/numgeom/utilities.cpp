@@ -279,7 +279,7 @@ TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape& initShape)
         {
             gp_Pnt pt = triangulation->Node(i);
             pt.Transform(tr);
-            mesh->GetNode(nodeIndex++) = pt;
+            mesh->GetNode(nodeIndex++) = TriMesh::NodeType(pt.X(), pt.Y(), pt.Z());
         }
 
         Standard_Integer nbCells = triangulation->NbTriangles();
@@ -291,9 +291,9 @@ TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape& initShape)
             mesh->GetCell(cellIndex++) =
                 TriMesh::Cell
                 {
-                    na + nodeOffset - 1,
-                    nb + nodeOffset - 1,
-                    nc + nodeOffset - 1
+                    static_cast<TriMesh::IndexType>(na + nodeOffset - 1),
+                    static_cast<TriMesh::IndexType>(nb + nodeOffset - 1),
+                    static_cast<TriMesh::IndexType>(nc + nodeOffset - 1)
                 };
         }
 

@@ -10,8 +10,8 @@ fi
 rm -rf bld
 mkdir bld
 cd bld
-cmake --preset=linux-debug ..
-cmake --build ./linux-debug
+cmake --preset=linux-vcpkg-debug ..
+cmake --build ./linux-vcpkg-debug
 ctest
 cmake --install ./linux-debug
 cpack -G "ZIP" -B .

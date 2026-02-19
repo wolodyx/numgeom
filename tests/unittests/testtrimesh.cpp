@@ -6,9 +6,10 @@
 #include "utilities.h"
 
 
+#include <format>
 TEST(TriMesh, LoadFromVtk)
 {
-    TriMesh::Ptr mesh = LoadTriMeshFromVtk(TestData("k.vtk"));
+    TriMesh::Ptr mesh = LoadTriMeshFromVtk(TestData("polydata-cube.vtk"));
     ASSERT_TRUE(mesh != TriMesh::Ptr());
 }
 
@@ -26,12 +27,12 @@ TEST(TriMesh, IsBoundaryNode)
     ASSERT_EQ(connectivity->NbNodes(), mesh->NbNodes());
     ASSERT_EQ(connectivity->NbTrias(), mesh->NbCells());
 
-    Standard_Integer nbNodes = mesh->NbNodes();
-    std::vector<Standard_Integer> nodes;
-    for(Standard_Integer iNode = 0; iNode < nbNodes; ++iNode)
+    size_t nbNodes = mesh->NbNodes();
+    std::vector<size_t> nodes;
+    for(size_t iNode = 0; iNode < nbNodes; ++iNode)
     {
         TriMesh::Edge eIncoming, eOutcoming;
-        Standard_Boolean isBoundaryNode =
+        bool isBoundaryNode =
             connectivity->IsBoundaryNode(iNode,
                                          &eIncoming,
                                          &eOutcoming);

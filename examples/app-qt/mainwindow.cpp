@@ -11,7 +11,7 @@
 
 #include "numgeom/application.h"
 #include "numgeom/gpumanager.h"
-#include "numgeom/loadfromvtk.h"
+#include "numgeom/loadtotrimesh.h"
 
 #include "scenewindow.h"
 
@@ -66,7 +66,7 @@ void MainWindow::initVulkan()
     );
 
     gpuManager->initialize(); //< Продолжить начатую выше инициализацию.
-    auto mesh = LoadTriMeshFromVtk("/home/tim/projects/numgeom/tests/data/polydata-cube.vtk");
+    auto mesh = LoadToTriMesh("/home/tim/projects/numgeom/tests/data/polydata-cube.vtk");
     m_app->add(mesh);
     m_app->update();
 }
@@ -163,7 +163,7 @@ void MainWindow::onOpenFile()
     if(filename.isEmpty())
         return;
 
-    auto mesh = LoadTriMeshFromVtk(filename.toStdString());
+    auto mesh = LoadToTriMesh(filename.toStdString());
     std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
     std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
     m_app->add(mesh);

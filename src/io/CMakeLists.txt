@@ -1,13 +1,24 @@
 set(PUBLIC_HEADERS
   include/numgeom/loadfromvtk.h
+  include/numgeom/loadtotrimesh.h
   include/numgeom/writetovtk.h
 )
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   loadfromvtk.cpp
+  loadtotrimesh.cpp
   writetovtk.cpp
 )
+
+if(OpenCASCADE_FOUND)
+  list(APPEND PUBLIC_HEADERS
+    include/numgeom/loadusingocc.h
+  )
+  list(APPEND SOURCE_FILES
+    loadusingocc.cpp
+  )
+endif()
 
 add_library(io ${SOURCE_FILES})
 add_library(numgeom::io ALIAS io)
@@ -43,3 +54,12 @@ target_include_directories(io
   PRIVATE
     ${CMAKE_CURRENT_BINARY_DIR}
 )
+
+if(OpenCASCADE_FOUND)
+  target_link_libraries(io
+    PRIVATE
+      TKBRep
+      TKDESTEP
+      numgeom::numgeom
+  )
+endif()

@@ -1,0 +1,19 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build",
+      "type": "shell",
+      "command": "cmake --build ${workspaceFolder}/bld/linux-vcpkg-debug --config Debug",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": ["$cmake", "$gcc"],
+      "detail": "CMake build using linux-vcpkg-debug preset",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    }
+  ]
+}

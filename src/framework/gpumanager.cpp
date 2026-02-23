@@ -54,8 +54,20 @@ namespace
 {;
 struct ImageResources
 {
+    //! Изображение для показа.
     VkImage image = VK_NULL_HANDLE;
-    VkImageView view = VK_NULL_HANDLE;
+
+    //! Вид изображения для показа.
+    VkImageView imageView = VK_NULL_HANDLE;
+
+    //! Сэмплированное изображение, создается только при
+    //! `VulkanState::sampleCount != VK_SAMPLE_COUNT_1_BIT`.
+    VkImage msaaImage = VK_NULL_HANDLE;
+
+    // Вид сэмплированного изображения.
+    VkImageView msaaImageView = VK_NULL_HANDLE;
+
+    //! Фреймбуфер.
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
 };
 
@@ -74,35 +86,77 @@ struct FrameResources
 //! Состояние vulkan и его объектов.
 struct VulkanState
 {
+    //! Признак остановки рендеринга.
     bool stopRendering = true;
+
     VkInstance instance = VK_NULL_HANDLE;
+
     VkDebugUtilsMessengerEXT debugMessenger;
+
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+
     VkPhysicalDeviceMemoryProperties memoryProperties;
+
     VkDevice device = VK_NULL_HANDLE;
+
     std::optional<uint32_t> graphicsFamilyIndex, presentFamilyIndex;
+
     VkQueue queue = VK_NULL_HANDLE;
+
     VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+
     VkSurfaceKHR surface = VK_NULL_HANDLE;
     bool externalSurface = false;
+
     VkFormat imageFormat = VK_FORMAT_UNDEFINED;
+
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+
+    VkFormat depthStencilFormat = VK_FORMAT_D24_UNORM_S8_UINT;
+
     VkPresentModeKHR presentMode = VK_PRESENT_MODE_FIFO_KHR;
+
     uint32_t minImageCount = 2;
+
+    VkSampleCountFlagBits sampleCount = VK_SAMPLE_COUNT_1_BIT;
+
     VkRenderPass renderpass = VK_NULL_HANDLE;
+
     VkPipeline pipeline = VK_NULL_HANDLE;
+
     VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+
     VkCommandPool cmdPool = VK_NULL_HANDLE;
+
     uint32_t imageCount = 0;
+
     uint32_t frameCount = MAX_NUM_FRAMES;
+
     VkExtent2D imageExtent;
+
     std::array<ImageResources,MAX_NUM_IMAGES> imageRes;
+
     std::array<FrameResources,MAX_NUM_FRAMES> frameRes;
+
+    //! Изображение буфера глубины.
+    VkImage depthStencilImage = VK_NULL_HANDLE;
+    VkDeviceMemory depthStencilMem = VK_NULL_HANDLE;
+    VkImageView depthStencilView = VK_NULL_HANDLE;
+
     VkDescriptorPool descriptorPool = VK_NULL_HANDLE;
+
     VkDescriptorSetLayout descLayout = VK_NULL_HANDLE;
+
     GpuMemory* memory = nullptr;
+
     GpuMemory* frameMemory = nullptr;
+
     MeshChunk* mesh = nullptr;
+
+    //! Память устройства, в котором содержатся изображения в
+    //! `ImageResources::msaaImage`.
+    VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
+
     size_t currentFrameIndex = 0;
 };
 }
@@ -162,53 +216,83 @@ void GpuManager::setImageExtentFunction(std::function<std::tuple<uint32_t,uint32
 
 namespace
 {;
+
+VkSampleCountFlagBits getMaxUsableSampleCount(VkPhysicalDevice device)
+{
+    VkPhysicalDeviceProperties properties;
+    vkGetPhysicalDeviceProperties(device, &properties);
+
+    VkSampleCountFlags counts =
+          properties.limits.framebufferColorSampleCounts
+        & properties.limits.framebufferDepthSampleCounts;
+
+    if(counts & VK_SAMPLE_COUNT_64_BIT) return VK_SAMPLE_COUNT_64_BIT;
+    if(counts & VK_SAMPLE_COUNT_32_BIT) return VK_SAMPLE_COUNT_32_BIT;
+    if(counts & VK_SAMPLE_COUNT_16_BIT) return VK_SAMPLE_COUNT_16_BIT;
+    if(counts & VK_SAMPLE_COUNT_8_BIT)  return VK_SAMPLE_COUNT_8_BIT;
+    if(counts & VK_SAMPLE_COUNT_4_BIT)  return VK_SAMPLE_COUNT_4_BIT;
+    if(counts & VK_SAMPLE_COUNT_2_BIT)  return VK_SAMPLE_COUNT_2_BIT;
+    return VK_SAMPLE_COUNT_1_BIT;
+}
+
+
 bool createRenderPass(VulkanState* state)
 {
+    bool msaa = (state->sampleCount != VK_SAMPLE_COUNT_1_BIT);
+
     std::vector<VkAttachmentDescription> attachments = {
-        {
+        { // Non-msaa render target or resolve target.
             .format = state->imageFormat,
             .samples = VK_SAMPLE_COUNT_1_BIT,
-            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .loadOp = msaa ? VK_ATTACHMENT_LOAD_OP_DONT_CARE : VK_ATTACHMENT_LOAD_OP_CLEAR,
             .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
             .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
             .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
             .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
             .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
         },
-        // {
-        //     .format = findDepthFormat();
-        //     .samples = VK_SAMPLE_COUNT_1_BIT,
-        //     .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-        //     .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        //     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        //     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        //     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        //     .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-        // },
-        // {
-        //     .format = state->imageFormat,
-        //     .samples = VK_SAMPLE_COUNT_1_BIT,
-        //     .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        //     .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-        //     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-        //     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-        //     .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-        //     .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        // },
+        { // Depth attachment with multisampling
+            .format = state->depthStencilFormat,
+            .samples = state->sampleCount,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+        },
+        { // Multisampled color attachment
+            .format = state->imageFormat,
+            .samples = state->sampleCount,
+            .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+            .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+            .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+            .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+            .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+            .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        },
     };
 
-    std::vector<VkAttachmentReference> colorAttachmentRefs = {
-        {
-            .attachment = 0,
-            .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        }
+    VkAttachmentReference colorAttachmentRef = {
+        .attachment = static_cast<uint32_t>(msaa ? 2 : 0),
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference depthAttachmentRef = {
+        .attachment = 1,
+        .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
+    };
+    VkAttachmentReference resolveAttachmentRef = {
+        .attachment = 0,
+        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
     };
 
     std::vector<VkSubpassDescription> subpasses = {
         {
             .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
-            .colorAttachmentCount = static_cast<uint32_t>(colorAttachmentRefs.size()),
-            .pColorAttachments = colorAttachmentRefs.data(),
+            .colorAttachmentCount = static_cast<uint32_t>(1),
+            .pColorAttachments = &colorAttachmentRef,
+            .pResolveAttachments = msaa ? &resolveAttachmentRef : nullptr,
+            .pDepthStencilAttachment = &depthAttachmentRef
         }
     };
 
@@ -225,7 +309,7 @@ bool createRenderPass(VulkanState* state)
 
     VkRenderPassCreateInfo ci_renderpass {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
-        .attachmentCount = static_cast<uint32_t>(attachments.size()),
+        .attachmentCount = static_cast<uint32_t>(msaa ? 3 : 2),
         .pAttachments = attachments.data(),
         .subpassCount = static_cast<uint32_t>(subpasses.size()),
         .pSubpasses = subpasses.data(),
@@ -408,7 +492,7 @@ bool createGraphicsPipeline(VulkanState* state)
 
     VkPipelineMultisampleStateCreateInfo ci_multisampleState {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-        .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+        .rasterizationSamples = state->sampleCount,
     };
 
     VkPipelineDepthStencilStateCreateInfo ci_depthStencilState {
@@ -487,6 +571,7 @@ bool createGraphicsPipeline(VulkanState* state)
 bool initImage(VulkanState* state, ImageResources* resources)
 {
     BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
+
     VkImageViewCreateInfo ci_imageView {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = resources->image,
@@ -510,14 +595,21 @@ bool initImage(VulkanState* state, ImageResources* resources)
         state->device,
         &ci_imageView,
         nullptr,
-        &resources->view
+        &resources->imageView
     );
+
+    bool msaa = (state->sampleCount != VK_SAMPLE_COUNT_1_BIT);
+
+    VkImageView attachments[3];
+    attachments[0] = resources->imageView;
+    attachments[1] = state->depthStencilView;
+    attachments[2] = resources->msaaImageView;
 
     VkFramebufferCreateInfo ci_framebuffer {
         .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
         .renderPass = state->renderpass,
-        .attachmentCount = 1,
-        .pAttachments = &resources->view,
+        .attachmentCount = static_cast<uint32_t>(msaa ? 3 : 2),
+        .pAttachments = attachments,
         .width = state->imageExtent.width,
         .height = state->imageExtent.height,
         .layers = 1
@@ -606,7 +698,9 @@ void finalizeResources(VulkanState* state, ImageResources* resources)
 
     vkDestroyFramebuffer(state->device, resources->framebuffer, nullptr);
 
-    vkDestroyImageView(state->device, resources->view, nullptr);
+    vkDestroyImageView(state->device, resources->imageView, nullptr);
+    vkDestroyImageView(state->device, resources->msaaImageView, nullptr);
+    vkDestroyImage(state->device, resources->msaaImage, nullptr);
 }
 
 
@@ -658,6 +752,177 @@ SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device, VkSurface
 }
 
 
+uint32_t chooseTransientImageMemType(
+    VulkanState* state,
+    VkImage img,
+    uint32_t startIndex)
+{
+    VkPhysicalDeviceMemoryProperties props;
+    vkGetPhysicalDeviceMemoryProperties(state->physicalDevice, &props);
+
+    VkMemoryRequirements memReq;
+    vkGetImageMemoryRequirements(state->device, img, &memReq);
+    if(memReq.memoryTypeBits == 0)
+        return -1;
+
+    uint32_t memTypeIndex = static_cast<uint32_t>(-1);
+    const VkMemoryType* memType = props.memoryTypes;
+    bool foundDevLocal = false;
+    for(uint32_t i = startIndex; i < props.memoryTypeCount; ++i) {
+        if(memReq.memoryTypeBits & (1 << i)) {
+            if(memType[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
+                if(!foundDevLocal) {
+                    foundDevLocal = true;
+                    memTypeIndex = i;
+                }
+                if(memType[i].propertyFlags & VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
+                    memTypeIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    return memTypeIndex;
+}
+
+
+bool createTransientImage(
+    VulkanState* state,
+    VkFormat format,
+    VkImageUsageFlags usage,
+    VkImageAspectFlags aspectMask,
+    VkImage* images,
+    VkDeviceMemory* mem,
+    VkImageView* views,
+    int count)
+{
+    VkMemoryRequirements memReq;
+    VkResult r;
+
+    assert(count > 0);
+    for(int i = 0; i < count; ++i) {
+        VkImageCreateInfo ci_image {
+            .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+            .imageType = VK_IMAGE_TYPE_2D,
+            .format = format,
+            .extent = VkExtent3D {
+                .width = state->imageExtent.width,
+                .height = state->imageExtent.height,
+                .depth = 1
+            },
+            .mipLevels = 1,
+            .arrayLayers = 1,
+            .samples = state->sampleCount,
+            .tiling = VK_IMAGE_TILING_OPTIMAL,
+            .usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+        };
+
+        r = vkCreateImage(state->device, &ci_image, nullptr, images + i);
+        if(r != VK_SUCCESS) {
+            BOOST_LOG_TRIVIAL(error) <<
+                std::format(
+                    "Failed to create image: {}",
+                    VkResultToString(r)
+                );
+            return false;
+        }
+        vkGetImageMemoryRequirements(state->device, images[i], &memReq);
+    }
+
+    VkMemoryAllocateInfo memInfo;
+    memset(&memInfo, 0, sizeof(memInfo));
+    memInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    memInfo.allocationSize = Aligned(memReq.size, memReq.alignment) * count;
+
+    uint32_t startIndex = 0;
+    do {
+        memInfo.memoryTypeIndex = chooseTransientImageMemType(state, images[0], startIndex);
+        if (memInfo.memoryTypeIndex == uint32_t(-1)) {
+            BOOST_LOG_TRIVIAL(error) << "No suitable memory type found";
+            return false;
+        }
+        startIndex = memInfo.memoryTypeIndex + 1;
+        BOOST_LOG_TRIVIAL(trace) <<
+            std::format(
+                "Allocating %u bytes for transient image (memtype %u)",
+                uint32_t(memInfo.allocationSize),
+                memInfo.memoryTypeIndex
+            );
+        r = vkAllocateMemory(state->device, &memInfo, nullptr, mem);
+        if(r != VK_SUCCESS && r != VK_ERROR_OUT_OF_DEVICE_MEMORY) {
+            BOOST_LOG_TRIVIAL(error) <<
+                std::format(
+                    "Failed to allocate image memory: {}",
+                    VkResultToString(r)
+                );
+            return false;
+        }
+    } while(r != VK_SUCCESS);
+
+    VkDeviceSize ofs = 0;
+    for (int i = 0; i < count; ++i) {
+        r = vkBindImageMemory(state->device, images[i], *mem, ofs);
+        if(r != VK_SUCCESS) {
+            BOOST_LOG_TRIVIAL(error) <<
+                std::format(
+                    "Failed to bind image memory: {}",
+                    VkResultToString(r)
+                );
+            return false;
+        }
+        ofs += Aligned(memReq.size, memReq.alignment);
+
+        VkImageViewCreateInfo imgViewInfo;
+        memset(&imgViewInfo, 0, sizeof(imgViewInfo));
+        imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        imgViewInfo.image = images[i];
+        imgViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        imgViewInfo.format = format;
+        imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
+        imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
+        imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
+        imgViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
+        imgViewInfo.subresourceRange.aspectMask = aspectMask;
+        imgViewInfo.subresourceRange.levelCount = imgViewInfo.subresourceRange.layerCount = 1;
+
+        r = vkCreateImageView(state->device, &imgViewInfo, nullptr, views + i);
+        if(r != VK_SUCCESS) {
+            BOOST_LOG_TRIVIAL(error) <<
+                std::format(
+                    "Failed to create image view: {}",
+                    VkResultToString(r)
+                );
+            return false;
+        }
+    }
+
+    return true;
+}
+
+
+void releaseSwapchain(VulkanState* state)
+{
+    vkDestroySwapchainKHR(state->device, state->swapchain, nullptr);
+
+    for(int i = 0; i < state->frameCount; ++i) {
+        FrameResources* frame = &state->frameRes[i];
+        finalizeResources(state, frame);
+    }
+
+    for(int i = 0; i < state->imageCount; ++i) {
+        ImageResources* image = &state->imageRes[i];
+        finalizeResources(state, image);
+    }
+
+    vkFreeMemory(state->device, state->msaaImageMem, nullptr);
+
+    vkDestroyImageView(state->device, state->depthStencilView, nullptr);
+    vkDestroyImage(state->device, state->depthStencilImage, nullptr);
+    vkFreeMemory(state->device, state->depthStencilMem, nullptr);
+}
+
+
 bool recreateSwapchain(
     VulkanState* state,
     uint32_t width,
@@ -683,10 +948,6 @@ bool recreateSwapchain(
         || surfaceCaps.currentExtent.width == width
         && surfaceCaps.currentExtent.height == height
     );
-    // if(surfaceCaps.currentExtent.width != static_cast<uint32_t>(-1)) {
-    //     assert(surfaceCaps.currentExtent.height != static_cast<uint32_t>(-1));
-    //     state->imageExtent = surfaceCaps.currentExtent;
-    // }
 
     VkSurfaceTransformFlagBitsKHR preTransform =
         (surfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
@@ -739,7 +1000,7 @@ bool recreateSwapchain(
         );
 
     if(oldSwapchain != VK_NULL_HANDLE) {
-        vkDestroySwapchainKHR(state->device, oldSwapchain, nullptr);
+        releaseSwapchain(state);
     }
 
     state->swapchain = newSwapchain;
@@ -772,9 +1033,38 @@ bool recreateSwapchain(
     if(state->imageCount > MAX_NUM_IMAGES)
         return false;
 
+    // Создаем изображение буфера глубины.
+    createTransientImage(
+        state,
+        state->depthStencilFormat,
+        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+        &state->depthStencilImage,
+        &state->depthStencilMem,
+        &state->depthStencilView,
+        1
+    );
+
+    std::vector<VkImage> msaaImages(state->imageCount, VK_NULL_HANDLE);
+    std::vector<VkImageView> msaaViews(state->imageCount, VK_NULL_HANDLE);
+    bool msaa = (state->sampleCount != VK_SAMPLE_COUNT_1_BIT);
+    if(msaa) {
+        createTransientImage(
+            state,
+            state->imageFormat,
+            VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+            VK_IMAGE_ASPECT_COLOR_BIT,
+            msaaImages.data(),
+            &state->msaaImageMem,
+            msaaViews.data(),
+            state->imageCount
+        );
+    }
     for(size_t i = 0; i < state->imageCount; ++i) {
         ImageResources& resources = state->imageRes[i];
         resources.image = swapchainImages[i];
+        resources.msaaImage = msaaImages[i];
+        resources.msaaImageView = msaaViews[i];
         initImage(state, &resources);
     }
 
@@ -811,9 +1101,9 @@ void render(
 
     // Begin renderpass command.
     VkClearValue clearValues[] = {
-        {
-            .color = { .float32 = { 0.2f, 0.2f, 0.2f, 1.0f } }
-        }
+        { .color = { .float32 = { 0.2f, 0.2f, 0.2f, 1.0f } } },
+        { .depthStencil = { 1.0f, 0 } },
+        { .color = { .float32 = { 0.2f, 0.2f, 0.2f, 1.0f } } }
     };
     VkRenderPassBeginInfo bi_renderpass {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -823,7 +1113,7 @@ void render(
             .offset = { 0, 0 },
             .extent = state->imageExtent
         },
-        .clearValueCount = 1,
+        .clearValueCount = 3,
         .pClearValues = clearValues
     };
     vkCmdBeginRenderPass(
@@ -1309,6 +1599,26 @@ bool createSurface(VulkanState* state, GpuManager::Impl::Xcb* xcb)
 #endif
 
 
+VkFormat selectDepthStencilFormat(VkPhysicalDevice device)
+{
+    const VkFormat dsFormatCandidates[] = {
+        VK_FORMAT_D24_UNORM_S8_UINT,
+        VK_FORMAT_D32_SFLOAT_S8_UINT,
+        VK_FORMAT_D16_UNORM_S8_UINT
+    };
+
+    for(int idx = 0; idx < sizeof(dsFormatCandidates)/sizeof(VkFormat); ++idx) {
+        VkFormat format = dsFormatCandidates[idx];
+        VkFormatProperties prop;
+        vkGetPhysicalDeviceFormatProperties(device, format, &prop);
+        if(prop.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+            return format;
+    }
+
+    return VK_FORMAT_UNDEFINED;
+}
+
+
 bool chooseSwapchainSettings(VulkanState* state)
 {
     SwapChainSupportDetails swapchainSupport = querySwapChainSupport(
@@ -1347,10 +1657,15 @@ bool chooseSwapchainSettings(VulkanState* state)
         return false;
     }
 
+    state->depthStencilFormat = selectDepthStencilFormat(state->physicalDevice);
+    if(state->depthStencilFormat == VK_FORMAT_UNDEFINED)
+        BOOST_LOG_TRIVIAL(error) << "Failed to find an optimal depth-stencil format";
+
     BOOST_LOG_TRIVIAL(trace) <<
         std::format(
-            "Image format is {}",
-            VkFormatToString(state->imageFormat)
+            "Color format: {} Depth-stencil format: {}",
+            VkFormatToString(state->imageFormat),
+            VkFormatToString(state->depthStencilFormat)
         );
 
     // Выбираем режим показа.
@@ -1411,6 +1726,13 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s)
     if(state->physicalDevice == VK_NULL_HANDLE && !selectPhysicalDevice(state,deviceExtensionNames))
         return false;
     CHECK_STATE(s, VulkanInitState::PhysicalDevice);
+
+    state->sampleCount = getMaxUsableSampleCount(state->physicalDevice);
+    BOOST_LOG_TRIVIAL(trace) <<
+        std::format(
+            "Selected MSAA sample count: {}",
+            static_cast<size_t>(state->sampleCount)
+        );
 
     // Создаем логическое устройство и извлекаем очередь.
     if(state->device == VK_NULL_HANDLE && !createLogicalDevice(state))

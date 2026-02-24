@@ -22,3 +22,38 @@ target_link_libraries(app-qt
 )
 
 install(TARGETS app-qt)
+
+# Копируем плагины Qt.
+install(DIRECTORY
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/plugins
+  DESTINATION bin
+)
+
+install(FILES
+  ${PROJECT_SOURCE_DIR}/tests/data/one-side-rounded-cube.step
+  ${PROJECT_SOURCE_DIR}/tests/data/polydata-cube.vtk
+  ${PROJECT_SOURCE_DIR}/tests/data/rounded-cube.step
+  DESTINATION doc
+)
+
+install(CODE [[
+  set(DEPENDENCY_PATHS $ENV{VCPKG_ROOT})
+  file(TO_CMAKE_PATH "${DEPENDENCY_PATHS}" DEPENDENCY_PATHS)
+
+  file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES $<TARGET_FILE:app-qt>
+    RESOLVED_DEPENDENCIES_VAR _r_deps
+    UNRESOLVED_DEPENDENCIES_VAR _u_deps
+    POST_EXCLUDE_REGEXES "^C:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss][Yy][Ss][Tt][Ee][Mm]32[/\\]*"
+    DIRECTORIES "${DEPENDENCY_PATHS}"
+  )
+
+  foreach(_file ${_r_deps})
+    file(INSTALL
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/bin"
+      TYPE SHARED_LIBRARY
+      FOLLOW_SYMLINK_CHAIN
+      FILES "${_file}"
+    )
+  endforeach()
+]])

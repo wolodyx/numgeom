@@ -20,3 +20,5 @@ target_link_libraries(app-qt
   numgeom::framework
   numgeom::io
 )
+
+install(TARGETS app-qt)

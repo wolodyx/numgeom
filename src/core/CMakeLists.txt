@@ -18,7 +18,7 @@ set(SOURCE_FILES
 add_library(core ${SOURCE_FILES})
 add_library(numgeom::core ALIAS core)
 
-set_target_properties(core PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+#set_target_properties(core PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
 generate_export_header(core
   EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/numgeomcore_export.h
@@ -34,3 +34,5 @@ target_link_libraries(core
   PUBLIC
     glm::glm
 )
+
+install(TARGETS core)

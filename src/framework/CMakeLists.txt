@@ -31,7 +31,7 @@ target_link_libraries(framework
     numgeom::core
 )
 
-set_target_properties(framework PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+#set_target_properties(framework PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
 generate_export_header(framework
   EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/framework_export.h
@@ -68,3 +68,5 @@ endif()
 if(ENABLE_XCB)
   target_link_libraries(framework PRIVATE xcb::xcb)
 endif()
+
+install(TARGETS framework)

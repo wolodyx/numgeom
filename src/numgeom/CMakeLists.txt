@@ -30,7 +30,7 @@ set(SOURCE_FILES
 add_library(numgeom ${SOURCE_FILES})
 add_library(numgeom::numgeom ALIAS numgeom)
 
-set_target_properties(numgeom PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+#set_target_properties(numgeom PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
 generate_export_header(numgeom
   EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/numgeom_export.h
@@ -60,3 +60,5 @@ target_include_directories(numgeom
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}/include
 )
+
+install(TARGETS numgeom)

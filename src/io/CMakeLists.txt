@@ -23,7 +23,7 @@ endif()
 add_library(io ${SOURCE_FILES})
 add_library(numgeom::io ALIAS io)
 
-set_target_properties(io PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+#set_target_properties(io PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
 generate_export_header(io
   EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/numgeomio_export.h
@@ -63,3 +63,5 @@ if(OpenCASCADE_FOUND)
       numgeom::numgeom
   )
 endif()
+
+install(TARGETS io)

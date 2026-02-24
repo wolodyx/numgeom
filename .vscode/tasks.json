@@ -4,13 +4,18 @@
     {
       "label": "build",
       "type": "shell",
-      "command": "cmake --build ${workspaceFolder}/bld/linux-vcpkg-debug --config Debug",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${command:cmake.buildDirectory}",
+        "--config ${command:cmake.buildType}"
+      ],
       "group": {
         "kind": "build",
         "isDefault": true
       },
       "problemMatcher": ["$cmake", "$gcc"],
-      "detail": "CMake build using linux-vcpkg-debug preset",
+      "detail": "CMake build using preset",
       "options": {
         "cwd": "${workspaceFolder}"
       }

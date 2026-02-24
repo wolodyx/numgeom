@@ -5,7 +5,7 @@
       "name": "Run app-qt",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/bld/linux-vcpkg-debug/examples/app-qt/app-qt",
+      "program": "${command:cmake.launchTargetPath}",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${workspaceFolder}",
@@ -19,8 +19,7 @@
           "ignoreFailures": true
         }
       ],
-      "preLaunchTask": "build",
-      "miDebuggerPath": "/usr/bin/gdb"
+      "preLaunchTask": "build"
     }
   ]
 }

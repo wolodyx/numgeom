@@ -15,6 +15,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "CMAKE_BUILD_TYPE": "Release"
       },
       "environment": {
@@ -27,6 +28,7 @@
       "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "CMAKE_BUILD_TYPE": "Debug"
       },
       "environment": {

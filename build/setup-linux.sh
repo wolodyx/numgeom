@@ -22,5 +22,5 @@ export VCPKG_ROOT=$HOME/vcpkg
 # Install external dependencies
 vcpkg install gtest nlohmann-json
 vcpkg install vulkan-sdk-components glslang[tools]
-#vcpkg install opencascade
+vcpkg install opencascade
 vcpkg install qt5-base[vulkan]

@@ -21,11 +21,14 @@ target_link_libraries(app-qt
   numgeom::io
 )
 
+include(Qt5Utils)
+copy_qt_plugin(Qt5::QJpegPlugin "imageformats")
+
 install(TARGETS app-qt)
 
 # Копируем плагины Qt.
 install(DIRECTORY
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<CONFIG>/plugins
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<$<PLATFORM_ID:Windows>:$<CONFIG>/>plugins
   DESTINATION bin
 )
 
@@ -44,7 +47,9 @@ install(CODE [[
     EXECUTABLES $<TARGET_FILE:app-qt>
     RESOLVED_DEPENDENCIES_VAR _r_deps
     UNRESOLVED_DEPENDENCIES_VAR _u_deps
-    POST_EXCLUDE_REGEXES "^C:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss][Yy][Ss][Tt][Ee][Mm]32[/\\]*"
+    POST_EXCLUDE_REGEXES
+      "^C:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss][Yy][Ss][Tt][Ee][Mm]32[/\\]*"
+      "^/lib/"
     DIRECTORIES "${DEPENDENCY_PATHS}"
   )
 

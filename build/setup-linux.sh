@@ -52,15 +52,20 @@ fi
 git clone https://github.com/microsoft/vcpkg.git
 cd vcpkg
 ./bootstrap-vcpkg.sh -disableMetrics
-mv vcpkg ~/bin/vcpkg
+mkdir -p $HOME/bin
+mv vcpkg $HOME/bin/vcpkg
 export PATH=$PATH:$HOME/bin
 export VCPKG_ROOT=$HOME/vcpkg
 
 # Install external dependencies
-vcpkg install gtest nlohmann-json boost-log
-vcpkg install vulkan-sdk-components glslang[tools] vulkan-loader[xcb]
-vcpkg install opencascade
-vcpkg install qt5-base[vulkan]
+vcpkg install             \
+    gtest                 \
+    nlohmann-json         \
+    boost-log             \
+    vulkan-loader[xcb]    \
+    vulkan-sdk-components \
+    opencascade           \
+    qt5-base[vulkan]
 
 rm -rf \
     $VCPKG_ROOT/buildtrees \

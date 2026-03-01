@@ -69,16 +69,22 @@ struct ImageResources
 
     //! Фреймбуфер.
     VkFramebuffer framebuffer = VK_NULL_HANDLE;
+
+    //! https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
+    VkSemaphore submitSemaphore = VK_NULL_HANDLE;
 };
 
 
 struct FrameResources
 {
     VkDescriptorSet descSet = VK_NULL_HANDLE;
+
     VkCommandBuffer cmdBuf = VK_NULL_HANDLE;
-    VkSemaphore imageSemaphore = VK_NULL_HANDLE;
-    VkSemaphore drawSemaphore = VK_NULL_HANDLE;
+
+    VkSemaphore acquireSemaphore = VK_NULL_HANDLE;
+
     VkFence cmdFence = VK_NULL_HANDLE;
+
     bool cmdFenceWaitable = false;
 };
 
@@ -572,6 +578,8 @@ bool initImage(VulkanState* state, ImageResources* resources)
 {
     BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
 
+    VkResult r;
+
     VkImageViewCreateInfo ci_imageView {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = resources->image,
@@ -591,12 +599,13 @@ bool initImage(VulkanState* state, ImageResources* resources)
             .layerCount = 1,
         },
     };
-    vkCreateImageView(
+    r = vkCreateImageView(
         state->device,
         &ci_imageView,
         nullptr,
         &resources->imageView
     );
+    assert(r == VK_SUCCESS);
 
     bool msaa = (state->sampleCount != VK_SAMPLE_COUNT_1_BIT);
 
@@ -614,12 +623,24 @@ bool initImage(VulkanState* state, ImageResources* resources)
         .height = state->imageExtent.height,
         .layers = 1
     };
-    vkCreateFramebuffer(
+    r = vkCreateFramebuffer(
         state->device,
         &ci_framebuffer,
         nullptr,
         &resources->framebuffer
     );
+    assert(r == VK_SUCCESS);
+
+    VkSemaphoreCreateInfo semaphoreCreateInfo {
+       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    r = vkCreateSemaphore(
+        state->device,
+        &semaphoreCreateInfo,
+        nullptr,
+        &resources->submitSemaphore
+    );
+    assert(r == VK_SUCCESS);
 
     return true;
 }
@@ -664,14 +685,7 @@ bool initFrame(VulkanState* state, FrameResources* resources)
         state->device,
         &semaphoreCreateInfo,
         nullptr,
-        &resources->imageSemaphore
-    );
-    assert(r == VK_SUCCESS);
-    r = vkCreateSemaphore(
-        state->device,
-        &semaphoreCreateInfo,
-        nullptr,
-        &resources->drawSemaphore
+        &resources->acquireSemaphore
     );
     assert(r == VK_SUCCESS);
 
@@ -701,6 +715,7 @@ void finalizeResources(VulkanState* state, ImageResources* resources)
     vkDestroyImageView(state->device, resources->imageView, nullptr);
     vkDestroyImageView(state->device, resources->msaaImageView, nullptr);
     vkDestroyImage(state->device, resources->msaaImage, nullptr);
+    vkDestroySemaphore(state->device, resources->submitSemaphore, nullptr);
 }
 
 
@@ -713,8 +728,7 @@ void finalizeResources(VulkanState* state, FrameResources* frame)
     vkDestroyFence(state->device, frame->cmdFence, nullptr);
     frame->cmdFenceWaitable = false;
 
-    vkDestroySemaphore(state->device, frame->imageSemaphore, nullptr);
-    vkDestroySemaphore(state->device, frame->drawSemaphore, nullptr);
+    vkDestroySemaphore(state->device, frame->acquireSemaphore, nullptr);
 }
 
 
@@ -1197,16 +1211,15 @@ void render(
     VkSubmitInfo submitInfo {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = static_cast<uint32_t>(1),
-        .pWaitSemaphores = &frame.imageSemaphore,
+        .pWaitSemaphores = &frame.acquireSemaphore,
         .pWaitDstStageMask = waitDstStageMask,
         .commandBufferCount = 1,
         .pCommandBuffers = &frame.cmdBuf,
         .signalSemaphoreCount = static_cast<uint32_t>(1),
-        .pSignalSemaphores = &frame.drawSemaphore
+        .pSignalSemaphores = &image.submitSemaphore
     };
     assert(!frame.cmdFenceWaitable);
     vkQueueSubmit(state->queue, 1, &submitInfo, frame.cmdFence);
-    //frame.imageSemaphoreWaitable = false;
     frame.cmdFenceWaitable = true;
 }
 
@@ -1233,6 +1246,42 @@ VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(
 }
 
 
+bool checkExtensions(const std::vector<const char*>& extensionNames)
+{
+    BOOST_LOG_TRIVIAL(trace) << "Check Extensions";
+
+    VkResult r;
+
+    uint32_t count = 0;
+    r = vkEnumerateInstanceExtensionProperties(nullptr, &count, nullptr);
+    assert(r == VK_SUCCESS);
+    if(count == 0)
+        return false;
+    std::vector<VkExtensionProperties> props(count);
+    r = vkEnumerateInstanceExtensionProperties(nullptr, &count, props.data());
+    assert(r == VK_SUCCESS);
+    bool haveExtensions = true;
+    for(const char* name : extensionNames) {
+        bool has = false;
+        for(const VkExtensionProperties& prop : props) {
+            if(strcmp(prop.extensionName,name) == 0) {
+                has = true;
+		break;
+            }
+	}
+	BOOST_LOG_TRIVIAL(trace) <<
+        std::format(
+            " * extension {} {}",
+            name,
+            has ? "exists":"doesn't exist"
+        );
+	if(!has)
+            haveExtensions = false;
+    }
+    return haveExtensions;
+}
+
+
 //! Создаем экземпляр vulkan.
 bool initInstance(VulkanState* state)
 {
@@ -1249,6 +1298,9 @@ bool initInstance(VulkanState* state)
         VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
 #endif
     };
+
+    if(!checkExtensions(extensionNames))
+        return false;
 
     VkApplicationInfo applicationInfo {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
@@ -1925,7 +1977,7 @@ bool GpuManager::update()
             state->device,
             state->swapchain,
             UINT64_MAX,
-            frame.imageSemaphore,
+            frame.acquireSemaphore,
             VK_NULL_HANDLE,
             &index
         );
@@ -1949,11 +2001,10 @@ bool GpuManager::update()
         VkPresentInfoKHR presentInfoKHR {
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = &frame.drawSemaphore,
+            .pWaitSemaphores = &image.submitSemaphore,
             .swapchainCount = 1,
             .pSwapchains = &state->swapchain,
             .pImageIndices = &index,
-            //.pResults = &r,
         };
         r = vkQueuePresentKHR(state->queue, &presentInfoKHR);
         if(r != VK_SUCCESS)

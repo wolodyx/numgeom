@@ -72,7 +72,7 @@ if(DEFINED SHADER_FILES)
       COMMAND
         "${Vulkan_GLSLC_EXECUTABLE}"
       ARGS
-        "-V ${CMAKE_CURRENT_SOURCE_DIR}/${file}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/${file}"
         "-o${file}.spv"
       COMMAND
         "${Python3_EXECUTABLE}"

@@ -282,12 +282,15 @@ TriMesh::Ptr ConvertToTriMesh(const TopoDS_Shape& initShape)
             mesh->GetNode(nodeIndex++) = TriMesh::NodeType(pt.X(), pt.Y(), pt.Z());
         }
 
+        bool normalConsistent = (v.first.Orientation() == TopAbs_FORWARD);
         Standard_Integer nbCells = triangulation->NbTriangles();
         for(Standard_Integer i = 1; i <= nbCells; ++i)
         {
             const Poly_Triangle& cell = triangulation->Triangle(i);
             Standard_Integer na, nb, nc;
             cell.Get(na, nb, nc);
+            if(!normalConsistent)
+                std::swap(nb, nc);
             mesh->GetCell(cellIndex++) =
                 TriMesh::Cell
                 {

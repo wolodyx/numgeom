@@ -22,3 +22,12 @@
 ```
 
 Если при сборке проекта будет закрываться окно терминала, то увеличьте объем RAM.
+
+
+## Настройка рабочей среды в Windows 11
+
+* установите `Git`, `CMake`;
+* установите `Visual Studio Community`;
+* установите переменную окружения `VCPKG_ROOT=%USERPROFILE%/vcpkg`;
+* добавьте к `PATH` значение `%USERPROFILE%/vcpkg`;
+* Из корня проекта запустите команду `./build/setup-windows.sh && ./build/build-windows.sh`.

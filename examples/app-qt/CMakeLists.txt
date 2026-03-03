@@ -21,17 +21,19 @@ target_link_libraries(app-qt
   numgeom::io
 )
 
-# List of env variables to run application
-file(GENERATE
-  OUTPUT "${CMAKE_BINARY_DIR}/app-qt.env"
-  CONTENT
-    [===[
+# List of env variables to run application from vscode.
+if(UNIX)
+  file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/app-qt.env"
+    CONTENT
+      [===[
 VCPKG_ROOT=${env:HOME}/vcpkg
 VK_LAYER_PATH=${env:VCPKG_ROOT}/packages/vulkan-validationlayers_x64-linux/share/vulkan/explicit_layer.d
 LD_LIBRARY_PATH=${env:VCPKG_ROOT}/installed/x64-linux/debug/lib
 QT_QPA_PLATFORM=xcb
-    ]===]
-)
+      ]===]
+  )
+endif()
 
 include(Qt5Utils)
 copy_qt_plugin(Qt5::QJpegPlugin "imageformats")

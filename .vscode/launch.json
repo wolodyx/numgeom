@@ -2,7 +2,7 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run app-qt",
+      "name": "Run app-qt on Linux",
       "type": "cppdbg",
       "request": "launch",
       "program": "${command:cmake.launchTargetPath}",
@@ -20,6 +20,18 @@
           "ignoreFailures": true
         }
       ],
+      "preLaunchTask": "build"
+    },
+    {
+      "name": "Run app-qt on Windows",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "program": "${command:cmake.launchTargetPath}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${workspaceFolder}",
+      "environment": [],
+      "console": "internalConsole",
       "preLaunchTask": "build"
     }
   ]

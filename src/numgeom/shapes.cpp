@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 
+#define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 
 #include "gp_Ax1.hxx"

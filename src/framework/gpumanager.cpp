@@ -860,7 +860,7 @@ bool createTransientImage(
         startIndex = memInfo.memoryTypeIndex + 1;
         BOOST_LOG_TRIVIAL(trace) <<
             std::format(
-                "Allocating %u bytes for transient image (memtype %u)",
+                "Allocating {} bytes for transient image (memtype {})",
                 uint32_t(memInfo.allocationSize),
                 memInfo.memoryTypeIndex
             );
@@ -1114,11 +1114,15 @@ void render(
         &commandBufferBeginInfo
     );
 
+    const VkClearColorValue lavender {
+        .float32 = {230/256.0f, 230/256.0f, 250/256.0f}
+    };
+
     // Begin renderpass command.
     VkClearValue clearValues[] = {
-        { .color = { .float32 = { 0.2f, 0.2f, 0.2f, 1.0f } } },
+        { .color = lavender },
         { .depthStencil = { 1.0f, 0 } },
-        { .color = { .float32 = { 0.2f, 0.2f, 0.2f, 1.0f } } }
+        { .color = lavender }
     };
     VkRenderPassBeginInfo bi_renderpass {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -1883,9 +1887,6 @@ bool GpuManager::initialize()
 
 namespace
 {
-void updateScene()
-{
-}
 
 void updateDataForFrame(Application* app, VulkanState* state)
 {
@@ -1963,7 +1964,7 @@ bool GpuManager::update()
 
     // Ожидаем освобождения последнего фрейма.
     if(frame.cmdFenceWaitable) {
-        vkWaitForFences(state->device, 1, &frame.cmdFence, VK_TRUE,UINT64_MAX);
+        vkWaitForFences(state->device, 1, &frame.cmdFence, VK_TRUE, UINT64_MAX);
         vkResetFences(state->device, 1, &frame.cmdFence);
         frame.cmdFenceWaitable = false;
     }

@@ -707,29 +707,39 @@ bool initFrame(VulkanState* state, FrameResources* resources)
 }
 
 
-void finalizeResources(VulkanState* state, ImageResources* resources)
+void finalize(VulkanState* state, ImageResources* resources)
 {
     BOOST_LOG_TRIVIAL(trace) << "Finalize image resources ...";
 
     vkDestroyFramebuffer(state->device, resources->framebuffer, nullptr);
+    resources->framebuffer = VK_NULL_HANDLE;
 
     vkDestroyImageView(state->device, resources->imageView, nullptr);
+    resources->imageView = VK_NULL_HANDLE;
+
     vkDestroyImageView(state->device, resources->msaaImageView, nullptr);
+    resources->msaaImageView = VK_NULL_HANDLE;
+
     vkDestroyImage(state->device, resources->msaaImage, nullptr);
+    resources->msaaImage = VK_NULL_HANDLE;
+
     vkDestroySemaphore(state->device, resources->submitSemaphore, nullptr);
+    resources->submitSemaphore = VK_NULL_HANDLE;
 }
 
 
-void finalizeResources(VulkanState* state, FrameResources* frame)
+void finalize(VulkanState* state, FrameResources* frame)
 {
     BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
 
     vkFreeCommandBuffers(state->device, state->cmdPool, 1, &frame->cmdBuf);
 
     vkDestroyFence(state->device, frame->cmdFence, nullptr);
+    frame->cmdFence = VK_NULL_HANDLE;
     frame->cmdFenceWaitable = false;
 
     vkDestroySemaphore(state->device, frame->acquireSemaphore, nullptr);
+    frame->acquireSemaphore = VK_NULL_HANDLE;
 }
 
 
@@ -920,14 +930,14 @@ void releaseSwapchain(VulkanState* state)
 {
     vkDestroySwapchainKHR(state->device, state->swapchain, nullptr);
 
-    for(int i = 0; i < state->frameCount; ++i) {
-        FrameResources* frame = &state->frameRes[i];
-        finalizeResources(state, frame);
-    }
+    // for(int i = 0; i < state->frameCount; ++i) {
+    //     FrameResources* frame = &state->frameRes[i];
+    //     finalize(state, frame);
+    // }
 
     for(int i = 0; i < state->imageCount; ++i) {
         ImageResources* image = &state->imageRes[i];
-        finalizeResources(state, image);
+        finalize(state, image);
     }
 
     vkFreeMemory(state->device, state->msaaImageMem, nullptr);
@@ -1291,7 +1301,6 @@ bool checkExtensions(const std::vector<const char*>& extensionNames)
 bool initInstance(VulkanState* state)
 {
     std::vector<const char*> extensionNames {
-        //VK_KHR_SWAPCHAIN_EXTENSION_NAME,
         VK_KHR_SURFACE_EXTENSION_NAME,
 #if defined(USE_PLATFORM_XCB_KHR)
         VK_KHR_XCB_SURFACE_EXTENSION_NAME,
@@ -1687,7 +1696,6 @@ bool chooseSwapchainSettings(VulkanState* state)
 
     VkFormat format = VK_FORMAT_UNDEFINED;
     VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-    //for(uint32_t i = 0; i < count; i++) {
     for(const auto& f : swapchainSupport.formats) {
         switch (f.format) {
         case VK_FORMAT_R8G8B8A8_SRGB:
@@ -1973,8 +1981,6 @@ bool GpuManager::update()
 
     while(true) {
         uint32_t index;
-        // BOOST_LOG_TRIVIAL(trace) << "vkAcquireNextImageKHR ...";
-        // BOOST_LOG_TRIVIAL(trace) << "Frame index: " << state->currentFrameIndex;
         VkResult r = vkAcquireNextImageKHR(
             state->device,
             state->swapchain,
@@ -1983,7 +1989,6 @@ bool GpuManager::update()
             VK_NULL_HANDLE,
             &index
         );
-        // BOOST_LOG_TRIVIAL(trace) << std::format("r = {}", VkResultToString(r));
         if(r == VK_SUBOPTIMAL_KHR || r == VK_ERROR_OUT_OF_DATE_KHR) {
             // Размеры окна.
             uint32_t width, height;

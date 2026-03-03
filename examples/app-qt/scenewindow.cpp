@@ -94,21 +94,16 @@ void SceneWindow::wheelEvent(QWheelEvent* event)
 
 void SceneWindow::resizeEvent(QResizeEvent* event)
 {
-    QSize sz = event->size();
-    std::cout << "Window size is (" << sz.width() << ", " << sz.height() << ")" << std::endl;
-    m_app->update();
 }
 
 
 void SceneWindow::exposeEvent(QExposeEvent* event)
 {
-    if(!this->isExposed()) {
-        QWindow::exposeEvent(event);
+    if(this->isExposed()) {
+        m_app->update();
         return;
     }
-    static int i = 0;
-    //std::cout << std::format("{}. expose event {}", i++, isExposed())  << std::endl;
-    QWindow::exposeEvent(event);
+    //QWindow::exposeEvent(event);
 }
 
 
@@ -116,21 +111,16 @@ bool SceneWindow::event(QEvent* e)
 {
     switch(e->type()) {
     case QEvent::Paint:
-        std::cout << "Paint" << std::endl;
-        break;
     case QEvent::UpdateRequest:
-        std::cout << "UpdateRequest" << std::endl;
+        m_app->update();
         break;
     case QEvent::PlatformSurface:
     {
         auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
-        std::cout << "PlatformSurface: ";
         switch(pse->surfaceEventType()) {
         case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
-            std::cout << "SurfaceAboutToBeDestroyed" << std::endl;
             break;
         case QPlatformSurfaceEvent::SurfaceCreated:
-            std::cout << "SurfaceCreated" << std::endl;
             break;
         }
         break;
@@ -138,16 +128,12 @@ bool SceneWindow::event(QEvent* e)
     case QEvent::MouseMove:
         break;
     case QEvent::Enter:
-        //std::cout << "Enter event." << std::endl;
         break;
     case QEvent::Leave:
-        //std::cout << "Leave event." << std::endl;
         break;
     case QEvent::Expose:
-        //std::cout << "Expose event." << std::endl;
         break;
     default:
-        //std::cout << "e->type() = " << e->type() << std::endl;
         break;
     }
     return QWindow::event(e);

@@ -571,6 +571,10 @@ bool createGraphicsPipeline(VulkanState* state)
             "Graphics pipeline {} is created.",
             static_cast<void*>(&state->pipeline)
         );
+
+    vkDestroyShaderModule(state->device, vsModule, nullptr);
+    vkDestroyShaderModule(state->device, fsModule, nullptr);
+
     return true;
 }
 
@@ -950,11 +954,10 @@ void releaseSwapchain(VulkanState* state)
 
 bool recreateSwapchain(
     VulkanState* state,
-    uint32_t width,
-    uint32_t height)
+    VkExtent2D extent)
 {
     // Защита от вырождения окна в нулевой размер.
-    if(width == 0 || height == 0)
+    if(extent.width == 0 || extent.height == 0)
         return true;
 
     VkResult r;
@@ -967,11 +970,10 @@ bool recreateSwapchain(
     assert(r == VK_SUCCESS);
 
     // Выбираем размер изображений.
-    state->imageExtent.width = width;
-    state->imageExtent.height = height;
+    state->imageExtent = extent;
     assert(surfaceCaps.currentExtent.width == static_cast<uint32_t>(-1)
-        || surfaceCaps.currentExtent.width == width
-        && surfaceCaps.currentExtent.height == height
+        || surfaceCaps.currentExtent.width == extent.width
+        && surfaceCaps.currentExtent.height == extent.height
     );
 
     VkSurfaceTransformFlagBitsKHR preTransform =
@@ -1020,7 +1022,7 @@ bool recreateSwapchain(
     }
     BOOST_LOG_TRIVIAL(trace) <<
         std::format(
-            "Swapchain object is ({}).",
+            "Success of create swapchain object ({}).",
             static_cast<void*>(&newSwapchain)
         );
 
@@ -1816,7 +1818,7 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s)
     // Создаем объект swapchain.
     uint32_t width, height;
     std::tie(width, height) = gpm->getImageExtent();
-    if(!recreateSwapchain(state,width,height))
+    if(!recreateSwapchain(state,VkExtent2D{width,height}))
         return false;
     CHECK_STATE(s, VulkanInitState::Swapchain);
 
@@ -1968,6 +1970,13 @@ bool GpuManager::update()
     if(state->stopRendering)
         return false;
 
+    VkExtent2D currentExtent;
+    std::tie(currentExtent.width, currentExtent.height) = m_pimpl->getImageExtent();
+    if(state->imageExtent.width != currentExtent.width || state->imageExtent.height != currentExtent.height) {
+        if(!recreateSwapchain(state, currentExtent))
+            return false;
+    }
+
     FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
     // Ожидаем освобождения последнего фрейма.
@@ -1991,9 +2000,9 @@ bool GpuManager::update()
         );
         if(r == VK_SUBOPTIMAL_KHR || r == VK_ERROR_OUT_OF_DATE_KHR) {
             // Размеры окна.
-            uint32_t width, height;
-            std::tie(width, height) = m_pimpl->getImageExtent();
-            recreateSwapchain(state, width, height);
+            VkExtent2D extent;
+            std::tie(extent.width, extent.height) = m_pimpl->getImageExtent();
+            recreateSwapchain(state, extent);
             continue;
         }
         if(r == VK_NOT_READY || r == VK_TIMEOUT)
@@ -2022,4 +2031,45 @@ bool GpuManager::update()
 
     state->currentFrameIndex = (state->currentFrameIndex + 1) % MAX_NUM_FRAMES;
     return true;
+}
+
+
+void GpuManager::finalize()
+{
+    VulkanState* state = &m_pimpl->vulkanState;
+
+    vkDeviceWaitIdle(state->device);
+
+    releaseSwapchain(state);
+
+    for(int i = 0; i < state->frameCount; ++i) {
+        FrameResources* frame = &state->frameRes[i];
+        ::finalize(state, frame);
+    }
+
+    vkDestroyPipeline(state->device, state->pipeline, nullptr);
+    state->pipeline = VK_NULL_HANDLE;
+
+    vkDestroyPipelineLayout(state->device, state->pipelineLayout, nullptr);
+    vkDestroyDescriptorSetLayout(state->device, state->descLayout, nullptr);
+    vkDestroyDescriptorPool(state->device, state->descriptorPool, nullptr);
+
+    vkDestroyRenderPass(state->device, state->renderpass, nullptr);
+    state->renderpass = VK_NULL_HANDLE;
+
+    vkDestroyCommandPool(state->device, state->cmdPool, nullptr);
+    state->cmdPool = VK_NULL_HANDLE;
+
+    delete state->mesh;
+    delete state->memory;
+    delete state->frameMemory;
+
+    if(!state->externalSurface)
+        vkDestroySurfaceKHR(state->instance, state->surface, nullptr);
+    state->surface = VK_NULL_HANDLE;
+
+    vkDestroyDevice(state->device, nullptr);
+
+    // vkDestroyInstance(state->instance, nullptr);
+    // state->instance = VK_NULL_HANDLE;
 }

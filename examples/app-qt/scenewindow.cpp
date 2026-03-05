@@ -12,7 +12,7 @@
 
 SceneWindow::SceneWindow(Application* app)
 {
-    m_app = app;
+    m_gpuManager = app->gpuManager();
     m_userInputController = new UserInputController(app);
 }
 
@@ -100,41 +100,27 @@ void SceneWindow::resizeEvent(QResizeEvent* event)
 void SceneWindow::exposeEvent(QExposeEvent* event)
 {
     if(this->isExposed()) {
-        m_app->update();
-        return;
+        m_gpuManager->update();
+    } else {
+        //m_gpuManager->finalize();
     }
-    //QWindow::exposeEvent(event);
 }
 
 
 bool SceneWindow::event(QEvent* e)
 {
     switch(e->type()) {
-    case QEvent::Paint:
-    case QEvent::UpdateRequest:
-        m_app->update();
-        break;
-    case QEvent::PlatformSurface:
-    {
-        auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
-        switch(pse->surfaceEventType()) {
-        case QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed:
+        case QEvent::Paint:
+        case QEvent::UpdateRequest:
+            m_gpuManager->update();
             break;
-        case QPlatformSurfaceEvent::SurfaceCreated:
+        case QEvent::PlatformSurface: {
+            auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
+            if(pse->surfaceEventType() == QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
+                m_gpuManager->finalize();
+            }
             break;
         }
-        break;
-    }
-    case QEvent::MouseMove:
-        break;
-    case QEvent::Enter:
-        break;
-    case QEvent::Leave:
-        break;
-    case QEvent::Expose:
-        break;
-    default:
-        break;
     }
     return QWindow::event(e);
 }

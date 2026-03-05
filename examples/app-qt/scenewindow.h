@@ -32,7 +32,7 @@ private:
     bool event(QEvent*) override;
 
 private:
-    Application* m_app;
+    GpuManager* m_gpuManager;
     UserInputController* m_userInputController;
 };
 #endif // !numgeom_app_scenewindow_h

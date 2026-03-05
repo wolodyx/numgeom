@@ -42,6 +42,8 @@ public:
 
     void setImageExtentFunction(std::function<std::tuple<uint32_t,uint32_t>()>);
 
+    void finalize();
+
 private:
     GpuManager(const GpuManager&) = delete;
     GpuManager& operator=(const GpuManager&) = delete;

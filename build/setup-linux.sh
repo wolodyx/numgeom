@@ -1,9 +1,9 @@
 #!/bin/bash
 set -e
 
-sudo apt -y install      \
+apt update
+apt -y install           \
     git                  \
-    vim                  \
     cmake                \
     build-essential      \
     flex                 \

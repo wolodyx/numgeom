@@ -18,22 +18,25 @@
 #include "vulkan/vulkan.h"
 
 #if defined(USE_PLATFORM_XCB_KHR)
-#include "vulkan/vulkan_xcb.h"
 #include "xcb/xcb.h"
+#include "vulkan/vulkan_xcb.h"
 #endif
 #if defined(_WIN32)
-#include "vulkan/vulkan_win32.h"
 #include "windows.h"
+#include "vulkan/vulkan_win32.h"
 #endif
 
 #define GLM_ENABLE_EXPERIMENTAL
-#include "boost/log/trivial.hpp"
 #include "glm/glm.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/string_cast.hpp"
-#include "meshchunk.h"
+
+#include "boost/log/trivial.hpp"
+
 #include "numgeom/application.h"
 #include "numgeom/gpumemory.h"
+
+#include "meshchunk.h"
 #include "vkutilities.h"
 
 // Количество изображений в обращении.

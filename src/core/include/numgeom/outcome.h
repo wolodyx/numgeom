@@ -1,58 +1,48 @@
 #ifndef numgeom_core_outcome_h
 #define numgeom_core_outcome_h
 
-#include <string>
 #include <iosfwd>
+#include <string>
 
 #include "numgeom/numgeomcore_export.h"
 
+class Outcome {
+ public:
+  static Outcome Success();
+  static Outcome Warning(const std::string& = std::string());
+  static Outcome Error(const std::string& = std::string());
+  static Outcome UserBreak();
 
-class Outcome
-{
-public:
-    static Outcome Success();
-    static Outcome Warning(const std::string& = std::string());
-    static Outcome Error(const std::string& = std::string());
-    static Outcome UserBreak();
+ public:
+  Outcome();
 
-public:
+  Outcome(const char* errorMessage);
 
-    Outcome();
+  Outcome(const std::string& errorMessage);
 
-    Outcome(const char* errorMessage);
+  bool operator!() const;
 
-    Outcome(const std::string& errorMessage);
+  const std::string& message() const;
 
-    bool operator!() const;
+  bool IsUserBreak() const;
 
-    const std::string& message() const;
+  bool operator==(const Outcome&) const;
+  bool operator!=(const Outcome&) const;
 
-    bool IsUserBreak() const;
+  Outcome& operator<<(const char*);
+  Outcome& operator<<(const std::string&);
+  Outcome& operator<<(const Outcome&);
 
-    bool operator==(const Outcome&) const;
-    bool operator!=(const Outcome&) const;
+ private:
+  enum RetCodeType { rtSuccess, rtWarning, rtError, rtUserBreak, rtUndefined };
 
-    Outcome& operator<<(const char*);
-    Outcome& operator<<(const std::string&);
-    Outcome& operator<<(const Outcome&);
+  Outcome(RetCodeType success, const std::string& message);
 
-private:
-    enum RetType
-    {
-        rtSuccess,
-        rtWarning,
-        rtError,
-        rtUserBreak,
-        rtUndefined
-    };
-
-    Outcome(RetType success, const std::string& message);
-
-private:
-    RetType m_rc;
-    std::string m_message;
+ private:
+  RetCodeType ret_code_;
+  std::string message_;
 };
 
 std::ostream& operator<<(std::ostream&, const Outcome&);
 
-#endif // !numgeom_core_outcome_h
+#endif  // !numgeom_core_outcome_h

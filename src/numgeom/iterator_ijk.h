@@ -5,35 +5,30 @@
 #include "numgeom/ijk.h"
 #include "numgeom/numgeom_export.h"
 
+class NUMGEOM_EXPORT Iterator_Ijk {
+ public:
+  Iterator_Ijk();
 
-class NUMGEOM_EXPORT Iterator_Ijk
-{
-public:
+  Iterator_Ijk(const Ijk& end, const Ijk& init = Ijk(),
+               const Ijk& begin = Ijk());
 
-    Iterator_Ijk();
+  Iterator_Ijk& operator++();
 
-    Iterator_Ijk(
-        const Ijk& end,
-        const Ijk& init = Ijk(),
-        const Ijk& begin = Ijk());
+  Ijk operator*() const;
 
-    Iterator_Ijk& operator++();
+  Standard_Boolean operator==(const Iterator_Ijk& other) const;
+  Standard_Boolean operator!=(const Iterator_Ijk& other) const;
 
-    Ijk operator*() const;
+  Standard_Boolean isEnd() const;
 
-    Standard_Boolean operator==(const Iterator_Ijk& other) const;
-    Standard_Boolean operator!=(const Iterator_Ijk& other) const;
+  Standard_Boolean onBound(Side3d) const;
+  Standard_Boolean nonBound() const;
 
-    Standard_Boolean isEnd() const;
+  void setEnd();
 
-    Standard_Boolean onBound(Side3d) const;
-    Standard_Boolean nonBound() const;
-
-    void setEnd();
-
-private:
-    Ijk myCurrent;
-    Ijk myBegin;
-    Ijk myEnd;
+ private:
+  Ijk myCurrent;
+  Ijk myBegin;
+  Ijk myEnd;
 };
-#endif // !numgeom_core_iterator_ijk_h
+#endif  // !numgeom_core_iterator_ijk_h

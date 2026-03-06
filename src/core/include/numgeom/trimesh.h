@@ -6,161 +6,128 @@
 #include <vector>
 
 #include "glm/glm.hpp"
-
 #include "numgeom/numgeomcore_export.h"
 
 #define NONE_INDEX -1
 
 class TriMeshConnectivity;
 
+class CORE_EXPORT CTriMesh {
+ public:
+  typedef glm::dvec3 NodeType;
+  typedef size_t IndexType;
+  typedef std::shared_ptr<CTriMesh> Ptr;
 
-class CORE_EXPORT CTriMesh
-{
-public:
+  struct Edge {
+    Edge() : na(NONE_INDEX), nb(NONE_INDEX) {}
 
-    typedef glm::dvec3 NodeType;
-    typedef size_t IndexType;
-    typedef std::shared_ptr<CTriMesh> Ptr;
+    Edge(size_t a, size_t b) : na(a), nb(b) {}
 
-    struct Edge
-    {
-        Edge() : na(NONE_INDEX), nb(NONE_INDEX) {}
+    bool empty() const { return na == NONE_INDEX; }
 
-        Edge(size_t a, size_t b) : na(a), nb(b) {}
+    bool operator!() const { return this->empty(); }
 
-        bool empty() const { return na == NONE_INDEX; }
+    bool operator==(const Edge& other) const {
+      return na == other.na && nb == other.nb;
+    }
 
-        bool operator!() const { return this->empty(); }
+    bool operator!=(const Edge& other) const {
+      return !this->operator==(other);
+    }
 
-        bool operator==(const Edge& other) const
-        {
-            return na == other.na && nb == other.nb;
-        }
+    Edge Reversed() const { return Edge(nb, na); }
 
-        bool operator!=(const Edge& other) const
-        {
-            return !this->operator==(other);
-        }
+    void Reverse() { std::swap(na, nb); }
 
-        Edge Reversed() const { return Edge(nb,na); }
+    size_t na, nb;
+  };
 
-        void Reverse() { std::swap(na,nb); }
+  struct Cell {
+    Cell() : na(NONE_INDEX) {}
 
-        size_t na, nb;
-    };
+    Cell(const size_t* nodes) : na(nodes[0]), nb(nodes[1]), nc(nodes[2]) {}
 
-    struct Cell
-    {
-        Cell() : na(NONE_INDEX) {}
+    Cell(size_t a, size_t b, size_t c) : na(a), nb(b), nc(c) {}
 
-        Cell(const size_t* nodes)
-            : na(nodes[0]), nb(nodes[1]), nc(nodes[2]) {}
+    size_t GetNodeIndex(size_t i) const {
+      assert(i < 3);
+      return *(&na + i);
+    }
 
-        Cell(size_t a, size_t b, size_t c)
-            : na(a), nb(b), nc(c) {}
+    Edge GetEdge(size_t i) const {
+      return Edge(*(&na + i % 3), *(&na + (i + 1) % 3));
+    }
 
-        size_t GetNodeIndex(size_t i) const
-        {
-            assert(i < 3);
-            return *(&na + i);
-        }
+    Edge GetIncomingEdge(size_t node) const {
+      if (node == na) return Edge(nc, na);
+      if (node == nb) return Edge(na, nb);
+      if (node == nc) return Edge(nb, nc);
+      return Edge();
+    }
 
-        Edge GetEdge(size_t i) const
-        {
-            return Edge(*(&na + i%3), *(&na + (i+1)%3));
-        }
+    Edge GetOutcomingEdge(size_t node) const {
+      if (node == na) return Edge(na, nb);
+      if (node == nb) return Edge(nb, nc);
+      if (node == nc) return Edge(nc, na);
+      return Edge();
+    }
 
-        Edge GetIncomingEdge(size_t node) const
-        {
-            if(node == na)
-                return Edge(nc, na);
-            if(node == nb)
-                return Edge(na, nb);
-            if(node == nc)
-                return Edge(nb, nc);
-            return Edge();
-        }
+    bool Has(const Edge& edge) const {
+      return edge.na == na && edge.nb == nb || edge.na == nb && edge.nb == nc ||
+             edge.na == nc && edge.nb == na;
+    }
 
-        Edge GetOutcomingEdge(size_t node) const
-        {
-            if(node == na)
-                return Edge(na, nb);
-            if(node == nb)
-                return Edge(nb, nc);
-            if(node == nc)
-                return Edge(nc, na);
-            return Edge();
-        }
+    size_t na, nb, nc;
+  };
 
-        bool Has(const Edge& edge) const
-        {
-            return edge.na == na && edge.nb == nb
-                || edge.na == nb && edge.nb == nc
-                || edge.na == nc && edge.nb == na;
-        }
+ public:
+  virtual ~CTriMesh();
 
-        size_t na, nb, nc;
-    };
+  size_t NbNodes() const;
 
-public:
+  size_t NbCells() const;
 
-    virtual ~CTriMesh();
+  const NodeType& GetNode(size_t) const;
 
-    size_t NbNodes() const;
+  const Cell& GetCell(size_t) const;
 
-    size_t NbCells() const;
+  bool Dump(const std::filesystem::path&) const;
 
-    const NodeType& GetNode(size_t) const;
+  TriMeshConnectivity* Connectivity() const;
 
-    const Cell& GetCell(size_t) const;
+ protected:
+  CTriMesh(size_t nbNodes, size_t nbCells);
 
-    bool Dump(const std::filesystem::path&) const;
+ private:
+  CTriMesh(const CTriMesh&) = delete;
+  void operator=(const CTriMesh&) = delete;
 
-    TriMeshConnectivity* Connectivity() const;
-
-protected:
-    CTriMesh(size_t nbNodes, size_t nbCells);
-
-private:
-    CTriMesh(const CTriMesh&) = delete;
-    void operator=(const CTriMesh&) = delete;
-
-protected:
-    std::vector<NodeType> myNodes;
-    std::vector<Cell> myCells;
-    mutable TriMeshConnectivity* myConnectivity;
+ protected:
+  std::vector<NodeType> myNodes;
+  std::vector<Cell> myCells;
+  mutable TriMeshConnectivity* myConnectivity;
 };
 
+class TriMesh : public CTriMesh {
+ public:
+  typedef std::shared_ptr<TriMesh> Ptr;
 
-class TriMesh : public CTriMesh
-{
-public:
+ public:
+  static Ptr Create(size_t nbNodes, size_t nbCells);
 
-    typedef std::shared_ptr<TriMesh> Ptr;
+  static Ptr Create(const std::vector<NodeType>& nodes,
+                    const std::vector<Cell>& cells);
 
-public:
+ public:
+  virtual ~TriMesh();
 
-    static Ptr Create(
-        size_t nbNodes,
-        size_t nbCells
-    );
+  NodeType& GetNode(size_t);
 
-    static Ptr Create(
-        const std::vector<NodeType>& nodes,
-        const std::vector<Cell>& cells
-    );
+  Cell& GetCell(size_t);
 
-public:
+  void Transform(const glm::dmat4&);
 
-    virtual ~TriMesh();
-
-    NodeType& GetNode(size_t);
-
-    Cell& GetCell(size_t);
-
-    void Transform(const glm::dmat4&);
-
-private:
-    TriMesh(size_t nbNodes, size_t nbCells);
+ private:
+  TriMesh(size_t nbNodes, size_t nbCells);
 };
-#endif // !numgeom_numgeom_trimesh_h
+#endif  // !numgeom_numgeom_trimesh_h

@@ -10,7 +10,6 @@ class QWindow;
 
 class GpuManager;
 
-
 /** \class Application
 \brief Сущность, в которой содержится все состояние приложения.
 
@@ -21,61 +20,57 @@ class GpuManager;
 * управляет моделями данных;
 
 */
-class FRAMEWORK_EXPORT Application
-{
-public:
+class FRAMEWORK_EXPORT Application {
+ public:
+  Application(int argc, char* argv[]);
 
-    Application(int argc, char* argv[]);
+  ~Application();
 
-    ~Application();
+  //!@{
+  //! Манипуляции камерой и запрос ее состояния.
 
+  void fitScene();
 
-    //!@{
-    //! Манипуляции камерой и запрос ее состояния.
+  void zoomCamera(float k);
 
-    void fitScene();
+  //! Перемещение камеры вдоль плоскости экрана
+  //! в направлении экранного вектора `(dx,dy)`.
+  void translateCamera(int x, int y, int dx, int dy);
 
-    void zoomCamera(float k);
+  void rotateCamera(int x, int y, int dx, int dy);
 
-    //! Перемещение камеры вдоль плоскости экрана
-    //! в направлении экранного вектора `(dx,dy)`.
-    void translateCamera(int x, int y, int dx, int dy);
+  glm::mat4 getViewMatrix() const;
 
-    void rotateCamera(int x, int y, int dx, int dy);
+  glm::mat4 getProjectionMatrix() const;
 
-    glm::mat4 getViewMatrix() const;
+  //!@}
 
-    glm::mat4 getProjectionMatrix() const;
+  //!@{
+  //! Методы для управления рисованием.
 
-    //!@}
+  void update();
+  //!@}
 
+  //!@{
+  //! Взаимодействие со сценой.
 
-    //!@{
-    //! Методы для управления рисованием.
+  CTriMesh::Ptr geometry() const;
 
-    void update();
-    //!@}
+  void add(CTriMesh::Ptr);
 
-    //!@{
-    //! Взаимодействие со сценой.
+  void clearScene();
+  //!@}
 
-    CTriMesh::Ptr geometry() const;
+  GpuManager* gpuManager();
 
-    void add(CTriMesh::Ptr);
+  void set_aspect_function(std::function<float()>);
 
-    void clearScene();
-    //!@}
+ private:
+  Application(const Application&) = delete;
+  Application& operator=(const Application&) = delete;
 
-    GpuManager* gpuManager();
-
-    void set_aspect_function(std::function<float()>);
-
-private:
-    Application(const Application&) = delete;
-    Application& operator=(const Application&) = delete;
-
-private:
-    struct Impl;
-    Impl* m_pimpl;
+ private:
+  struct Impl;
+  Impl* m_pimpl;
 };
-#endif // !numgeom_framework_application_h
+#endif  // !numgeom_framework_application_h

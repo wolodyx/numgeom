@@ -10,7 +10,6 @@ class AuxClassificateData2d;
 class gp_Pnt2d;
 class TopoDS_Face;
 
-
 /**\brief Классификация точки относительно параметрического пространства грани.
 \param face Топологическая грань, из которой извлекается двумерная область в
              параметрическом пространстве.
@@ -18,10 +17,8 @@ class TopoDS_Face;
 \param aux Вспомогательный объект, ускоряющий вычисления при повторном вызове
            функции.
 */
-NUMGEOM_EXPORT TopAbs_State Classificate(
-    const TopoDS_Face& face,
-    const gp_Pnt2d& point,
-    const AuxClassificateData2d** aux = nullptr
-);
+NUMGEOM_EXPORT TopAbs_State
+Classificate(const TopoDS_Face& face, const gp_Pnt2d& point,
+             const AuxClassificateData2d** aux = nullptr);
 
-#endif // !numgeom_numgeom_classificate_h
+#endif  // !numgeom_numgeom_classificate_h

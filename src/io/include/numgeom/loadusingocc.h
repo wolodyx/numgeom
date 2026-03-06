@@ -5,7 +5,6 @@
 
 #include "numgeom/trimesh.h"
 
-
 TriMesh::Ptr LoadUsingOCC(const std::filesystem::path&);
 
-#endif // !numgeom_io_loadusingocc_h
+#endif  // !numgeom_io_loadusingocc_h

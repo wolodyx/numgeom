@@ -7,13 +7,13 @@ set(PUBLIC_HEADERS
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
-  application.cpp
-  camera.cpp                camera.h
-  gpumanager.cpp
-  gpumemory.cpp
-  meshchunk.cpp             meshchunk.h
-  userinputcontroller.cpp
-  vkutilities.cpp           vkutilities.h
+  application.cc
+  camera.cc                 camera.h
+  gpumanager.cc
+  gpumemory.cc
+  meshchunk.cc              meshchunk.h
+  userinputcontroller.cc
+  vkutilities.cc            vkutilities.h
 )
 
 set(SHADER_FILES

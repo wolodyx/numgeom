@@ -1,5 +1,5 @@
 set(SOURCE_FILES
-  main.cpp
+  main.cc
 )
 
 add_executable(app-xcb ${SOURCE_FILES})

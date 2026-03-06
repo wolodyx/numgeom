@@ -3,13 +3,10 @@
 
 #include "numgeom/render_export.h"
 
+class RENDER_EXPORT SceneEntity {
+ public:
+  SceneEntity();
 
-class RENDER_EXPORT SceneEntity
-{
-public:
-
-    SceneEntity();
-
-    virtual ~SceneEntity();
+  virtual ~SceneEntity();
 };
-#endif // !numgeom_render_sceneentity_h
+#endif  // !numgeom_render_sceneentity_h

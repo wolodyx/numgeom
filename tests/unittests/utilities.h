@@ -3,9 +3,8 @@
 
 #include <filesystem>
 
-
 std::string GetTestName();
 
 std::filesystem::path TestData(const std::string& fileName);
 
-#endif // !NUMGEOM_UNITTESTS_UTILITIES_H
+#endif  // !NUMGEOM_UNITTESTS_UTILITIES_H

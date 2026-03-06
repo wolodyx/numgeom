@@ -6,9 +6,6 @@
 #include "numgeom/numgeomio_export.h"
 #include "numgeom/trimesh.h"
 
+IO_EXPORT TriMesh::Ptr LoadTriMeshFromVtk(const std::filesystem::path&);
 
-IO_EXPORT TriMesh::Ptr LoadTriMeshFromVtk(
-    const std::filesystem::path&
-);
-
-#endif // !numgeom_numgeom_loadfromvtk_h
+#endif  // !numgeom_numgeom_loadfromvtk_h

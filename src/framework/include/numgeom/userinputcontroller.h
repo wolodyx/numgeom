@@ -5,42 +5,39 @@
 
 class Application;
 
+class UserInputController {
+ public:
+  UserInputController(Application* app);
 
-class UserInputController
-{
-public:
+  ~UserInputController();
 
-    UserInputController(Application* app);
+  void keyPressed(int key);
 
-    ~UserInputController();
+  void keyReleased(int key);
 
-    void keyPressed(int key);
+  void mouseLeftButtonDown(int x, int y);
 
-    void keyReleased(int key);
+  void mouseLeftButtonUp(int x, int y);
 
-    void mouseLeftButtonDown(int x, int y);
+  void mouseMiddleButtonDown(int x, int y);
 
-    void mouseLeftButtonUp(int x, int y);
+  void mouseMiddleButtonUp(int x, int y);
 
-    void mouseMiddleButtonDown(int x, int y);
+  void mouseRightButtonDown(int x, int y);
 
-    void mouseMiddleButtonUp(int x, int y);
+  void mouseRightButtonUp(int x, int y);
 
-    void mouseRightButtonDown(int x, int y);
+  void mouseMove(int x, int y);
 
-    void mouseRightButtonUp(int x, int y);
+  void mouseWheelRotate(int count);
 
-    void mouseMove(int x, int y);
+ private:
+  UserInputController(const UserInputController&) = delete;
+  UserInputController& operator=(const UserInputController&) = delete;
 
-    void mouseWheelRotate(int count);
-
-private:
-    UserInputController(const UserInputController&) = delete;
-    UserInputController& operator=(const UserInputController&) = delete;
-
-private:
-    struct Impl;
-    Impl* m_pimpl;
+ private:
+  struct Impl;
+  Impl* m_pimpl;
 };
 
-#endif // !numgeom_framework_userinputcontroller_h
+#endif  // !numgeom_framework_userinputcontroller_h

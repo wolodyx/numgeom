@@ -6,67 +6,52 @@
 
 #include "numgeom/numgeomcore_export.h"
 
-
 /**\class StaticJaggedArray
 \brief Static jagged array
 
 Jagged arrays on [wiki](https://en.wikipedia.org/wiki/Jagged_array).
 */
-class CORE_EXPORT StaticJaggedArray
-{
-public:
+class CORE_EXPORT StaticJaggedArray {
+ public:
+  StaticJaggedArray();
 
-    StaticJaggedArray();
+  StaticJaggedArray(size_t rows, size_t elems);
 
-    StaticJaggedArray(
-        size_t rows,
-        size_t elems
-    );
+  StaticJaggedArray(const std::vector<size_t>& data,
+                    const std::vector<size_t>& offsets);
 
-    StaticJaggedArray(
-        const std::vector<size_t>& data,
-        const std::vector<size_t>& offsets
-    );
+  StaticJaggedArray(const std::vector<size_t>& rowSizes);
 
-    StaticJaggedArray(
-        const std::vector<size_t>& rowSizes
-    );
+  void Initialize(const std::vector<size_t>& rowSizes);
 
-    void Initialize(
-        const std::vector<size_t>& rowSizes
-    );
+  void Initialize(size_t rows, size_t elems);
 
-    void Initialize(
-        size_t rows,
-        size_t elems
-    );
+  size_t Size() const;
 
-    size_t Size() const;
+  size_t Size(size_t i) const;
 
-    size_t Size(size_t i) const;
+  const size_t* operator[](size_t i) const;
 
-    const size_t* operator[](size_t i) const;
+  size_t* operator[](size_t i);
 
-    size_t* operator[](size_t i);
+  const size_t* Data() const;
 
-    const size_t* Data() const;
+  size_t* Data();
 
-    size_t* Data();
+  const size_t* Offsets() const;
 
-    const size_t* Offsets() const;
+  size_t* Offsets();
 
-    size_t* Offsets();
+  void Append(size_t iRow, size_t element);
 
-    void Append(size_t iRow, size_t element);
+  void Clear();
 
-    void Clear();
+ private:
+  StaticJaggedArray(const StaticJaggedArray&) = delete;
+  void operator=(const StaticJaggedArray&) = delete;
 
-private:
-    StaticJaggedArray(const StaticJaggedArray&) = delete;
-    void operator=(const StaticJaggedArray&) = delete;
-
-private:
-    std::vector<size_t> myData;
-    std::vector<size_t> myOffsets;
+ private:
+  std::vector<size_t> myData;
+  std::vector<size_t> myOffsets;
 };
-#endif // !numgeom_numgeom_staticjaggedarray_h
+#endif  // !numgeom_numgeom_staticjaggedarray_h

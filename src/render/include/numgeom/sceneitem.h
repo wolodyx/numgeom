@@ -1,119 +1,101 @@
 #ifndef numgeom_render_sceneitem_h
 #define numgeom_render_sceneitem_h
 
-#include <vector>
-
 #include <gp_Pnt.h>
+
+#include <vector>
 
 #include "numgeom/iterator.h"
 #include "numgeom/linmath.h"
 #include "numgeom/render_export.h"
 
+class RENDER_EXPORT SceneItem {
+ public:
+  SceneItem();
 
-class RENDER_EXPORT SceneItem
-{
-public:
+  virtual ~SceneItem() {}
 
-    SceneItem();
+  virtual size_t pointsNumber() const = 0;
 
-    virtual ~SceneItem() {}
+  virtual size_t elementsNumber() const = 0;
 
-    virtual size_t pointsNumber() const = 0;
+  virtual Iterator<gp_Pnt> points() const = 0;
 
-    virtual size_t elementsNumber() const = 0;
+  Vec3f color() const { return myColor; }
+  void setColor(const Vec3f& color) { myColor = color; }
 
-    virtual Iterator<gp_Pnt> points() const = 0;
+  bool isVisible() const { return myVisibility; }
+  void setVisible() { myVisibility = true; }
+  void setInvisible() { myVisibility = false; }
 
-    Vec3f color() const { return myColor; }
-    void setColor(const Vec3f& color) { myColor = color; }
-
-    bool isVisible() const { return myVisibility; }
-    void setVisible() { myVisibility = true; }
-    void setInvisible() { myVisibility = false; }
-
-private:
-    Vec3f myColor;
-    bool myVisibility;
+ private:
+  Vec3f myColor;
+  bool myVisibility;
 };
 
-
-class RENDER_EXPORT SceneItem0 : public SceneItem
-{
-public:
-    virtual ~SceneItem0() {}
+class RENDER_EXPORT SceneItem0 : public SceneItem {
+ public:
+  virtual ~SceneItem0() {}
 };
 
-
-class RENDER_EXPORT SceneItem1 : public SceneItem
-{
-public:
-    virtual ~SceneItem1() {}
-    virtual Iterator<Tuple2s> lines() const = 0;
+class RENDER_EXPORT SceneItem1 : public SceneItem {
+ public:
+  virtual ~SceneItem1() {}
+  virtual Iterator<Tuple2s> lines() const = 0;
 };
 
-
-class RENDER_EXPORT SceneItem2 : public SceneItem
-{
-public:
-    virtual ~SceneItem2() {}
-    virtual Iterator<Tuple3s> trias() const = 0;
+class RENDER_EXPORT SceneItem2 : public SceneItem {
+ public:
+  virtual ~SceneItem2() {}
+  virtual Iterator<Tuple3s> trias() const = 0;
 };
 
+class RENDER_EXPORT SceneItem_CachedPoints : public SceneItem {
+ public:
+  virtual ~SceneItem_CachedPoints() {}
 
-class RENDER_EXPORT SceneItem_CachedPoints : public SceneItem
-{
-public:
+  size_t piontsNumber() const override;
 
-    virtual ~SceneItem_CachedPoints() {}
+  Iterator<gp_Pnt> points() const override;
 
-    size_t piontsNumber() const override;
+  void addPoint(const gp_Pnt&);
+  void addPoints(std::initializer_list<gp_Pnt>);
 
-    Iterator<gp_Pnt> points() const override;
+  void clearPoints();
 
-    void addPoint(const gp_Pnt&);
-    void addPoints(std::initializer_list<gp_Pnt>);
-
-    void clearPoints();
-
-private:
-    std::vector<gp_Pnt> myPoints;
+ private:
+  std::vector<gp_Pnt> myPoints;
 };
 
+class RENDER_EXPORT SceneItem1_Cached : public virtual SceneItem_CachedPoints,
+                                        public virtual SceneItem1 {
+ public:
+  virtual ~SceneItem1_Cached() {}
 
-class RENDER_EXPORT SceneItem1_Cached : public virtual SceneItem_CachedPoints
-                                      , public virtual SceneItem1
-{
-public:
+  size_t elementsNumber() const override;
+  Iterator<Tuple2s> lines() const override;
 
-    virtual ~SceneItem1_Cached() {}
+  void addLine(const Tuple2s&);
+  void clearElements();
+  void clear();
 
-    size_t elementsNumber() const override;
-    Iterator<Tuple2s> lines() const override;
-
-    void addLine(const Tuple2s&);
-    void clearElements();
-    void clear();
-
-private:
-    std::vector<Tuple2s> myLines;
+ private:
+  std::vector<Tuple2s> myLines;
 };
 
+class RENDER_EXPORT SceneItem2_Cached : public virtual SceneItem_CachedPoints,
+                                        public virtual SceneItem2 {
+ public:
+  virtual ~SceneItem2_Cached() {}
 
-class RENDER_EXPORT SceneItem2_Cached : public virtual SceneItem_CachedPoints
-                                      , public virtual SceneItem2
-{
-public:
+  size_t elementsNumber() const override;
+  Iterator<Tuple3s> trias() const override;
 
-    virtual ~SceneItem2_Cached() {}
+  void addTria(const Tuple3s&);
+  void clearElements();
+  void clear();
 
-    size_t elementsNumber() const override;
-    Iterator<Tuple3s> trias() const override;
-
-    void addTria(const Tuple3s&);
-    void clearElements();
-    void clear();
-
-private:
-    std::vector<Tuple3s> myTrias;
+ private:
+  std::vector<Tuple3s> myTrias;
 };
-#endif // !numgeom_render_sceneitem_h
+#endif  // !numgeom_render_sceneitem_h

@@ -5,28 +5,25 @@
 
 class SceneEntity;
 
+class RENDER_EXPORT SceneManager {
+ public:
+  SceneManager();
+  ~SceneManager();
 
-class RENDER_EXPORT SceneManager
-{
-public:
+  void update();
 
-    SceneManager();
-    ~SceneManager();
+  void draw();
 
-    void update();
+  bool add(SceneEntity*);
 
-    void draw();
+  bool remove(SceneEntity*);
 
-    bool add(SceneEntity*);
+ private:
+  SceneManager(const SceneManager&) = delete;
+  SceneManager& operator=(const SceneManager&) = delete;
 
-    bool remove(SceneEntity*);
-
-private:
-    SceneManager(const SceneManager&) = delete;
-    SceneManager& operator=(const SceneManager&) = delete;
-
-private:
-    class Internal;
-    Internal* myPimpl;
+ private:
+  class Internal;
+  Internal* myPimpl;
 };
-#endif // !numgeom_render_scenemanager_h
+#endif  // !numgeom_render_scenemanager_h

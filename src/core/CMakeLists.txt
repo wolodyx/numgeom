@@ -9,10 +9,10 @@ set(PUBLIC_HEADERS
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
-  outcome.cpp
-  staticjaggedarray.cpp
-  trimesh.cpp
-  trimeshconnectivity.cpp
+  outcome.cc
+  staticjaggedarray.cc
+  trimesh.cc
+  trimeshconnectivity.cc
 )
 
 add_library(core ${SOURCE_FILES})

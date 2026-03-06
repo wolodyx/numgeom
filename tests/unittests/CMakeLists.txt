@@ -1,9 +1,9 @@
 set(SOURCE_FILES
-  main.cpp
-  testcircularlist.cpp
-  testexample.cpp
-  testtrimesh.cpp
-  utilities.cpp             utilities.h
+  main.cc
+  testcircularlist.cc
+  testexample.cc
+  testtrimesh.cc
+  utilities.cc              utilities.h
 )
 
 add_executable(unittests ${SOURCE_FILES})
@@ -26,10 +26,10 @@ target_link_libraries(unittests
 
 if(TARGET numgeom)
   list(APPEND SOURCE_FILES
-    testclassificate.cpp
-    testoctree.cpp
-    testquadtree.cpp
-    testremovefaces.cpp
+    testclassificate.cc
+    testoctree.cc
+    testquadtree.cc
+    testremovefaces.cc
   )
   target_link_libraries(unittests numgeom::numgeom)
 endif()

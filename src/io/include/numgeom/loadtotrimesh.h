@@ -3,7 +3,6 @@
 
 #include "numgeom/trimesh.h"
 
-
 TriMesh::Ptr LoadToTriMesh(const std::filesystem::path& filename);
 
-#endif // !numgeom_io_loadtotrimesh_h
+#endif  // !numgeom_io_loadtotrimesh_h

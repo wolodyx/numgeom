@@ -1,7 +1,7 @@
 set(SOURCE_FILES
-  main.cpp
-  mainwindow.cpp            mainwindow.h
-  scenewindow.cpp           scenewindow.h
+  main.cc
+  mainwindow.cc             mainwindow.h
+  scenewindow.cc            scenewindow.h
 )
 
 set(RESOURCE_FILES

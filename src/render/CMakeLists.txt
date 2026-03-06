@@ -12,10 +12,10 @@ set(SHADER_FILES
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
-  cube.cpp
-  sceneitem.cpp
-  scenemanager.cpp
-  vkrender.cpp
+  cube.cc
+  sceneitem.cc
+  scenemanager.cc
+  vkrender.cc
 )
 
 add_library(render ${SOURCE_FILES})
@@ -61,7 +61,7 @@ if(ENABLE_XCB)
       xcb::xcb
   )
   target_compile_definitions(render PUBLIC ENABLE_XCB)
-  target_sources(render PRIVATE connect-xcb.cpp)
+  target_sources(render PRIVATE connect-xcb.cc)
 endif()
 
 # Добавляем шейдерные файлы в проект.

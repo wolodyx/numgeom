@@ -5,7 +5,6 @@
 
 #include "numgeom/trimesh.h"
 
-
 bool WriteToVtk(CTriMesh::Ptr, const std::filesystem::path& filename);
 
-#endif // !NUMGEOM_IO_WRITETOVTK_H
+#endif  // !NUMGEOM_IO_WRITETOVTK_H

@@ -13,18 +13,18 @@ set(PUBLIC_HEADERS
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
-  classificate.cpp
-  curvemetriclength.cpp     curvemetriclength.h
-  ffextintersections.cpp    ffextintersections.h
-  intersections.h           intersections.cpp
-  iterator_ijk.cpp          iterator_ijk.h
-  octree.cpp
-  quadtree.cpp
-  removefaces.cpp
-  shapes.cpp
-  tesselate.cpp
-  utilities.cpp
-  writevtk.cpp              writevtk.h
+  classificate.cc
+  curvemetriclength.cc      curvemetriclength.h
+  ffextintersections.cc     ffextintersections.h
+  intersections.cc          intersections.h
+  iterator_ijk.cc           iterator_ijk.h
+  octree.cc
+  quadtree.cc
+  removefaces.cc
+  shapes.cc
+  tesselate.cc
+  utilities.cc
+  writevtk.cc               writevtk.h
 )
 
 add_library(numgeom ${SOURCE_FILES})

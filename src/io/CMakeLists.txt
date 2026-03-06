@@ -6,9 +6,9 @@ set(PUBLIC_HEADERS
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
-  loadfromvtk.cpp
-  loadtotrimesh.cpp
-  writetovtk.cpp
+  loadfromvtk.cc
+  loadtotrimesh.cc
+  writetovtk.cc
 )
 
 if(OpenCASCADE_FOUND)
@@ -16,7 +16,7 @@ if(OpenCASCADE_FOUND)
     include/numgeom/loadusingocc.h
   )
   list(APPEND SOURCE_FILES
-    loadusingocc.cpp
+    loadusingocc.cc
   )
 endif()
 

@@ -1,5 +1,5 @@
-#ifndef numgeom_app_mainwindow_h
-#define numgeom_app_mainwindow_h
+#ifndef NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_
+#define NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_
 
 #include "qmainwindow.h"
 #include "qvulkaninstance.h"
@@ -7,32 +7,26 @@
 class Application;
 class SceneWindow;
 
+class MainWindow : public QMainWindow {
+  Q_OBJECT
 
-class MainWindow : public QMainWindow
-{
-    Q_OBJECT
+ public:
+  MainWindow(Application* app);
+  ~MainWindow();
+  void initVulkan();
 
-public:
+ private:
+  void createActions();
 
-    MainWindow(Application* app);
+ public slots:
+  void onScreenshot();
+  void onOpenFile();
+  void onQuit();
+  void onFitScene();
 
-    ~MainWindow();
-
-    void initVulkan();
-
-
-private:
-    void createActions();
-
-public slots:
-    void onScreenshot();
-    void onOpenFile();
-    void onQuit();
-    void onFitScene();
-
-private:
-    SceneWindow* m_sceneWindow;
-    Application* m_app;
-    QVulkanInstance m_vulkanInstance;
+ private:
+  Application* app_;
+  SceneWindow* scene_window_;
+  QVulkanInstance vulkan_instance_;
 };
-#endif // !numgeom_app_mainwindow_h
+#endif  // NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_

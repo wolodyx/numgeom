@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       packages: read
+      contents: read
 
     container:
       image: ghcr.io/wolodyx/numgeom-ubuntu-24.04-build:latest

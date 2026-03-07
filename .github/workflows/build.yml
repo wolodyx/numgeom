@@ -15,6 +15,7 @@ jobs:
 
     container:
       image: ghcr.io/wolodyx/numgeom-ubuntu-24.04-build:latest
+      options: --user tim
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}

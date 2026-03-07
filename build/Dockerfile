@@ -1,7 +1,8 @@
 FROM ubuntu:24.04
 
 ENV TZ=Europe/Moscow
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+RUN    ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
 
 RUN apt update &&            \
     apt -y install           \
@@ -41,7 +42,6 @@ RUN apt update &&            \
 
 WORKDIR /usr/local/src
 
-# Install vcpkg
 RUN    git clone https://github.com/microsoft/vcpkg.git \
     && vcpkg/bootstrap-vcpkg.sh -disableMetrics \
     && mv vcpkg/vcpkg /usr/local/bin
@@ -49,6 +49,8 @@ RUN    git clone https://github.com/microsoft/vcpkg.git \
 ENV VCPKG_ROOT=/usr/local/src/vcpkg
 
 RUN vcpkg install             \
+        --triplet=x64-linux-dynamic \
+        --clean-after-build   \
         gtest                 \
         nlohmann-json         \
         boost-log             \
@@ -57,15 +59,12 @@ RUN vcpkg install             \
         opencascade           \
         qt5-base[vulkan]
 
-RUN rm -rf \
-        $VCPKG_ROOT/buildtrees \
-        $VCPKG_ROOT/downloads
-
 ARG USERNAME=tim
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
-RUN    groupadd --gid $USER_GID $USERNAME \
+RUN    userdel -r ubuntu || true \
+    && groupadd --gid $USER_GID $USERNAME \
     && useradd --uid $USER_UID --gid $USER_GID -m $USERNAME \
     && apt-get install -y sudo \
     && echo $USERNAME ALL=\(root\) NOPASSWD:ALL > /etc/sudoers.d/$USERNAME \

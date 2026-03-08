@@ -18,7 +18,7 @@ jobs:
     env:
       _VCPKG_: ${{ github.workspace }}/vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
-      VCPKG_BINARY_SOURCES: 'default,rw'
+      VCPKG_BINARY_SOURCES: 'default,readwrite'
 
     steps:
       - uses: actions/github-script@v7

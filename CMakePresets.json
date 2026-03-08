@@ -12,7 +12,6 @@
     },
     {
       "name": "linux-vcpkg-release",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
@@ -25,7 +24,6 @@
     },
     {
       "name": "linux-vcpkg-debug",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
@@ -45,6 +43,12 @@
         "LD_LIBRARY_PATH": "/usr/lib64"
       },
       "binaryDir": "${sourceDir}/bld/${presetName}"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "linux-vcpkg-release",
+      "configurePreset": "linux-vcpkg-release"
     }
   ]
 }

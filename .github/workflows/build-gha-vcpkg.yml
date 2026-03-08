@@ -10,6 +10,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04, windows-2022] # , macos-15
+        include:
+          - os: ubuntu-24.04
+            preset: linux-vcpkg-release
+          - os: windows-2022
+            preset: windows-vcpkg-release
     env:
       _VCPKG_: ${{ github.workspace }}/vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
@@ -47,7 +52,7 @@ jobs:
 
       - name: Restore from cache the dependencies and generate project files
         run: |
-          cmake --preset linux-vcpkg-release
+          cmake --preset ${{ matrix.preset }}
 
       # - name: check-format
       #   if: runner.os == 'Linux'

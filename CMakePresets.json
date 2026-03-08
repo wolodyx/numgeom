@@ -12,6 +12,7 @@
     },
     {
       "name": "linux-vcpkg-release",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",

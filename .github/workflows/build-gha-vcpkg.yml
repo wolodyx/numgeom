@@ -27,6 +27,32 @@ jobs:
             core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
             core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
 
+      - name: Update APT and install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install \
+            pkg-config            \
+            autoconf              \
+            autoconf-archive      \
+            automake              \
+            libtool               \
+            wayland-protocols     \
+            libwayland-dev        \
+            libwayland-client0    \
+            libxtst-dev           \
+            libxinerama-dev       \
+            libxcursor-dev        \
+            '^libxcb.*-dev'       \
+            libx11-xcb-dev        \
+            libgl1-mesa-dev       \
+            libxrender-dev        \
+            libxi-dev             \
+            libxkbcommon-dev      \
+            libxkbcommon-x11-dev  \
+            libsystemd-dev        \
+            libarchive-dev        \
+            libxrandr-dev
+
       - uses: actions/checkout@v4
         with:
           submodules: true

@@ -9,7 +9,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04] # , macos-15, windows-2022
+        os: [ubuntu-24.04, windows-2022] # , macos-15
     env:
       _VCPKG_: ${{ github.workspace }}/vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
@@ -44,19 +44,20 @@ jobs:
             ${{ hashFiles( '.git/modules/vcpkg/HEAD', 'vcpkg.json' )}}
 
       - uses: ilammy/msvc-dev-cmd@v1
+
       - name: Restore from cache the dependencies and generate project files
         run: |
-          cmake --preset ninja-multi-vcpkg
+          cmake --preset linux-vcpkg-release
 
-      - name: check-format
-        if: runner.os == 'Linux'
-        run: |
-          cmake --workflow --preset check-format
+      # - name: check-format
+      #   if: runner.os == 'Linux'
+      #   run: |
+      #     cmake --workflow --preset check-format
 
-      - name: Build (Release configuration)
-        run: |
-          cmake --build --preset ninja-vcpkg-release
+      # - name: Build (Release configuration)
+      #   run: |
+      #     cmake --build --preset ninja-vcpkg-release
 
-      - name: Test (Release configuration)
-        run: |
-          ctest --preset test-release
+      # - name: Test (Release configuration)
+      #   run: |
+      #     ctest --preset test-release

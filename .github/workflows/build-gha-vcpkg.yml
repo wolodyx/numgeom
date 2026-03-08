@@ -41,7 +41,7 @@ jobs:
             !${{ env._VCPKG_ }}/downloads
             !${{ env._VCPKG_ }}/installed
           key: |
-            ${{ hashFiles( '.git/modules/vcpkg/HEAD', vcpkg.json )}}
+            ${{ hashFiles( '.git/modules/vcpkg/HEAD', 'vcpkg.json' )}}
 
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Restore from cache the dependencies and generate project files

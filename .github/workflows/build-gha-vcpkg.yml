@@ -1,0 +1,62 @@
+name: build-gha-vcpkg
+on:
+  workflow_dispatch:
+
+jobs:
+  job:
+    name: ${{ matrix.os }}-${{ github.workflow }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04] # , macos-15, windows-2022
+    env:
+      _VCPKG_: ${{ github.workspace }}/vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
+      VCPKG_BINARY_SOURCES: 'clear;x-gha,readwrite'
+
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
+            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
+
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: "Create directory '${{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
+        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
+        shell: bash
+
+      - uses: lukka/get-cmake@latest
+
+      - name: Restore vcpkg
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ env._VCPKG_ }}
+            !${{ env._VCPKG_ }}/buildtrees
+            !${{ env._VCPKG_ }}/packages
+            !${{ env._VCPKG_ }}/downloads
+            !${{ env._VCPKG_ }}/installed
+          key: |
+            ${{ hashFiles( '.git/modules/vcpkg/HEAD', vcpkg.json )}}
+
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Restore from cache the dependencies and generate project files
+        run: |
+          cmake --preset ninja-multi-vcpkg
+
+      - name: check-format
+        if: runner.os == 'Linux'
+        run: |
+          cmake --workflow --preset check-format
+
+      - name: Build (Release configuration)
+        run: |
+          cmake --build --preset ninja-vcpkg-release
+
+      - name: Test (Release configuration)
+        run: |
+          ctest --preset test-release

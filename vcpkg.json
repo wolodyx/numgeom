@@ -5,7 +5,7 @@
     "nlohmann-json",
     "boost-log",
     "vulkan-sdk-components",
-    "opencascade",
+    //"opencascade",
     {
       "name": "qt5-base",
       "features": ["vulkan"]

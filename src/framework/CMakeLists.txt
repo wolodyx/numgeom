@@ -21,7 +21,7 @@ set(SHADER_FILES
   app.frag
 )
 
-add_library(framework ${SOURCE_FILES})
+add_library(framework ${SOURCE_FILES} ${SHADER_FILES})
 add_library(numgeom::framework ALIAS framework)
 
 target_link_libraries(framework

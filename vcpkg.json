@@ -1,0 +1,27 @@
+{
+  "name": "numgeom",
+  "dependencies": [
+    "gtest",
+    "nlohmann-json",
+    "boost-log",
+    "vulkan-sdk-components",
+    "opencascade",
+    {
+      "name": "qt5-base",
+      "features": ["vulkan"]
+    },
+    {
+      "name": "python3",
+      "platform": "windows"
+    },
+    {
+      "name": "winflexbison",
+      "platform": "windows"
+    }
+  ],
+  "vcpkg-configuration": {
+    "overlay-ports": [
+      "build/vcpkg/ports"
+    ]
+  }
+}

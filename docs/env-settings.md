@@ -23,6 +23,12 @@
 
 Если при сборке проекта будет закрываться окно терминала, то увеличьте объем RAM.
 
+Для разработки дополнительно установите следующие приложения:
+* `Vim`, `Git`, `build-essential`;
+* `VirtualBox Guest Extensions`;
+* `Visual Studio Code`;
+* [`Docker`](https://docs.docker.com/engine/install/ubuntu/);
+
 
 ## Настройка рабочей среды в Windows 11
 

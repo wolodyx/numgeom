@@ -1,5 +1,5 @@
 {
-  "version": 3,
+  "version": 6,
   "configurePresets": [
     {
       "name": "windows-vcpkg-release",
@@ -51,6 +51,56 @@
     {
       "name": "linux-vcpkg-release",
       "configurePreset": "linux-vcpkg-release"
+    },
+    {
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg-release"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "linux-vcpkg-release",
+      "configurePreset": "linux-vcpkg-release"
+    },
+    {
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg-release"
+    }
+  ],
+  "workflowPresets": [
+    {
+      "name": "ubuntu-ci",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "linux-vcpkg-release"
+        },
+        {
+          "type": "build",
+          "name": "linux-vcpkg-release"
+        },
+        {
+          "type": "test",
+          "name": "linux-vcpkg-release"
+        }
+      ]
+    },
+    {
+      "name": "windows-ci",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "windows-vcpkg-release"
+        },
+        {
+          "type": "build",
+          "name": "windows-vcpkg-release"
+        },
+        {
+          "type": "test",
+          "name": "windows-vcpkg-release"
+        }
+      ]
     }
   ]
 }

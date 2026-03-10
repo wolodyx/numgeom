@@ -38,8 +38,8 @@ target_include_directories(render
 target_link_libraries(render
   PUBLIC
     numgeom::core
-  PRIVATE
     Vulkan::Vulkan
+  PRIVATE
     glm::glm
     Boost::log
 )

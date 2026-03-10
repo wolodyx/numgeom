@@ -12,22 +12,19 @@ jobs:
         os: [ubuntu-24.04, windows-2022] # , macos-15
         include:
           - os: ubuntu-24.04
-            preset: linux-vcpkg-release
+            workflow: ubuntu-ci
           - os: windows-2022
-            preset: windows-vcpkg-release
+            workflow: windows-ci
+    permissions:
+      packages: write
+      contents: read
     env:
-      _VCPKG_: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg/bincache
-      VCPKG_BINARY_SOURCES: 'default,readwrite'
+      VCPKG_EXECUTABLE: ${{ github.workspace }}/vcpkg/vcpkg
+      NUGET_FEED_URL: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+      VCPKG_BINARY_SOURCES: "clear;nuget,https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json,readwrite"
 
     steps:
-      - uses: actions/github-script@v7
-        with:
-          script: |
-            core.exportVariable('ACTIONS_CACHE_URL', process.env.ACTIONS_CACHE_URL || '');
-            core.exportVariable('ACTIONS_RUNTIME_TOKEN', process.env.ACTIONS_RUNTIME_TOKEN || '');
-
-      - name: Update APT and install dependencies
+      - name: Install system dependencies and tools
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
@@ -54,35 +51,43 @@ jobs:
             libarchive-dev        \
             libxrandr-dev         \
             libltdl-dev
+          sudo apt-get -y install mono-complete
+
+      - uses: lukka/get-cmake@latest
 
       - uses: actions/checkout@v4
         with:
-          submodules: true
-      - name: "Create directory '${{ env.VCPKG_DEFAULT_BINARY_CACHE }}'"
-        run: mkdir -p $VCPKG_DEFAULT_BINARY_CACHE
-        shell: bash
-
-      - uses: lukka/get-cmake@latest
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: recursive
 
       - name: Set up vcpkg
         uses: lukka/run-vcpkg@v11
 
-      - name: Set up binary cache
-        uses: actions/cache@v4
+      - name: Add NuGet sources
+        shell: bash
+        run: |
+          if [ "${{ runner.os }}" == "Linux" ]; then
+            mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
+              sources add \
+              -Source "${{ env.NUGET_FEED_URL }}" \
+              -StorePasswordInClearText \
+              -Name GitHubPackages \
+              -UserName "${{ github.repository_owner }}" \
+              -Password "${{ secrets.GITHUB_TOKEN }}"
+            mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
+              setapikey "${{ secrets.GITHUB_TOKEN }}" \
+              -Source "${{ env.NUGET_FEED_URL }}"
+          elif [ "${{ runner.os }}" == "Linux" ]; then
+            nuget sources add \
+              -Source "${{ env.NUGET_FEED_URL }}" \
+              -Name "GitHubPackages" \
+              -Username "${{ github.repository_owner }}" \
+              -Password "${{ secrets.GITHUB_TOKEN }}" \
+              -ConfigFile "$env:APPDATA\NuGet\nuget.config"
+          fi
+
+      - name: Build, test and pack using CMake
+        uses: lukka/run-cmake@v10
         with:
-          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-          key: ${{ runner.os }}-${{ hashFiles('.git/modules/vcpkg/HEAD') }}-${{ hashFiles('vcpkg*.json') }}
-
-      - uses: ilammy/msvc-dev-cmd@v1
-
-      - name: Restore from cache the dependencies and generate project files
-        run: |
-          cmake --preset ${{ matrix.preset }}
-
-      - name: Build (Release configuration)
-        run: |
-          cmake --build --preset ${{ matrix.preset }}
-
-      # - name: Test (Release configuration)
-      #   run: |
-      #     ctest --preset test-release
+          workflowPreset: ${{ matrix.workflow }}

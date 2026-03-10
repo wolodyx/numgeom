@@ -3,7 +3,7 @@
   "configurePresets": [
     {
       "name": "windows-vcpkg-release",
-      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/install"

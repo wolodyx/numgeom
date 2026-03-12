@@ -1,4 +1,4 @@
-﻿#include "numgeom/trimeshconnectivity.h"
+#include "numgeom/trimeshconnectivity.h"
 
 #include <algorithm>
 #include <cassert>
@@ -26,6 +26,8 @@ std::pair<size_t, size_t> GetMatchingElements(const size_t* arr1, size_t n1,
 */
 bool SortTriangles(size_t* trs, size_t nbTrs, size_t node,
                    const TriMesh::Cell* allTrias) {
+  if (nbTrs == 0)
+    return false;
   // Ищем треугольник с граничным ребром, исходящим из вершины `node`.
   size_t firstTriaIndex = 0;
   for (; firstTriaIndex < nbTrs; ++firstTriaIndex) {

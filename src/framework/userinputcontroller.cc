@@ -57,7 +57,14 @@ void UserInputController::mouseLeftButtonUp(int x, int y) {
                    m_pimpl->mouseLeftButtonState.yDown == y;
 }
 
-void UserInputController::mouseMiddleButtonUp(int x, int y) {}
+void UserInputController::mouseMiddleButtonUp(int x, int y) {
+  if (!m_pimpl->mouseMiddleButtonState.down) return;
+
+  m_pimpl->mouseMiddleButtonState.down = false;
+
+  bool beClicked = m_pimpl->mouseMiddleButtonState.xDown == x &&
+                   m_pimpl->mouseMiddleButtonState.yDown == y;
+}
 
 void UserInputController::mouseRightButtonUp(int x, int y) {
   if (!m_pimpl->mouseRightButtonState.down) return;

@@ -86,6 +86,10 @@ void Application::zoomCamera(float k) {
   this->update();
 }
 
+glm::vec3 Application::CameraPosition() const {
+  return m_pimpl->camera.m_position;
+}
+
 void Application::translateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));

@@ -6,6 +6,7 @@ apt -y install           \
     git                  \
     cmake                \
     build-essential      \
+    ninja-build          \
     flex                 \
     bison                \
     curl                 \

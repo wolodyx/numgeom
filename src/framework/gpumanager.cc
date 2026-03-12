@@ -85,6 +85,23 @@ struct FrameResources {
   bool cmdFenceWaitable = false;
 };
 
+//! Структура, повторяющая расположение uniform-переменных в вершинном шейдере.
+//! Следует учитывать выравнивание по правилам std140 (16 байт).
+struct VertexBufferObject {
+  glm::mat4 mvpMatrix;
+  glm::mat4 mvMatrix;
+  glm::vec4 normalMatrixRow0;
+  glm::vec4 normalMatrixRow1;
+  glm::vec4 normalMatrixRow2;
+};
+
+//! Структура, повторяющая расположение uniform-переменных во фрагментном шейдере.
+//! Следует учитывать выравнивание по правилам std140 (16 байт).
+struct FragmentBufferObject {
+  glm::vec4 lightPos;
+  glm::vec4 viewPos;
+};
+
 //! Состояние vulkan и его объектов.
 struct VulkanState {
   //! Признак остановки рендеринга.
@@ -317,12 +334,20 @@ bool createGraphicsPipeline(VulkanState* state) {
   VkResult r;
 
   // Создаем макеты набора дескрипторов.
-  std::array<VkDescriptorSetLayoutBinding, 1> descriptorSetLayoutBindings{
+  std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings{
       VkDescriptorSetLayoutBinding{
+          .binding = 0,
           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
           .descriptorCount = 1,
           .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      }};
+      },
+      VkDescriptorSetLayoutBinding{
+          .binding = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      },
+  };
   VkDescriptorSetLayoutCreateInfo ci_descriptorSetLayout{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
       .bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size()),
@@ -400,22 +425,32 @@ bool createGraphicsPipeline(VulkanState* state) {
   };
 
   VkVertexInputBindingDescription vertexBindingDescriptions[] = {
-      {.binding = 0,
-       .stride = 3 * sizeof(float),
-       .inputRate = VK_VERTEX_INPUT_RATE_VERTEX},
+      VkVertexInputBindingDescription{
+        .binding = 0,
+        .stride = 6 * sizeof(float),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
   };
-  VkVertexInputAttributeDescription vertexAttributeDescriptions[] = {
-      {.location = 0,
-       .binding = 0,
-       .format = VK_FORMAT_R32G32B32_SFLOAT,
-       .offset = 0},
+  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+      VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 3 * sizeof(float)
+      },
   };
   VkPipelineVertexInputStateCreateInfo ci_vertexInputState{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
       .vertexBindingDescriptionCount = 1,
       .pVertexBindingDescriptions = vertexBindingDescriptions,
-      .vertexAttributeDescriptionCount = 1,
-      .pVertexAttributeDescriptions = vertexAttributeDescriptions};
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
+      .pVertexAttributeDescriptions = vertex_attr_descs.data()};
 
   VkPipelineInputAssemblyStateCreateInfo ci_inputAssemblyState{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -1507,9 +1542,11 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   };
   vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmdPool);
 
-  // Подготавливаем данные для конвейера.
+  // Создаем объект пула дескрипторов.
   std::array<VkDescriptorPoolSize, 1> descPoolSizes = {
-      {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, state->frameCount},
+      VkDescriptorPoolSize{
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = state->frameCount * 2},
   };
   VkDescriptorPoolCreateInfo ci_descpool{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1525,7 +1562,10 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   // Память под данные фреймов.
   state->frameMemory = new GpuMemory(state->physicalDevice, state->device,
                                      VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-  state->frameMemory->resize(state->frameCount * 16 * sizeof(float));
+  VkDeviceSize vbo_size = state->frameMemory->uniformBlockSize(sizeof(VertexBufferObject));
+  VkDeviceSize fbo_size = state->frameMemory->uniformBlockSize(sizeof(FragmentBufferObject));
+  size_t frame_memory_size = state->frameCount * (vbo_size + fbo_size);
+  state->frameMemory->resize(frame_memory_size);
 
   state->stopRendering = false;
 
@@ -1550,6 +1590,70 @@ bool GpuManager::initialize() {
 }
 
 namespace {
+
+void updateDescriptorSets(Application* app, VulkanState* state) {
+  FrameResources& frame = state->frameRes[state->currentFrameIndex];
+
+  glm::mat4 model_view_matrix = app->getViewMatrix();
+  glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
+  VertexBufferObject vbo{
+    .mvpMatrix = app->getProjectionMatrix() * model_view_matrix,
+    .mvMatrix = model_view_matrix,
+    .normalMatrixRow0 = glm::vec4(normal_matrix[0], 0.0f),
+    .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),
+    .normalMatrixRow2 = glm::vec4(normal_matrix[2], 0.0f)
+  };
+  glm::vec3 lightPos = glm::inverse(model_view_matrix) * glm::vec4(10.27f, 10.27f, 10.92f, 0.0f);
+  FragmentBufferObject fbo{
+    .lightPos = glm::vec4(lightPos, 0.0f),
+    .viewPos = glm::vec4(app->CameraPosition(), 0.0f)
+  };
+
+  VkDeviceSize vbo_size = state->frameMemory->uniformBlockSize(sizeof(vbo));
+  VkDeviceSize fbo_size = state->frameMemory->uniformBlockSize(sizeof(fbo));
+  VkDeviceSize frame_data_size = vbo_size + fbo_size;
+  VkDeviceSize frame_offset = state->currentFrameIndex * frame_data_size;
+
+  auto mapping = state->frameMemory->access();
+  std::byte* data = mapping.data() + frame_offset;
+
+  std::memcpy(data, &vbo, sizeof(vbo));
+  std::memcpy(data + vbo_size, &fbo, sizeof(fbo));
+
+  std::vector<VkDescriptorBufferInfo> bufferInfo{
+      VkDescriptorBufferInfo{
+        .buffer = state->frameMemory->buffer(),
+        .offset = frame_offset,
+        .range = sizeof(vbo)
+      },
+      VkDescriptorBufferInfo{
+        .buffer = state->frameMemory->buffer(),
+        .offset = frame_offset + vbo_size,
+        .range = sizeof(fbo)
+      },
+  };
+  std::vector<VkWriteDescriptorSet> descWrites{
+      VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .dstBinding = 0,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo[0],
+      },
+      VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .dstBinding = 1,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo[1],
+      },
+  };
+  vkUpdateDescriptorSets(state->device,
+                         static_cast<uint32_t>(descWrites.size()),
+                         descWrites.data(), 0, nullptr);
+}
 
 void updateDataForFrame(Application* app, VulkanState* state) {
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
@@ -1579,29 +1683,7 @@ void updateDataForFrame(Application* app, VulkanState* state) {
       state->stopRendering = false;
     }
   }
-  auto mapping = state->frameMemory->access();
-  float* data = reinterpret_cast<float*>(mapping.data());
-  data += (16 * state->currentFrameIndex);
-
-  glm::mat4 mvp = app->getProjectionMatrix() * app->getViewMatrix();
-  const float* mptr = glm::value_ptr(mvp);
-  for (int j = 0; j < 16; ++j) {
-    *data = mptr[j];
-    ++data;
-  }
-
-  VkDescriptorBufferInfo bufferInfo{
-      .buffer = state->frameMemory->buffer(),
-      .offset = state->currentFrameIndex * sizeof(float) * 16,
-      .range = 16 * sizeof(float)};
-  VkWriteDescriptorSet descWrite{
-      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-      .dstSet = frame.descSet,
-      .descriptorCount = 1,
-      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-      .pBufferInfo = &bufferInfo,
-  };
-  vkUpdateDescriptorSets(state->device, 1, &descWrite, 0, nullptr);
+  updateDescriptorSets(app, state);
 }
 }  // namespace
 

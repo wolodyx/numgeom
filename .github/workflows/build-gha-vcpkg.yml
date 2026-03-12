@@ -64,28 +64,35 @@ jobs:
       - name: Set up vcpkg
         uses: lukka/run-vcpkg@v11
 
-      - name: Add NuGet sources
+      - name: Add NuGet sources (Linux)
+        if: runner.os == 'Linux'
         shell: bash
         run: |
-          if [ "${{ runner.os }}" == "Linux" ]; then
-            mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
-              sources add \
-              -Source "${{ env.NUGET_FEED_URL }}" \
-              -StorePasswordInClearText \
-              -Name GitHubPackages \
-              -UserName "${{ github.repository_owner }}" \
-              -Password "${{ secrets.GITHUB_TOKEN }}"
-            mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
-              setapikey "${{ secrets.GITHUB_TOKEN }}" \
-              -Source "${{ env.NUGET_FEED_URL }}"
-          elif [ "${{ runner.os }}" == "Linux" ]; then
-            nuget sources add \
-              -Source "${{ env.NUGET_FEED_URL }}" \
-              -Name "GitHubPackages" \
-              -Username "${{ github.repository_owner }}" \
-              -Password "${{ secrets.GITHUB_TOKEN }}" \
-              -ConfigFile "$env:APPDATA\NuGet\nuget.config"
-          fi
+          mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
+            sources add \
+            -Source "${{ env.NUGET_FEED_URL }}" \
+            -StorePasswordInClearText \
+            -Name GitHubPackages \
+            -UserName "${{ github.repository_owner }}" \
+            -Password "${{ secrets.GITHUB_TOKEN }}"
+          mono `${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1` \
+            setapikey "${{ secrets.GITHUB_TOKEN }}" \
+            -Source "${{ env.NUGET_FEED_URL }}"
+
+      - name: Add NuGet sources (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nugetPath = & $env:VCPKG_EXECUTABLE fetch nuget | Select-Object -Last 1
+          Write-Host "NuGet path: $nugetPath"
+          & $nugetPath sources add `
+            -Source "$env:NUGET_FEED_URL" `
+            -Name "GitHubPackages" `
+            -Username "${{ github.repository_owner }}" `
+            -Password "${{ secrets.GITHUB_TOKEN }}" `
+            -ConfigFile "$env:APPDATA\NuGet\NuGet.config"
+          & $nugetPath setapikey "${{ secrets.GITHUB_TOKEN }}" `
+            -Source "$env:NUGET_FEED_URL"
 
       - name: Build, test and pack using CMake
         uses: lukka/run-cmake@v10

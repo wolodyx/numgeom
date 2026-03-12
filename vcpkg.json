@@ -5,6 +5,11 @@
     "gtest",
     "nlohmann-json",
     "boost-log",
+    {
+      "name": "vulkan-loader",
+      "features": ["xcb"],
+      "platform": "linux"
+    },
     "vulkan-sdk-components",
     "opencascade",
     {

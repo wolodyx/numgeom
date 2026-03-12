@@ -1,4 +1,4 @@
-﻿#ifndef numgeom_framework_application_h
+#ifndef numgeom_framework_application_h
 #define numgeom_framework_application_h
 
 #include <functional>
@@ -32,6 +32,9 @@ class FRAMEWORK_EXPORT Application {
   void fitScene();
 
   void zoomCamera(float k);
+
+  //! Позиция камеры в глобальной системе координат.
+  glm::vec3 CameraPosition() const;
 
   //! Перемещение камеры вдоль плоскости экрана
   //! в направлении экранного вектора `(dx,dy)`.

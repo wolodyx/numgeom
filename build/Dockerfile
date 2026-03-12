@@ -9,6 +9,7 @@ RUN apt update &&            \
         git                  \
         cmake                \
         build-essential      \
+        ninja-build          \
         flex                 \
         bison                \
         curl                 \

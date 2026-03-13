@@ -26,17 +26,26 @@ if(UNIX)
   file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/app-qt.env"
     CONTENT
-      [===[
-VCPKG_ROOT=${env:HOME}/vcpkg
-VK_LAYER_PATH=${env:VCPKG_ROOT}/packages/vulkan-validationlayers_x64-linux/share/vulkan/explicit_layer.d
+[===[
 LD_LIBRARY_PATH=${env:VCPKG_ROOT}/installed/x64-linux/debug/lib
 QT_QPA_PLATFORM=xcb
-      ]===]
+]===]
+  )
+
+  file(GENERATE
+    OUTPUT "${CMAKE_BINARY_DIR}/run-app-qt.sh"
+    CONTENT
+[===[
+export QT_PLUGIN_PATH="${PWD}/plugins"
+export LD_LIBRARY_PATH="${PWD}"
+export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
+./app-qt
+]===]
   )
 endif()
 
 include(Qt5Utils)
-copy_qt_plugin(Qt5::QJpegPlugin "imageformats")
+copy_qt_plugin(Qt5::QXcbIntegrationPlugin "platforms")
 
 install(TARGETS app-qt)
 
@@ -53,12 +62,18 @@ install(FILES
   DESTINATION doc
 )
 
+install(FILES
+  "${CMAKE_BINARY_DIR}/run-app-qt.sh"
+  DESTINATION bin
+  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ
+)
+
 install(CODE [[
-  set(DEPENDENCY_PATHS $ENV{VCPKG_ROOT})
+  set(DEPENDENCY_PATHS "${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic")
   file(TO_CMAKE_PATH "${DEPENDENCY_PATHS}" DEPENDENCY_PATHS)
 
   file(GET_RUNTIME_DEPENDENCIES
-    EXECUTABLES $<TARGET_FILE:app-qt>
+    EXECUTABLES $<TARGET_FILE:app-qt> $<TARGET_FILE:Qt5::QXcbIntegrationPlugin>
     RESOLVED_DEPENDENCIES_VAR _r_deps
     UNRESOLVED_DEPENDENCIES_VAR _u_deps
     POST_EXCLUDE_REGEXES
@@ -75,4 +90,10 @@ install(CODE [[
       FILES "${_file}"
     )
   endforeach()
+
+  file(CREATE_LINK
+    "${CMAKE_INSTALL_PREFIX}/bin/libvulkan.so.1"
+    "${CMAKE_INSTALL_PREFIX}/bin/libvulkan.so"
+    SYMBOLIC
+  )
 ]])

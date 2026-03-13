@@ -62,18 +62,5 @@ if(BUILD_TESTING)
   add_subdirectory(tests)
 endif()
 
-set(CPACK_GENERATOR NSIS)
-set(CPACK_PACKAGE_NAME "numgeom")
-set(CPACK_PACKAGE_VENDOR "numgeom.ru")
-set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Numgeom - Modern CAx Framework")
-set(CPACK_PACKAGE_VERSION_MAJOR ${PROJECT_VERSION_MAJOR})
-set(CPACK_PACKAGE_VERSION_MINOR ${PROJECT_VERSION_MINOR})
-set(CPACK_PACKAGE_VERSION_PATCH ${PROJECT_VERSION_PATCH})
-set(CPACK_PACKAGE_INSTALL_DIRECTORY "numgeom")
-set(CPACK_NSIS_MODIFY_PATH ON)
-set(CPACK_NSIS_DEFINES "RequestExecutionLevel user")
-set(CPACK_NSIS_EXTRA_INSTALL_COMMANDS
-  "  CreateShortCut '$DESKTOP\\\\numgeom.lnk' '$INSTDIR\\\\bin\\\\app-qt.exe' "
-)
-
-INCLUDE(CPack)
+include(CPackConfig.cmake)
+include(CPack)

@@ -45,6 +45,20 @@
         "LD_LIBRARY_PATH": "/usr/lib64"
       },
       "binaryDir": "${sourceDir}/bld/${presetName}"
+    },
+    {
+      "name": "macos-release",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "generator": "Ninja",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "environment": {
+        "LD_LIBRARY_PATH": "/usr/lib64"
+      },
+      "binaryDir": "${sourceDir}/bld/${presetName}"
     }
   ],
   "buildPresets": [
@@ -55,6 +69,10 @@
     {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg-release"
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release"
     }
   ],
   "testPresets": [
@@ -65,6 +83,10 @@
     {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg-release"
+    },
+    {
+      "name": "macos-release",
+      "configurePreset": "macos-release"
     }
   ],
   "workflowPresets": [
@@ -99,6 +121,23 @@
         {
           "type": "test",
           "name": "windows-vcpkg-release"
+        }
+      ]
+    },
+    {
+      "name": "macos-ci",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "macos-release"
+        },
+        {
+          "type": "build",
+          "name": "macos-release"
+        },
+        {
+          "type": "test",
+          "name": "macos-release"
         }
       ]
     }

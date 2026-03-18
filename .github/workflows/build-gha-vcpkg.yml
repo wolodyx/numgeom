@@ -106,6 +106,7 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          brew install mono
           NUGET_EXE=$(${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1)
           mono "$NUGET_EXE" sources add \
             -Source "${{ env.NUGET_FEED_URL }}" \

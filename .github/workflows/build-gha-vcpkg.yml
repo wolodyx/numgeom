@@ -9,12 +9,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, windows-2022] # , macos-15
+        os: [macos-15] # ubuntu-24.04, windows-2022]
         include:
           - os: ubuntu-24.04
             workflow: ubuntu-ci
           - os: windows-2022
             workflow: windows-ci
+          - os: macos-15
+            workflow: macous-ci
     permissions:
       packages: write
       contents: read

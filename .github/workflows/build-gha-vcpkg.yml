@@ -113,9 +113,11 @@ jobs:
             -StorePasswordInClearText \
             -Name GitHubPackages \
             -UserName "${{ github.repository_owner }}" \
-            -Password "${{ secrets.GITHUB_TOKEN }}"
+            -Password "${{ secrets.GITHUB_TOKEN }}" \
+            -Verbosity detailed
           mono "$NUGET_EXE" setapikey "${{ secrets.GITHUB_TOKEN }}" \
-            -Source "${{ env.NUGET_FEED_URL }}"
+            -Source "${{ env.NUGET_FEED_URL }}" \
+            -Verbosity detailed
 
       - name: Build, test and pack using CMake
         uses: lukka/run-cmake@v10

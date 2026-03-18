@@ -11,12 +11,12 @@ jobs:
       matrix:
         os: [macos-15] # ubuntu-24.04, windows-2022]
         include:
-          - os: ubuntu-24.04
-            workflow: ubuntu-ci
-          - os: windows-2022
-            workflow: windows-ci
+          # - os: ubuntu-24.04
+          #   workflow: ubuntu-ci
+          # - os: windows-2022
+          #   workflow: windows-ci
           - os: macos-15
-            workflow: macous-ci
+            workflow: macos-ci
     permissions:
       packages: write
       contents: read
@@ -95,6 +95,18 @@ jobs:
             -ConfigFile "$env:APPDATA\NuGet\NuGet.config"
           & $nugetPath setapikey "${{ secrets.GITHUB_TOKEN }}" `
             -Source "$env:NUGET_FEED_URL"
+
+      - name: Add NuGet sources (macOS)
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          dotnet nuget add source "${{ env.NUGET_FEED_URL }}" \
+            --name GitHubPackages \
+            --username "${{ github.repository_owner }}" \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --store-password-in-clear-text
+          dotnet nuget setapikey "${{ secrets.GITHUB_TOKEN }}" \
+            --source "${{ env.NUGET_FEED_URL }}"
 
       - name: Build, test and pack using CMake
         uses: lukka/run-cmake@v10

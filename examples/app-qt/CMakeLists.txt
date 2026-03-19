@@ -36,10 +36,11 @@ QT_QPA_PLATFORM=xcb
     OUTPUT "${CMAKE_BINARY_DIR}/run-app-qt.sh"
     CONTENT
 [===[
-export QT_PLUGIN_PATH="${PWD}/plugins"
-export LD_LIBRARY_PATH="${PWD}"
+script_dir="$(dirname -- $0)"
+export QT_PLUGIN_PATH="${script_dir}/plugins"
+export LD_LIBRARY_PATH="${script_dir}"
 export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
-./app-qt
+"${script_dir}/app-qt"
 ]===]
   )
 endif()
@@ -65,7 +66,9 @@ install(FILES
 install(FILES
   "${CMAKE_BINARY_DIR}/run-app-qt.sh"
   DESTINATION bin
-  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ GROUP_EXECUTE GROUP_READ
+  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
+              GROUP_EXECUTE GROUP_READ
+              WORLD_EXECUTE WORLD_READ
 )
 
 install(CODE [[

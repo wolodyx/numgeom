@@ -1,0 +1,13 @@
+Package:        numgeom
+Version:        @PROJECT_VERSION@
+Section:        devel
+Priority:       optional
+Depends:        libboost-log1.83.0,
+                libqt5widgets5t64,
+                libocct-modeling-data-7.6t64
+Architecture:   amd64
+Essential:      no
+Installed-Size: @DEB_PACKAGE_INSTALLED_SIZE@
+Homepage:       https://github.com/wolodyx/numgeom
+Maintainer:     Vladimir Lazarev <11465238+wolodyx@users.noreplay.github.com>
+Description:    CAx Framework

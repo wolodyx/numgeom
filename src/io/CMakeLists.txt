@@ -59,9 +59,13 @@ if(OpenCASCADE_FOUND)
   target_link_libraries(io
     PRIVATE
       TKBRep
-      TKDESTEP
       numgeom::numgeom
   )
+  if(${OpenCASCADE_VERSION} VERSION_LESS "7.8.0")
+    target_link_libraries(io PRIVATE TKSTEP)
+  else()
+    target_link_libraries(io PRIVATE TKDESTEP)
+  endif()
 endif()
 
 install(TARGETS io)

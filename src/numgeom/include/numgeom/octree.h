@@ -1,10 +1,12 @@
 ﻿#ifndef numgeom_numgeom_octree_h
 #define numgeom_numgeom_octree_h
 
-#include <Bnd_Box.hxx>
 #include <filesystem>
+#include <functional>
 #include <list>
 #include <memory>
+
+#include "Bnd_Box.hxx"
 
 #include "numgeom/ijk.h"
 #include "numgeom/iterator.h"

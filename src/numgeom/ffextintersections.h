@@ -1,11 +1,15 @@
 ﻿#ifndef numgeom_numgeom_ffextintersections_h
 #define numgeom_numgeom_ffextintersections_h
 
-#include <Geom_Surface.hxx>
-#include <TopTools_MapOfShape.hxx>
-#include <TopoDS_Face.hxx>
 #include <list>
+#include <map>
 #include <unordered_map>
+
+#include "Geom_Surface.hxx"
+#include "TopTools_MapOfShape.hxx"
+#include "TopoDS_Face.hxx"
+
+#include "numgeom/utilities.h"
 
 class Geom_BoundedCurve;
 class Geom_Curve;
@@ -59,13 +63,13 @@ class FaceFaceIntersections {
 
  private:
   //! Расширенные поверхности граней.
-  std::unordered_map<TopoDS_Face, Handle(Geom_Surface), std::hash<TopoDS_Face>>
+  std::unordered_map<TopoDS_Face, Handle(Geom_Surface)>
       myFace2extendedSurface;
 
   //! Кешированный результат пересечения граней с гранями.
   mutable std::unordered_map<TopoDS_Face, std::list<IntFF>>
       myFace2intersections;
-  mutable std::unordered_map<Handle(Geom_Curve), std::list<IntCF>>
+  mutable std::map<Handle(Geom_Curve), std::list<IntCF>>
       myCurve2intersections;
 };
 

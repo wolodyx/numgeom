@@ -3,10 +3,11 @@
 #include <array>
 #include <cassert>
 #include <map>
-#include <nlohmann/json.hpp>
 #include <queue>
 #include <stack>
 #include <vector>
+
+#include "nlohmann/json.hpp"
 using json = nlohmann::json;
 
 struct QuadTree::Internal {

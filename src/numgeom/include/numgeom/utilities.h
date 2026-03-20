@@ -1,9 +1,12 @@
 ﻿#ifndef numgeom_numgeom_utilities_h
 #define numgeom_numgeom_utilities_h
 
-#include <Bnd_Box.hxx>
-#include <Bnd_Box2d.hxx>
 #include <filesystem>
+
+#include "Bnd_Box.hxx"
+#include "Bnd_Box2d.hxx"
+#include "Standard_Version.hxx"
+#include "TopoDS_Face.hxx"
 
 #include "numgeom/trimesh.h"
 
@@ -16,6 +19,40 @@ class TopoDS_Edge;
 class TopoDS_Face;
 class TopoDS_Shape;
 class TopoDS_Solid;
+
+#if OCC_VERSION_HEX < 0x070900
+namespace std {
+  template<>
+  struct hash<TopoDS_Shape> {
+    size_t operator()(const TopoDS_Shape& theShape) const {
+        return (size_t)theShape.HashCode(std::numeric_limits<int>::max());
+    }
+  };
+
+  template<>
+  struct equal_to<TopoDS_Shape> {
+    size_t operator()(const TopoDS_Shape& theShape1,
+                      const TopoDS_Shape& theShape2) const {
+        return theShape1.IsSame(theShape2);
+    }
+  };
+
+  template<>
+  struct hash<TopoDS_Face> {
+    size_t operator()(const TopoDS_Face& theFace) const {
+        return (size_t)theFace.HashCode(std::numeric_limits<int>::max());
+    }
+  };
+
+  template<>
+  struct equal_to<TopoDS_Face> {
+    size_t operator()(const TopoDS_Face& theFace1,
+                      const TopoDS_Face& theFace2) const {
+        return theFace1.IsSame(theFace2);
+    }
+  };
+}
+#endif
 
 Bnd_Box2d ComputePCurvesBox(const TopoDS_Face&);
 

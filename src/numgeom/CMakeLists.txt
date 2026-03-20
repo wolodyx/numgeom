@@ -43,10 +43,10 @@ target_link_libraries(numgeom
     TKG3d
     TKernel
   PRIVATE
+    nlohmann_json
     TKBO
     TKBRep
     TKG2d
-    TKDESTEP
     TKGeomAlgo
     TKGeomBase
     TKMesh
@@ -54,6 +54,13 @@ target_link_libraries(numgeom
     TKTopAlgo
     TKXSBase
 )
+
+if(${OpenCASCADE_VERSION} VERSION_LESS "7.8.0")
+  target_link_libraries(numgeom PRIVATE TKSTEP)
+  target_include_directories(numgeom PUBLIC ${OpenCASCADE_INCLUDE_DIR})
+else()
+  target_link_libraries(numgeom PRIVATE TKDESTEP)
+endif()
 
 target_include_directories(numgeom
   PUBLIC

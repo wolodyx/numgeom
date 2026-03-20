@@ -43,23 +43,6 @@ RUN apt update &&            \
 
 WORKDIR /usr/local/src
 
-RUN    git clone https://github.com/microsoft/vcpkg.git \
-    && vcpkg/bootstrap-vcpkg.sh -disableMetrics \
-    && mv vcpkg/vcpkg /usr/local/bin
-
-ENV VCPKG_ROOT=/usr/local/src/vcpkg
-
-RUN vcpkg install             \
-        --triplet=x64-linux-dynamic \
-        --clean-after-build   \
-        gtest                 \
-        nlohmann-json         \
-        boost-log             \
-        vulkan-loader[xcb]    \
-        vulkan-sdk-components \
-        opencascade           \
-        qt5-base[vulkan]
-
 ARG USERNAME=tim
 ARG USER_UID=1000
 ARG USER_GID=$USER_UID

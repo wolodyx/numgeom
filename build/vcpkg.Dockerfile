@@ -41,6 +41,9 @@ RUN apt update &&            \
         libarchive-dev       \
         libxrandr-dev
 
+ENV VCPKG_BINARY_SOURCES=files,/vcpkg_cache,readwrite
+RUN mkdir /vcpkg_cache
+
 WORKDIR /usr/local/src
 
 ARG USERNAME=tim

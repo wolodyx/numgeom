@@ -1,11 +1,19 @@
-name: Deploy Docker image for linux-system build configuration
+name: Deploy a Docker image for Linux builds
 
 on:
   workflow_dispatch:
+    inputs:
+      package_manager:
+        description: 'Package manager for delivering external dependencies'
+        required: true
+        type: choice
+        options:
+          - system
+          - vcpkg
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-ci-linux-system
+  IMAGE_NAME: ${{ github.repository }}-ci-linux-${{ github.event.inputs.package_manager }}
 
 jobs:
   build-and-push:
@@ -40,7 +48,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ./build
-          file: ./build/system.Dockerfile
+          file: ./build/${{ github.event.inputs.package_manager }}.Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

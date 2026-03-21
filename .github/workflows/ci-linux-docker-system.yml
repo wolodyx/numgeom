@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: CI/CD pipeline for linux-docker-system configuration
 on:
   workflow_dispatch:
 
@@ -10,7 +10,7 @@ jobs:
       contents: read
 
     container:
-      image: ghcr.io/wolodyx/numgeom-ubuntu-24.04-build:latest
+      image: ghcr.io/wolodyx/numgeom-ci-linux-system:latest
       options: --user root
       credentials:
         username: ${{ github.actor }}
@@ -19,6 +19,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: recursive
 
       - name: Build
-        run: ./build/build-linux.sh
+        run: cmake --workflow --preset ci-linux-system

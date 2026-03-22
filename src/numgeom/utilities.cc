@@ -1,5 +1,7 @@
 #include "numgeom/utilities.h"
 
+#include <unordered_map>
+
 #include <BRepBndLib.hxx>
 #include <BRepClass_FaceClassifier.hxx>
 #include <BRepMesh_IncrementalMesh.hxx>

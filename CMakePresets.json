@@ -1,78 +1,152 @@
 {
-  "version": 6,
+  "version": 8,
   "configurePresets": [
     {
-      "name": "windows-vcpkg-release",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/install"
-      },
-      "binaryDir": "${sourceDir}/bld"
-    },
-    {
       "name": "linux-vcpkg-release",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_BUILD_TYPE": "Release"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
       },
-      "binaryDir": "${sourceDir}/bld/${presetName}"
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
     },
     {
       "name": "linux-vcpkg-debug",
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
-        "CMAKE_BUILD_TYPE": "Debug"
-      },
-      "environment": {
-        "LD_LIBRARY_PATH": "/usr/lib64"
-      },
-      "binaryDir": "${sourceDir}/bld/${presetName}"
-    },
-    {
-      "name": "linux-host-debug",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      },
-      "environment": {
-        "LD_LIBRARY_PATH": "/usr/lib64"
-      },
-      "binaryDir": "${sourceDir}/bld/${presetName}"
-    },
-    {
-      "name": "macos-release",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "generator": "Ninja",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "LD_LIBRARY_PATH": "/usr/lib64"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-system-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "CMAKE_BUILD_TYPE": "Release"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
       },
-      "binaryDir": "${sourceDir}/bld/${presetName}"
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "linux-system-debug",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "environment": {
+        "LD_LIBRARY_PATH": "/usr/lib64"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
+      "name": "windows-vcpkg",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "VCPKG_TARGET_TRIPLET": "x64-windows"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "windows-system",
+      "generator": "Visual Studio 17 2022",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
+      "name": "mac-vcpkg-release",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "VCPKG_TARGET_TRIPLET": "x64-mac",
+        "CMAKE_BUILD_TYPE": "Release"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "macOS"
+      }
     }
   ],
   "buildPresets": [
     {
+      "name": "linux-base",
+      "hidden": true,
+      "targets": ["all", "install", "deb"]
+    },
+    {
       "name": "linux-vcpkg-release",
+      "inherits": ["linux-base"],
       "configurePreset": "linux-vcpkg-release"
     },
     {
-      "name": "windows-vcpkg-release",
-      "configurePreset": "windows-vcpkg-release"
+      "name": "linux-system-release",
+      "inherits": ["linux-base"],
+      "configurePreset": "linux-system-release"
     },
     {
-      "name": "macos-release",
-      "configurePreset": "macos-release"
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-system-release",
+      "configurePreset": "windows-vcpkg",
+      "configuration": "Release"
+    },
+    {
+      "name": "mac-vcpkg-release",
+      "configurePreset": "mac-vcpkg-release"
     }
   ],
   "testPresets": [
@@ -81,17 +155,28 @@
       "configurePreset": "linux-vcpkg-release"
     },
     {
-      "name": "windows-vcpkg-release",
-      "configurePreset": "windows-vcpkg-release"
+      "name": "linux-system-release",
+      "configurePreset": "linux-system-release"
     },
     {
-      "name": "macos-release",
-      "configurePreset": "macos-release"
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg"
+    },
+    {
+      "name": "mac-vcpkg-release",
+      "configurePreset": "mac-vcpkg-release"
+    }
+  ],
+  "packagePresets": [
+    {
+      "name": "linux-system-release",
+      "configurePreset": "linux-system-release",
+      "generators": ["ZIP"]
     }
   ],
   "workflowPresets": [
     {
-      "name": "ubuntu-ci",
+      "name": "ci-linux-vcpkg",
       "steps": [
         {
           "type": "configure",
@@ -108,11 +193,28 @@
       ]
     },
     {
-      "name": "windows-ci",
+      "name": "ci-linux-system",
       "steps": [
         {
           "type": "configure",
-          "name": "windows-vcpkg-release"
+          "name": "linux-system-release"
+        },
+        {
+          "type": "build",
+          "name": "linux-system-release"
+        },
+        {
+          "type": "test",
+          "name": "linux-system-release"
+        }
+      ]
+    },
+    {
+      "name": "ci-windows-vcpkg",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "windows-vcpkg"
         },
         {
           "type": "build",
@@ -125,22 +227,21 @@
       ]
     },
     {
-      "name": "macos-ci",
+      "name": "ci-macos-vcpkg",
       "steps": [
         {
           "type": "configure",
-          "name": "macos-release"
+          "name": "mac-vcpkg-release"
         },
         {
           "type": "build",
-          "name": "macos-release"
+          "name": "mac-vcpkg-release"
         },
         {
           "type": "test",
-          "name": "macos-release"
+          "name": "mac-vcpkg-release"
         }
       ]
     }
   ]
 }
-

@@ -100,9 +100,11 @@ jobs:
         if: runner.os == 'macOS'
         shell: bash
         run: |
+          export MONO_GAC_PREFIX="/opt/homebrew"
           brew install mono
-          echo "Mono installed."
+          echo "Mono installed. Ret = $?"
           NUGET_EXE=$(${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1)
+          echo "NUGET_EXE = ${NUGET_EXE}"
           mono "$NUGET_EXE" sources add \
             -Source "${{ env.NUGET_FEED_URL }}" \
             -StorePasswordInClearText \

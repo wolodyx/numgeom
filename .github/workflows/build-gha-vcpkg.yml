@@ -101,6 +101,7 @@ jobs:
         shell: bash
         run: |
           brew install mono
+          echo "Mono installed."
           NUGET_EXE=$(${{ env.VCPKG_EXECUTABLE }} fetch nuget | tail -n 1)
           mono "$NUGET_EXE" sources add \
             -Source "${{ env.NUGET_FEED_URL }}" \
@@ -109,9 +110,11 @@ jobs:
             -UserName "${{ github.repository_owner }}" \
             -Password "${{ secrets.GITHUB_TOKEN }}" \
             -Verbosity detailed
+          echo "Mono sources added."
           mono "$NUGET_EXE" setapikey "${{ secrets.GITHUB_TOKEN }}" \
             -Source "${{ env.NUGET_FEED_URL }}" \
             -Verbosity detailed
+          echo "Mono api key set."
 
       - name: Build, test and pack using CMake
         uses: lukka/run-cmake@v10

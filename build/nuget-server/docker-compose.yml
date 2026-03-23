@@ -1,0 +1,31 @@
+version: '3'
+
+services:
+  baget:
+    image: loicsharma/baget
+    container_name: baget
+    restart: always
+    env_file:
+      - ./baget.env
+    volumes:
+      - ~/baget:/var/baget
+    networks:
+      - internal
+
+  nginx:
+    image: nginx:alpine
+    container_name: baget-nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/baget.conf:/etc/nginx/conf.d/baget.conf:ro
+      - ~/nginx/ssl:/etc/nginx/ssl:ro
+    networks:
+      - internal
+    depends_on:
+      - baget
+
+networks:
+  internal:

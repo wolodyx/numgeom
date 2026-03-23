@@ -1,5 +1,8 @@
 # Поднимаем nuget-сервер
 
+
+## Работа с сервером
+
 Для сервера понадобятся:
 * каталог `$HOME/baget`, где будут складироваться пакеты, указывается в
   `docker-compose.yml -> services -> baget -> volumes`.
@@ -19,25 +22,33 @@ openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
   -subj "/CN=localhost"
 ```
 
-Поднимите контейнеры сервера:
-``` bash
-docker compose up -d
-```
+Понадобятся следующие команды:
+* `docker compose up -d` -- поднять контейнеры сервера;
+* `docker compose down` -- остановить контейнеры сервера;
+* `docker logs -f <id>` -- посмотреть логи сервера.
 
-Файл **самоподписанного** сертификата `certificate.crt` скопируйте на клиентскую
-машину и обновите сертификаты.
-Для доверенного сертификата это не нужно делать.
+
+## Работа с клиентом
+
+Если у вас **самоподписанный** сертификат, то скопируйте файл `certificate.crt`
+на клиентскую машину и обновите сертификаты:
 ``` bash
 sudo cp ~/certificate.crt /usr/local/share/ca-certificates
 sudo update-ca-certificates
 ```
 
-Проверьте доступность сервера с клиента командой:
+Настройте клиент, запустив с корня проекта команды:
 ``` bash
-curl -k https://localhost/v3/index.json
+rm -f ~/.config/NuGet/NuGet.Config
+./build/nuget-server/setup-nuget-client.sh
 ```
 
-Остановите контейнеры сервера:
+Установите переменную окружения `VCPKG_BINARY_SOURCES`:
 ``` bash
-docker compose down
+export VCPKG_BINARY_SOURCES="clear;nugetconfig,/home/tim/.config/NuGet/NuGet.Config,readwrite"
+```
+
+Проверьте доступность сервера с клиента командой:
+``` bash
+curl https://<server-name>/v3/index.json
 ```

@@ -1,5 +1,7 @@
 # NumGeom Framework
 
+![linux build](https://github.com/wolodyx/numgeom/actions/workflows/ci-linux-docker-system.yml/badge.svg)
+
 **Быстрая разработка CAD/CAE/CAM приложений на C++**
 
 NumGeom -- это кроссплатформенный фреймворк, объединяющий передовые технологии 3D-моделирования в единой среде.

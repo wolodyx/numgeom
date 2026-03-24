@@ -1,4 +1,4 @@
-name: CI/CD pipeline for linux-docker-system configuration
+name: CI/CD Linux
 on:
   workflow_dispatch:
 

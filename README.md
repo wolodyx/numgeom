@@ -1,6 +1,6 @@
 # NumGeom Framework
 
-![linux build](https://github.com/wolodyx/numgeom/actions/workflows/ci-linux-docker-system.yml/badge.svg)
+![linux build](https://github.com/wolodyx/numgeom/actions/workflows/ci-linux.yml/badge.svg)
 
 **Быстрая разработка CAD/CAE/CAM приложений на C++**
 

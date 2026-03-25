@@ -1,0 +1,37 @@
+name: CI/CD Windows
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.304.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-use-cache: true
+
+      - name: Install Boost
+        uses: MarkusJx/install-boost@v2
+        with:
+          boost_version: 1.90.0
+
+      - name: Install Pyhton
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: cmake --workflow --preset ci-windows-system

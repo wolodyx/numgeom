@@ -141,7 +141,7 @@
     },
     {
       "name": "windows-system-release",
-      "configurePreset": "windows-vcpkg",
+      "configurePreset": "windows-system",
       "configuration": "Release"
     }
   ],
@@ -157,6 +157,10 @@
     {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg"
+    },
+    {
+      "name": "windows-system-release",
+      "configurePreset": "windows-system"
     }
   ],
   "packagePresets": [
@@ -198,6 +202,23 @@
         {
           "type": "test",
           "name": "linux-system-release"
+        }
+      ]
+    },
+    {
+      "name": "ci-windows-system",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "windows-system"
+        },
+        {
+          "type": "build",
+          "name": "windows-system-release"
+        },
+        {
+          "type": "test",
+          "name": "windows-system-release"
         }
       ]
     },

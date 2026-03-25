@@ -1,5 +1,6 @@
 set(SOURCE_FILES
   main.cc
+  loadtotrimesh.cc          loadtotrimesh.h
   mainwindow.cc             mainwindow.h
   scenewindow.cc            scenewindow.h
 )
@@ -19,6 +20,13 @@ target_link_libraries(app-qt
   Qt::Gui
   numgeom::framework
   numgeom::io
+)
+
+# Добавляем перед запуском app-qt путь к библиотекам Qt.
+include(QtUtils)
+get_qt_binary_dir(NUMGEOM_QT_BIN_DIR)
+set_target_properties(app-qt PROPERTIES
+  VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}"
 )
 
 # List of env variables to run application from vscode.
@@ -45,8 +53,10 @@ export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x6
   )
 endif()
 
-include(Qt5Utils)
-copy_qt_plugin(Qt5::QXcbIntegrationPlugin "platforms")
+include(QtUtils)
+if(UNIX)
+  copy_qt_plugin("Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin" "platforms")
+endif()
 
 install(TARGETS app-qt)
 

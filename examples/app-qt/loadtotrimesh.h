@@ -1,5 +1,5 @@
-#ifndef numgeom_io_loadtotrimesh_h
-#define numgeom_io_loadtotrimesh_h
+#ifndef examples_appqt_loadtotrimesh_h
+#define examples_appqt_loadtotrimesh_h
 
 #include "numgeom/trimesh.h"
 

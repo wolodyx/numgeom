@@ -11,8 +11,8 @@
 
 #include "numgeom/application.h"
 #include "numgeom/gpumanager.h"
-#include "numgeom/loadtotrimesh.h"
 
+#include "loadtotrimesh.h"
 #include "scenewindow.h"
 
 MainWindow::MainWindow(Application* app) {

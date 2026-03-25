@@ -3,6 +3,7 @@ set(PUBLIC_HEADERS
   include/numgeom/enums.h
   include/numgeom/ijk.h
   include/numgeom/iterator.h
+  include/numgeom/loadusingocc.h
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
@@ -18,6 +19,7 @@ set(SOURCE_FILES
   ffextintersections.cc     ffextintersections.h
   intersections.cc          intersections.h
   iterator_ijk.cc           iterator_ijk.h
+  loadusingocc.cc
   octree.cc
   quadtree.cc
   removefaces.cc
@@ -27,16 +29,16 @@ set(SOURCE_FILES
   writevtk.cc               writevtk.h
 )
 
-add_library(numgeom ${SOURCE_FILES})
-add_library(numgeom::numgeom ALIAS numgeom)
+add_library(occ ${SOURCE_FILES})
+add_library(numgeom::occ ALIAS occ)
 
-#set_target_properties(numgeom PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
+#set_target_properties(occ PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 
-generate_export_header(numgeom
-  EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/numgeom_export.h
+generate_export_header(occ
+  EXPORT_FILE_NAME ${CMAKE_CURRENT_BINARY_DIR}/include/numgeom/occ_export.h
 )
 
-target_link_libraries(numgeom
+target_link_libraries(occ
   PUBLIC
     numgeom::core
     TKMath
@@ -55,17 +57,19 @@ target_link_libraries(numgeom
     TKXSBase
 )
 
+target_compile_definitions(occ PUBLIC USE_NUMGEOM_MODULE_OCC)
+
 if(${OpenCASCADE_VERSION} VERSION_LESS "7.8.0")
-  target_link_libraries(numgeom PRIVATE TKSTEP)
-  target_include_directories(numgeom PUBLIC ${OpenCASCADE_INCLUDE_DIR})
+  target_link_libraries(occ PRIVATE TKSTEP)
+  target_include_directories(occ PUBLIC ${OpenCASCADE_INCLUDE_DIR})
 else()
-  target_link_libraries(numgeom PRIVATE TKDESTEP)
+  target_link_libraries(occ PRIVATE TKDESTEP)
 endif()
 
-target_include_directories(numgeom
+target_include_directories(occ
   PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_BINARY_DIR}/include
 )
 
-install(TARGETS numgeom)
+install(TARGETS occ)

@@ -3,9 +3,9 @@
 
 #include "numgeom/enums.h"
 #include "numgeom/ijk.h"
-#include "numgeom/numgeom_export.h"
+#include "numgeom/occ_export.h"
 
-class NUMGEOM_EXPORT Iterator_Ijk {
+class OCC_EXPORT Iterator_Ijk {
  public:
   Iterator_Ijk();
 

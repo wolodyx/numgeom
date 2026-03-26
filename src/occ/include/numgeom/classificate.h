@@ -4,7 +4,7 @@
 #include <Standard_TypeDef.hxx>
 #include <TopAbs_State.hxx>
 
-#include "numgeom/numgeom_export.h"
+#include "numgeom/occ_export.h"
 
 class AuxClassificateData2d;
 class gp_Pnt2d;
@@ -17,7 +17,7 @@ class TopoDS_Face;
 \param aux Вспомогательный объект, ускоряющий вычисления при повторном вызове
            функции.
 */
-NUMGEOM_EXPORT TopAbs_State
+OCC_EXPORT TopAbs_State
 Classificate(const TopoDS_Face& face, const gp_Pnt2d& point,
              const AuxClassificateData2d** aux = nullptr);
 

@@ -7,18 +7,26 @@ jobs:
     runs-on: windows-latest
 
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Prepare Vulkan SDK
         uses: humbletim/setup-vulkan-sdk@v1.2.1
         with:
           vulkan-query-version: 1.4.304.1
-          vulkan-components: Vulkan-Headers, Vulkan-Loader
+          vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools
           vulkan-use-cache: true
 
       - name: Install Boost
         uses: MarkusJx/install-boost@v2
+        id:
+          install-boost
         with:
-          boost_version: 1.90.0
+          boost_version: 1.89.0
+          platform_version: 2022
+          toolset: msvc
+          link: static
+          cache: true
 
       - name: Install Pyhton
         uses: actions/setup-python@v6
@@ -29,9 +37,9 @@ jobs:
         uses: jurplel/install-qt-action@v4
         with:
           version: '6.8.3'
-
-      - name: Checkout code
-        uses: actions/checkout@v4
+          cache: true
 
       - name: Build
         run: cmake --workflow --preset ci-windows-system
+        env:
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}

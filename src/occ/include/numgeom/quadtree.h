@@ -8,9 +8,9 @@
 #include <memory>
 
 #include "numgeom/iterator.h"
-#include "numgeom/numgeom_export.h"
+#include "numgeom/occ_export.h"
 
-class NUMGEOM_EXPORT QuadTree {
+class OCC_EXPORT QuadTree {
  public:
   typedef std::shared_ptr<QuadTree> Ptr;
   typedef std::shared_ptr<const QuadTree> CPtr;
@@ -162,7 +162,7 @@ struct QuadTree::Node {
 \param maximumDistance Радиус, вокруг которого происходит поиск.
 \param nearestCells Ближайшие к точке терминальные отмеченные ячейки.
 */
-void NUMGEOM_EXPORT SearchNearestCells(
+void OCC_EXPORT SearchNearestCells(
     QuadTree::CPtr qTree, const gp_Pnt2d& Q,
     const std::function<Standard_Boolean(QuadTree::CPtr,
                                          const QuadTree::Cell&)>& isTaggedCell,

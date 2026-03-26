@@ -49,12 +49,12 @@ if(DEFINED SHADER_FILES)
     add_custom_command(
       OUTPUT ${file}.spv.h
       COMMAND
-        "${Vulkan_GLSLC_EXECUTABLE}"
+        $<TARGET_FILE:Vulkan::glslangValidator>
       ARGS
-        "${CMAKE_CURRENT_SOURCE_DIR}/${file}"
-        "-o${file}.spv"
+        -V "${CMAKE_CURRENT_SOURCE_DIR}/${file}"
+        -o "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
       COMMAND
-        "${Python3_EXECUTABLE}"
+        ${Python3_EXECUTABLE}
       ARGS
         "${CMAKE_CURRENT_SOURCE_DIR}/binary_to_hex_array.py"
         "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"

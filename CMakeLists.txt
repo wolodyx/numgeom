@@ -21,7 +21,7 @@ if(UNIX)
   option(ENABLE_XCB "Enable xcb code" ON)
 endif()
 
-find_package(Vulkan REQUIRED COMPONENTS glslc)
+find_package(Vulkan REQUIRED)
 find_package(Boost COMPONENTS log REQUIRED CONFIG)
 find_package(Python3 COMPONENTS Interpreter REQUIRED)
 find_package(FLEX)

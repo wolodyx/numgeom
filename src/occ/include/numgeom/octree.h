@@ -10,9 +10,9 @@
 
 #include "numgeom/ijk.h"
 #include "numgeom/iterator.h"
-#include "numgeom/numgeom_export.h"
+#include "numgeom/occ_export.h"
 
-class NUMGEOM_EXPORT OcTree {
+class OCC_EXPORT OcTree {
  public:
   typedef std::shared_ptr<OcTree> Ptr;
   typedef std::shared_ptr<const OcTree> CPtr;
@@ -187,7 +187,7 @@ struct OcTree::Node {
 \param maximumDistance Радиус, вокруг которого происходит поиск.
 \param nearestCells Ближайшие к точке терминальные отмеченные ячейки.
 */
-void NUMGEOM_EXPORT SearchNearestCells(
+void OCC_EXPORT SearchNearestCells(
     OcTree::CPtr tree, const gp_Pnt& Q,
     const std::function<Standard_Boolean(OcTree::CPtr, const OcTree::Cell&)>&
         isTaggedCell,

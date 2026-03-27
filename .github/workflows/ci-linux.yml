@@ -6,7 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      packages: read
+      packages: write
       contents: read
 
     container:
@@ -26,3 +26,12 @@ jobs:
 
       - name: Build
         run: cmake --workflow --preset ci-linux-system
+
+      - name: Build package
+        run: cmake --build --preset linux-system-release --target deb
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: bld/linux-system-release/build/packages/deb/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

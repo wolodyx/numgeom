@@ -64,7 +64,6 @@ include(GenerateExportHeader)
 add_subdirectory(extern)
 add_subdirectory(src)
 add_subdirectory(examples)
-add_subdirectory(build)
 
 include(CTest)
 if(BUILD_TESTING)

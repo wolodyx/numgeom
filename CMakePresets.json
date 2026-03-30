@@ -122,7 +122,7 @@
     {
       "name": "linux-base",
       "hidden": true,
-      "targets": ["all", "install", "deb"]
+      "targets": ["all", "install"]
     },
     {
       "name": "linux-vcpkg-release",
@@ -167,7 +167,7 @@
     {
       "name": "linux-system-release",
       "configurePreset": "linux-system-release",
-      "generators": ["ZIP"]
+      "generators": ["DEB"]
     }
   ],
   "workflowPresets": [
@@ -201,6 +201,10 @@
         },
         {
           "type": "test",
+          "name": "linux-system-release"
+        },
+        {
+          "type": "package",
           "name": "linux-system-release"
         }
       ]

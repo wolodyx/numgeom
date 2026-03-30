@@ -6,7 +6,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      packages: read
+      packages: write
       contents: read
 
     container:
@@ -24,5 +24,11 @@ jobs:
           fetch-tags: true
           submodules: recursive
 
-      - name: Build
+      - name: Build, test and package
         run: cmake --workflow --preset ci-linux-system
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: bld/linux-system-release/*.deb
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

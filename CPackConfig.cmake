@@ -23,9 +23,14 @@ if(CPACK_GENERATOR MATCHES "NSIS")
 endif()
 
 if(CPACK_GENERATOR MATCHES "DEB")
-  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Vladimir Lazarev")
-  set(CPACK_DEBIAN_PACIAGE_DESCRIPTOR "Debian package descriptor")
-  set(CPACK_DEBIAN_PACKAGE_SECTION "utils")
-  set(CPACK_DEBIAN_FILE_NAME "${PROJECT_NAME}-${PROJECT_VERSION}-amd64.deb")
+  set(CPACK_DEBIAN_PACKAGE_MAINTAINER "https://github.com/wolodyx")
+  set(CPACK_DEBIAN_PACKAGE_DESCRIPTION [[
+NumGeom -- это кроссплатформенный фреймворк, объединяющий передовые технологии
+3D-моделирования в единой среде. Проект предоставляет готовую инфраструктуру для
+создания интерактивных приложений инженерного анализа, автоматизированного
+проектирования и подготовки производства.
+  ]])
+  set(CPACK_DEBIAN_PACKAGE_SECTION "devel")
+  set(CPACK_DEBIAN_FILE_NAME "DEB-DEFAULT")
   set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/${PROJECT_NAME}")
 endif()

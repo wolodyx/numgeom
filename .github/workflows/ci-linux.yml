@@ -22,7 +22,6 @@ jobs:
         with:
           fetch-depth: 0
           fetch-tags: true
-          submodules: recursive
 
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-system

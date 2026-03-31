@@ -39,7 +39,16 @@ jobs:
           version: '6.8.3'
           cache: true
 
-      - name: Build
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+
+      - name: Build, test and package
         run: cmake --workflow --preset ci-windows-system
         env:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          path: bld/windows-system/numgeom-*-win64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

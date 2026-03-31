@@ -39,32 +39,9 @@ LD_LIBRARY_PATH=${env:VCPKG_ROOT}/installed/x64-linux/debug/lib
 QT_QPA_PLATFORM=xcb
 ]===]
   )
-
-  file(GENERATE
-    OUTPUT "${CMAKE_BINARY_DIR}/run-app-qt.sh"
-    CONTENT
-[===[
-script_dir="$(dirname -- $0)"
-export QT_PLUGIN_PATH="${script_dir}/plugins"
-export LD_LIBRARY_PATH="${script_dir}"
-export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
-"${script_dir}/app-qt"
-]===]
-  )
-endif()
-
-include(QtUtils)
-if(UNIX)
-  copy_qt_plugin("Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin" "platforms")
 endif()
 
 install(TARGETS app-qt)
-
-# Копируем плагины Qt.
-install(DIRECTORY
-  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/$<$<PLATFORM_ID:Windows>:$<CONFIG>/>plugins
-  DESTINATION bin
-)
 
 install(FILES
   ${PROJECT_SOURCE_DIR}/tests/data/one-side-rounded-cube.step
@@ -73,10 +50,4 @@ install(FILES
   DESTINATION doc
 )
 
-install(FILES
-  "${CMAKE_BINARY_DIR}/run-app-qt.sh"
-  DESTINATION bin
-  PERMISSIONS OWNER_EXECUTE OWNER_WRITE OWNER_READ
-              GROUP_EXECUTE GROUP_READ
-              WORLD_EXECUTE WORLD_READ
-)
+deploy_qt_app(TARGET app-qt)

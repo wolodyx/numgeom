@@ -9,7 +9,8 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "USE_SYSTEM_QT": "OFF"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
@@ -28,7 +29,8 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Debug"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "USE_SYSTEM_QT": "OFF"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
@@ -109,7 +111,8 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-mac",
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "USE_SYSTEM_QT": "OFF"
       },
       "condition": {
         "type": "equals",
@@ -168,6 +171,11 @@
       "name": "linux-system-release",
       "configurePreset": "linux-system-release",
       "generators": ["DEB"]
+    },
+    {
+      "name": "windows-system-release",
+      "configurePreset": "windows-system",
+      "generators": ["NSIS"]
     }
   ],
   "workflowPresets": [
@@ -222,6 +230,10 @@
         },
         {
           "type": "test",
+          "name": "windows-system-release"
+        },
+        {
+          "type": "package",
           "name": "windows-system-release"
         }
       ]

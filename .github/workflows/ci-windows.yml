@@ -50,8 +50,10 @@ jobs:
         env:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
 
-      - uses: actions/upload-artifact@v4
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
         with:
-          path: bld/windows-system/numgeom-*-win64.exe
+          working_directory: bld/windows-system
+          files: numgeom-*-win64.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

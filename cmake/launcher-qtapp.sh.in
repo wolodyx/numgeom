@@ -1,0 +1,10 @@
+#!/bin/bash
+
+script_dir="$(dirname -- $0)"
+export QT_QPA_PLATFORM=xcb
+if [ -x Qt*.so ]; then
+  export QT_PLUGIN_PATH="${script_dir}/plugins"
+  export LD_LIBRARY_PATH="${script_dir}"
+  export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
+fi
+"${script_dir}/@APP_EXECUTABLE@"

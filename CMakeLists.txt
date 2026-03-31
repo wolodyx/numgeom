@@ -38,6 +38,12 @@ if(UNIX)
 endif()
 
 if(ENABLE_QT)
+  # Признак, что при сборке и запуске Qt будет использован общесистемный Qt:
+  # * разделяемые библиотеки и плагины не копируются в `CMAKE_INSTALL_PREFIX`;
+  # * Qt не поставляется вместе с дистрибутивом;
+  # * приложение при запуске компонуется с установленной в систему версией Qt.
+  # Значение актуально только для UNIX, под Windows всегда `USE_SYSTEM_QT=OFF`.
+  option(USE_SYSTEM_QT "Use system wide Qt" ON)
   set(QtComponents Core Gui Widgets)
   find_package(Qt6 COMPONENTS ${QtComponents} CONFIG)
   set(NUMGEOM_QT_MAJOR_VERSION 6)

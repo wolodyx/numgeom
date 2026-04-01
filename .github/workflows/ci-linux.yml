@@ -36,4 +36,3 @@ jobs:
           path: bld/linux-system-release/*.deb
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-`

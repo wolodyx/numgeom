@@ -35,6 +35,6 @@ jobs:
         if: github.ref_type == 'tag'
         with:
           working_directory: bld/linux-system-release
-          files: *.deb
+          files: '*.deb'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

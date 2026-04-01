@@ -11,8 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
-      contents: read
+      contents: write
 
     container:
       image: ghcr.io/wolodyx/numgeom-ci-linux-system:latest

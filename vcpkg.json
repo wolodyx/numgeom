@@ -8,6 +8,10 @@
       "features": ["xcb"],
       "platform": "linux"
     },
+    {
+      "name": "glslang",
+      "features": ["tools"]
+    },
     "vulkan-sdk-components",
     "opencascade",
     {

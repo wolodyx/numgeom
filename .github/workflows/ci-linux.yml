@@ -8,29 +8,24 @@ on:
     types: [opened]
 
 jobs:
-  build:
+  # Сборка проекта с внешними зависимостями, уже установленными в систему.
+  build-system:
     runs-on: ubuntu-latest
     permissions:
-      packages: write
-      contents: read
-
+      contents: write
     container:
       image: ghcr.io/wolodyx/numgeom-ci-linux-system:latest
       options: '--user 1001:1001'
       credentials:
         username: ${{ github.actor }}
         password: ${{ secrets.GITHUB_TOKEN }}
-
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
-
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-system
-
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
@@ -38,3 +33,49 @@ jobs:
           files: '*.deb'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Сборка проекта с внешними зависимостями, подтягиваемыми через vcpkg.
+  build-with-vcpkg:
+    runs-on: ubuntu-latest
+    env:
+      VCPKG_BINARY_SOURCES: "clear;x-aws,s3://${{ secrets.YC_BUCKET_NAME }}/vcpkg-cache/,readwrite"
+      AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL: "https://storage.yandexcloud.net"
+      AWS_DEFAULT_BUCKET: ${{ secrets.YC_BUCKET_NAME }}
+      AWS_DEFAULT_REGION: "ru-central1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: recursive
+      - name: Install system dependencies and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install \
+            pkg-config            \
+            autoconf              \
+            autoconf-archive      \
+            automake              \
+            libtool               \
+            wayland-protocols     \
+            libwayland-dev        \
+            libwayland-client0    \
+            libxtst-dev           \
+            libxinerama-dev       \
+            libxcursor-dev        \
+            '^libxcb.*-dev'       \
+            libx11-xcb-dev        \
+            libgl1-mesa-dev       \
+            libxrender-dev        \
+            libxi-dev             \
+            libxkbcommon-dev      \
+            libxkbcommon-x11-dev  \
+            libsystemd-dev        \
+            libarchive-dev        \
+            libxrandr-dev         \
+            libltdl-dev
+      - uses: lukka/get-cmake@latest
+      - name: Build, test and package
+        run: cmake --workflow --preset ci-linux-vcpkg

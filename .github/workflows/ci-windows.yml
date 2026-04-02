@@ -1,59 +1,60 @@
 name: CI/CD Windows
 on:
   workflow_dispatch:
-  # push:
-  #   branches: ['main']
-  #   tags: ['v*']
-  # pull_request:
-  #   types: [opened]
+  push:
+    branches: ['main']
+    tags: ['v*']
+  pull_request:
+    types: [opened]
 
 jobs:
-#   build-system:
-#     runs-on: windows-latest
-#     steps:
-#       - name: Checkout code
-#         uses: actions/checkout@v4
-#         with:
-#           fetch-depth: 0
-#           fetch-tags: true
-#       - name: Prepare Vulkan SDK
-#         uses: humbletim/setup-vulkan-sdk@v1.2.1
-#         with:
-#           vulkan-query-version: 1.4.304.1
-#           vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools
-#           vulkan-use-cache: true
-#       - name: Install Boost
-#         uses: MarkusJx/install-boost@v2
-#         id:
-#           install-boost
-#         with:
-#           boost_version: 1.89.0
-#           platform_version: 2022
-#           toolset: msvc
-#           link: static
-#           cache: true
-#       - name: Install Pyhton
-#         uses: actions/setup-python@v6
-#         with:
-#           python-version: '3.13'
-#       - name: Install Qt
-#         uses: jurplel/install-qt-action@v4
-#         with:
-#           version: '6.8.3'
-#           cache: true
-#       - name: Install NSIS
-#         uses: negrutiu/nsis-install@v2
-#       - name: Build, test and package
-#         run: cmake --workflow --preset ci-windows-system
-#         env:
-#           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
-#       - uses: softprops/action-gh-release@v2
-#         if: github.ref_type == 'tag'
-#         with:
-#           working_directory: bld/windows-system
-#           files: numgeom-*-win64.exe
-#         env:
-#           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  build-system:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Prepare Vulkan SDK
+        uses: humbletim/setup-vulkan-sdk@v1.2.1
+        with:
+          vulkan-query-version: 1.4.304.1
+          vulkan-components: Vulkan-Headers, Vulkan-Loader, Glslang, SPIRV-Tools
+          vulkan-use-cache: true
+      - name: Install Boost
+        uses: MarkusJx/install-boost@v2
+        id:
+          install-boost
+        with:
+          boost_version: 1.89.0
+          platform_version: 2022
+          toolset: msvc
+          link: static
+          cache: true
+      - name: Install Pyhton
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.8.3'
+          cache: true
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+      - name: Build, test and package
+        run: cmake --workflow --preset ci-windows-system
+        env:
+          BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          working_directory: bld/windows-system
+          files: numgeom-*-win64.exe
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   build-with-vcpkg:
     runs-on: windows-latest
     env:

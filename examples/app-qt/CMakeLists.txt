@@ -63,9 +63,13 @@ install(FILES
 )
 
 set(used_qt_plugins
-  Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin
   Qt${NUMGEOM_QT_MAJOR_VERSION}::QJpegPlugin
 )
+if(LINUX)
+  list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin)
+elseif(WINDOWS)
+  list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QWindowsIntegrationPlugin)
+endif()
 
 install(
   FILES appimage/app-qt.sh
@@ -88,8 +92,9 @@ endforeach()
 install(
   CODE "set(executable_files ${executable_files})"
   CODE [[
-  set(DEPENDENCY_PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
-  file(TO_CMAKE_PATH "${DEPENDENCY_PATHS}" DEPENDENCY_PATHS)
+  if(DEFINED VCPKG_INSTALLED_DIR AND NOT ${VCPKG_INSTALLED_DIR} STREQUAL "")
+    set(DEPENDENCY_PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+  endif()
   file(GET_RUNTIME_DEPENDENCIES
     EXECUTABLES ${executable_files}
     RESOLVED_DEPENDENCIES_VAR _r_deps
@@ -109,11 +114,13 @@ install(
   endforeach()
   # Creating the missing `libvulkan.so ` -- symbolic link to `libvulkan.so.1'.
   if(NOT EXISTS ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so)
-    file(CREATE_LINK
-      libvulkan.so.1
-      ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so
-      SYMBOLIC
-    )
+    if(EXISTS ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so.1)
+      file(CREATE_LINK
+        libvulkan.so.1
+        ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so
+        SYMBOLIC
+      )
+    endif()
   endif()
 ]])
 

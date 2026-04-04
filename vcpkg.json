@@ -15,7 +15,7 @@
     "vulkan-sdk-components",
     "opencascade",
     {
-      "name": "qt5-base",
+      "name": "qtbase",
       "features": ["vulkan"]
     },
     {

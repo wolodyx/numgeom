@@ -1,0 +1,12 @@
+[Desktop Entry]
+Name=AppName
+Exec=app-qt.sh
+Icon=AppIcon
+Type=Application
+Categories=Education;Development;
+Comment=AppImage example
+MimeType=inode/directory;audio/flac;
+Name[en]="App name"
+Terminal=false
+StartupNotify=true
+NoDisplay=false

@@ -20,6 +20,7 @@ target_link_libraries(app-qt
   Qt::Gui
   numgeom::framework
   numgeom::io
+  $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
 )
 
 # Добавляем перед запуском app-qt путь к библиотекам Qt.
@@ -41,6 +42,17 @@ QT_QPA_PLATFORM=xcb
   )
 endif()
 
+if(UNIX)
+  add_custom_target(appimage-app-qt
+    COMMAND
+      ${CMAKE_CURRENT_SOURCE_DIR}/appimage/make-appimage.sh
+        ${CMAKE_CURRENT_SOURCE_DIR}
+    WORKING_DIRECTORY
+      ${CMAKE_CURRENT_BINARY_DIR}
+  )
+  add_dependencies(appimage-app-qt app-qt)
+endif()
+
 install(TARGETS app-qt)
 
 install(FILES
@@ -50,4 +62,64 @@ install(FILES
   DESTINATION doc
 )
 
-deploy_qt_app(TARGET app-qt)
+set(used_qt_plugins
+  Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin
+  Qt${NUMGEOM_QT_MAJOR_VERSION}::QJpegPlugin
+)
+
+install(
+  FILES appimage/app-qt.sh
+  DESTINATION bin
+  PERMISSIONS
+    OWNER_EXECUTE OWNER_WRITE OWNER_READ
+    GROUP_EXECUTE GROUP_READ
+    WORLD_EXECUTE WORLD_READ
+)
+install(
+  FILES appimage/qt.conf
+  DESTINATION bin
+)
+set(executable_files $<TARGET_FILE:app-qt>)
+foreach(plugin ${used_qt_plugins})
+  get_target_property(loc ${plugin} LOCATION)
+  list(APPEND executable_files ${loc})
+endforeach()
+
+install(
+  CODE "set(executable_files ${executable_files})"
+  CODE [[
+  set(DEPENDENCY_PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
+  file(TO_CMAKE_PATH "${DEPENDENCY_PATHS}" DEPENDENCY_PATHS)
+  file(GET_RUNTIME_DEPENDENCIES
+    EXECUTABLES ${executable_files}
+    RESOLVED_DEPENDENCIES_VAR _r_deps
+    UNRESOLVED_DEPENDENCIES_VAR _u_deps
+    POST_EXCLUDE_REGEXES
+      "^C:[/\\]Windows[/\\]system32[/\\]*"
+      "^/lib/x86_64-linux-gnu/"
+    DIRECTORIES "${DEPENDENCY_PATHS}"
+  )
+  foreach(_file ${_r_deps})
+    file(INSTALL
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
+      TYPE SHARED_LIBRARY
+      FOLLOW_SYMLINK_CHAIN
+      FILES "${_file}"
+    )
+  endforeach()
+  # Creating the missing `libvulkan.so ` -- symbolic link to `libvulkan.so.1'.
+  if(NOT EXISTS ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so)
+    file(CREATE_LINK
+      libvulkan.so.1
+      ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so
+      SYMBOLIC
+    )
+  endif()
+]])
+
+foreach(plugin IN LISTS used_qt_plugins)
+  get_target_property(type ${plugin} QT_PLUGIN_TYPE)
+  install(FILES $<TARGET_FILE:${plugin}>
+    DESTINATION plugins/${type}
+  )
+endforeach()

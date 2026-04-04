@@ -72,11 +72,13 @@ jobs:
             libxi-dev             \
             libxkbcommon-dev      \
             libxkbcommon-x11-dev  \
+            libegl1-mesa-dev      \
+            libglu1-mesa-dev      \
+            libsm-dev             \
             libsystemd-dev        \
             libarchive-dev        \
             libxrandr-dev         \
-            libltdl-dev           \
-            lld
+            libltdl-dev
       - uses: lukka/get-cmake@latest
       - uses: pcolby/install-linuxdeploy@v1
       - name: Build, test and package

@@ -78,6 +78,7 @@ jobs:
             libltdl-dev           \
             lld
       - uses: lukka/get-cmake@latest
+      - uses: pcolby/install-linuxdeploy@v1
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-vcpkg
       - uses: softprops/action-gh-release@v2

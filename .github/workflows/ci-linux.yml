@@ -79,3 +79,10 @@ jobs:
       - uses: lukka/get-cmake@latest
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-vcpkg
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          working_directory: bld/linux-vcpkg-release/examples/app-qt
+          files: 'numgeom-*.AppImage'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

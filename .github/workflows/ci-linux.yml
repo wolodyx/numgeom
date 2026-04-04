@@ -75,7 +75,8 @@ jobs:
             libsystemd-dev        \
             libarchive-dev        \
             libxrandr-dev         \
-            libltdl-dev
+            libltdl-dev           \
+            lld
       - uses: lukka/get-cmake@latest
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-vcpkg

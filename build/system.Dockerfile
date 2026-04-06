@@ -40,6 +40,12 @@ RUN apt update               \
       libwayland-dev         \
       libwayland-client0
 
+# Install linuxdeploy to generate the appimage packages.
+RUN  curl -L -o linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage \
+  && chmod +x linuxdeploy \
+  && mv linuxdeploy /usr/local/bin \
+  && apt-get -y install file fuse
+
 WORKDIR /usr/local/src
 
 ARG USERNAME=tim

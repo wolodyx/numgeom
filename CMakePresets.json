@@ -125,7 +125,7 @@
     {
       "name": "linux-base",
       "hidden": true,
-      "targets": ["all", "install"]
+      "targets": ["all", "install", "appimage-app-qt"]
     },
     {
       "name": "linux-vcpkg-release",

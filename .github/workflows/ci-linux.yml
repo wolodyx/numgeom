@@ -72,10 +72,26 @@ jobs:
             libxi-dev             \
             libxkbcommon-dev      \
             libxkbcommon-x11-dev  \
+            libegl1-mesa-dev      \
+            libglu1-mesa-dev      \
+            libsm-dev             \
             libsystemd-dev        \
             libarchive-dev        \
             libxrandr-dev         \
             libltdl-dev
       - uses: lukka/get-cmake@latest
+      - name: Install linuxdeploy
+        run: |
+          mkdir ${{ runner.temp }}/bin
+          curl -L -o ${{ runner.temp }}/bin/linuxdeploy https://github.com/linuxdeploy/linuxdeploy/releases/download/1-alpha-20251107-1/linuxdeploy-x86_64.AppImage
+          chmod +x ${{ runner.temp }}/bin/linuxdeploy
+          echo "${{ runner.temp }}/bin" >> $GITHUB_PATH
       - name: Build, test and package
         run: cmake --workflow --preset ci-linux-vcpkg
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          working_directory: bld/linux-vcpkg-release/examples/app-qt
+          files: 'numgeom-*.AppImage'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,7 +7,7 @@ on:
     paths-ignore:
       - '.devcontainer'
       - '.github/**'
-      - '!.github/workflows/linux.yml'
+      - '!.github/workflows/windows.yml'
       - '.vscode'
       - 'docs/**'
       - 'vcpkg/**'
@@ -17,7 +17,7 @@ on:
     paths-ignore:
       - '.devcontainer'
       - '.github/**'
-      - '!.github/workflows/linux.yml'
+      - '!.github/workflows/windows.yml'
       - '.vscode'
       - 'docs/**'
       - 'vcpkg/**'

@@ -1,7 +1,7 @@
 # NumGeom Framework
 
-![linux build](https://github.com/wolodyx/numgeom/actions/workflows/ci-linux.yml/badge.svg)
-![windows build](https://github.com/wolodyx/numgeom/actions/workflows/ci-windows.yml/badge.svg)
+![linux build](https://github.com/wolodyx/numgeom/actions/workflows/linux.yml/badge.svg)
+![windows build](https://github.com/wolodyx/numgeom/actions/workflows/windows.yml/badge.svg)
 
 **Быстрая разработка CAD/CAE/CAM приложений на C++**
 

@@ -1,11 +1,27 @@
-name: CI/CD Windows
+name: Windows Build
 on:
   workflow_dispatch:
   push:
     branches: ['main']
     tags: ['v*']
+    paths-ignore:
+      - '.devcontainer'
+      - '.github/**'
+      - '!.github/workflows/linux.yml'
+      - '.vscode'
+      - 'docs/**'
+      - 'vcpkg/**'
+      - '**.md'
   pull_request:
     types: [opened]
+    paths-ignore:
+      - '.devcontainer'
+      - '.github/**'
+      - '!.github/workflows/linux.yml'
+      - '.vscode'
+      - 'docs/**'
+      - 'vcpkg/**'
+      - '**.md'
 
 jobs:
   build-system:

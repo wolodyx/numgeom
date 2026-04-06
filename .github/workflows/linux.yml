@@ -1,9 +1,17 @@
-name: CI/CD Linux
+name: Linux Build
 on:
   workflow_dispatch:
   push:
     branches: ['main']
     tags: ['v*']
+    paths-ignore:
+      - '.devcontainer'
+      - '.github/**'
+      - '!.github/workflows/linux.yml'
+      - '.vscode'
+      - 'docs/**'
+      - 'vcpkg/**'
+      - '**.md'
   pull_request:
     types: [opened]
 

@@ -1,4 +1,4 @@
-name: Deploy a Docker image for Linux builds
+name: Deploy docker images
 
 on:
   workflow_dispatch:

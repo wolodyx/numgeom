@@ -17,6 +17,7 @@ RUN apt update &&            \
         unzip                \
         tar                  \
         file                 \
+        wget                 \
         pkg-config           \
         autoconf             \
         autoconf-archive     \

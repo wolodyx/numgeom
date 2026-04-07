@@ -88,7 +88,7 @@ jobs:
       - name: Install WiX Toolset v4
         if: github.ref_type == 'tag'
         run: |
-          dotnet tool install --global wix
+          dotnet tool install --global wix --version 4.0.4
           wix extension add --global WixToolset.UI.wixext
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-vcpkg

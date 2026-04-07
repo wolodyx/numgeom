@@ -57,19 +57,10 @@ jobs:
         with:
           version: '6.8.3'
           cache: true
-      - name: Install NSIS
-        uses: negrutiu/nsis-install@v2
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-system
         env:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
-      - uses: softprops/action-gh-release@v2
-        if: github.ref_type == 'tag'
-        with:
-          working_directory: bld/windows-system
-          files: numgeom-*-win64.exe
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   build-with-vcpkg:
     runs-on: windows-latest
@@ -87,5 +78,26 @@ jobs:
           fetch-tags: true
           submodules: recursive
       - uses: lukka/get-cmake@latest
+      - name: Install NSIS
+        uses: negrutiu/nsis-install@v2
+        if: github.ref_type == 'tag'
+      - uses: actions/setup-dotnet@v4
+        if: github.ref_type == 'tag'
+        with:
+          dotnet-version: '8.0.x'
+      - name: Install WiX Toolset v4
+        if: github.ref_type == 'tag'
+        run: |
+          dotnet tool install --global wix
+          wix extension add --global WixToolset.UI.wixext
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-vcpkg
+      - uses: softprops/action-gh-release@v2
+        if: github.ref_type == 'tag'
+        with:
+          working_directory: bld/windows-vcpkg
+          files: |
+            numgeom-*-win64.exe
+            numgeom-*.msi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -173,9 +173,9 @@
       "generators": ["DEB"]
     },
     {
-      "name": "windows-system-release",
-      "configurePreset": "windows-system",
-      "generators": ["NSIS"]
+      "name": "windows-vcpkg-release",
+      "configurePreset": "windows-vcpkg",
+      "generators": ["NSIS", "WIX"]
     }
   ],
   "workflowPresets": [
@@ -231,10 +231,6 @@
         {
           "type": "test",
           "name": "windows-system-release"
-        },
-        {
-          "type": "package",
-          "name": "windows-system-release"
         }
       ]
     },
@@ -251,6 +247,10 @@
         },
         {
           "type": "test",
+          "name": "windows-vcpkg-release"
+        },
+        {
+          "type": "package",
           "name": "windows-vcpkg-release"
         }
       ]

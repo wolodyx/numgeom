@@ -2,6 +2,7 @@ set(PUBLIC_HEADERS
   include/numgeom/circularlist.h
   include/numgeom/iterator.h
   include/numgeom/outcome.h
+  include/numgeom/shapes.h
   include/numgeom/staticjaggedarray.h
   include/numgeom/trimesh.h
   include/numgeom/trimeshconnectivity.h
@@ -10,6 +11,7 @@ set(PUBLIC_HEADERS
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   outcome.cc
+  shapes.cc
   staticjaggedarray.cc
   trimesh.cc
   trimeshconnectivity.cc

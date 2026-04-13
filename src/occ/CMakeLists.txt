@@ -7,7 +7,6 @@ set(PUBLIC_HEADERS
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
-  include/numgeom/shapes.h
   include/numgeom/tesselate.h
   include/numgeom/utilities.h
 )
@@ -23,7 +22,6 @@ set(SOURCE_FILES
   octree.cc
   quadtree.cc
   removefaces.cc
-  shapes.cc
   tesselate.cc
   utilities.cc
   writevtk.cc               writevtk.h

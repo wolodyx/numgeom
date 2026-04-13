@@ -1,7 +1,7 @@
 #ifndef numgeom_numgeom_circularlist_h
 #define numgeom_numgeom_circularlist_h
 
-#include "numgeom/numgeomcore_export.h"
+#include "numgeom/core_export.h"
 
 template <typename T>
 class CORE_EXPORT CircularList {

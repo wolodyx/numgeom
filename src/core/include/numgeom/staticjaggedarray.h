@@ -4,7 +4,7 @@
 #include <cstddef>
 #include <vector>
 
-#include "numgeom/numgeomcore_export.h"
+#include "numgeom/core_export.h"
 
 /**\class StaticJaggedArray
 \brief Static jagged array

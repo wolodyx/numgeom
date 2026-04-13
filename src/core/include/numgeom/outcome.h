@@ -4,7 +4,7 @@
 #include <iosfwd>
 #include <string>
 
-#include "numgeom/numgeomcore_export.h"
+#include "numgeom/core_export.h"
 
 class Outcome {
  public:

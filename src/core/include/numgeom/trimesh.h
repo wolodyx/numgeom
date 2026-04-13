@@ -6,7 +6,7 @@
 #include <vector>
 
 #include "glm/glm.hpp"
-#include "numgeom/numgeomcore_export.h"
+#include "numgeom/core_export.h"
 
 #define NONE_INDEX -1
 

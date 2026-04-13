@@ -1,5 +1,5 @@
-#ifndef numgeom_core_iterators_h
-#define numgeom_core_iterators_h
+#ifndef NUMGEOM_CORE_ITERATOR_H
+#define NUMGEOM_CORE_ITERATOR_H
 
 #include <cassert>
 #include <cstddef>
@@ -77,4 +77,4 @@ class Iterator {
  private:
   IteratorImpl<T>* m_impl;
 };
-#endif  // numgeom_core_iterators_h
+#endif // !NUMGEOM_CORE_ITERATOR_H

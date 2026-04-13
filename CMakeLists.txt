@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
+if(POLICY CMP0207)
+  cmake_policy(SET CMP0207 NEW)
+endif()
+
 project(NumGeom
   LANGUAGES CXX C
   VERSION 0.0.1

@@ -5,6 +5,8 @@
 
 #include "glm/glm.hpp"
 
+class AlignedBoundBox;
+
 /** \class Camera
 Вспомогательный класс для управления параметрами камеры.
 */
@@ -24,7 +26,7 @@ class Camera {
   glm::mat4 viewMatrix() const;
 
   //! Матрица проекции.
-  glm::mat4 projectionMatrix(const glm::vec3&, const glm::vec3&) const;
+  glm::mat4 projectionMatrix(const AlignedBoundBox&) const;
 
   void translate(const glm::vec3& v);
 
@@ -37,7 +39,7 @@ class Camera {
 
   void zoom(float k);
 
-  void fitBox(const glm::vec3& minPoint, const glm::vec3& maxPoint);
+  void fitBox(const AlignedBoundBox&);
 
   void setAspectFunction(std::function<float()>);
 

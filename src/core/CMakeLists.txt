@@ -1,4 +1,5 @@
 set(PUBLIC_HEADERS
+  include/numgeom/alignedboundbox.h
   include/numgeom/circularlist.h
   include/numgeom/iterator.h
   include/numgeom/iteratorimpl.h

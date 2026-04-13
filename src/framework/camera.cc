@@ -2,6 +2,8 @@
 
 #include "glm/gtc/matrix_transform.hpp"
 
+#include "numgeom/alignedboundbox.h"
+
 const float Camera::s_fovY = glm::radians(45.0f);
 
 float Camera::computeCameraDistance(float radius) const {
@@ -38,8 +40,7 @@ float distanceBetweenPointAndCube(const glm::vec3& pt,
 }
 }  // namespace
 
-glm::mat4 Camera::projectionMatrix(const glm::vec3& minPoint,
-                                   const glm::vec3& maxPoint) const {
+glm::mat4 Camera::projectionMatrix(const AlignedBoundBox& box) const {
   return glm::perspective(glm::radians(45.0f), m_aspectFunction(), 0.001f,
                           1000.0f);
 }
@@ -70,9 +71,9 @@ void Camera::translate(const glm::vec2& screenOffset) {
 
 void Camera::zoom(float k) { m_position += (k * m_direction); }
 
-void Camera::fitBox(const glm::vec3& minPoint, const glm::vec3& maxPoint) {
-  glm::vec3 center = (minPoint + maxPoint) * 0.5f;
-  glm::vec3 size = maxPoint - minPoint;
+void Camera::fitBox(const AlignedBoundBox& box) {
+  glm::vec3 center = box.GetCenter();
+  glm::vec3 size = box.GetSize();
   float radius = glm::length(size) * 0.5f;
   float distance = computeCameraDistance(radius);
   m_position = center - m_direction * distance;

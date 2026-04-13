@@ -3,51 +3,36 @@
 #include <format>
 #include <iostream>
 
-#include "camera.h"
+#include "numgeom/alignedboundbox.h"
 #include "numgeom/gpumanager.h"
 #include "numgeom/trimesh.h"
 
-namespace {
-void ComputeBoundBox(CTriMesh::Ptr scene, glm::vec3& bbMinPoint,
-                     glm::vec3& bbMaxPoint) {
-  assert(scene != nullptr);
+#include "camera.h"
 
-  bbMinPoint = glm::vec3(+FLT_MAX, +FLT_MAX, +FLT_MAX);
-  bbMaxPoint = glm::vec3(-FLT_MAX, -FLT_MAX, -FLT_MAX);
+namespace {
+AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
+  assert(scene != nullptr);
+  AlignedBoundBox box;
   for (size_t i = 0; i < scene->NbCells(); ++i) {
     const auto& cell = scene->GetCell(i);
     for (size_t j = 0; j < 3; ++j) {
       auto pt = scene->GetNode(cell.GetNodeIndex(j));
-      bbMinPoint.x = std::min(bbMinPoint.x, static_cast<float>(pt.x));
-      bbMinPoint.y = std::min(bbMinPoint.y, static_cast<float>(pt.y));
-      bbMinPoint.z = std::min(bbMinPoint.z, static_cast<float>(pt.z));
-      bbMaxPoint.x = std::max(bbMaxPoint.x, static_cast<float>(pt.x));
-      bbMaxPoint.y = std::max(bbMaxPoint.y, static_cast<float>(pt.y));
-      bbMaxPoint.z = std::max(bbMaxPoint.z, static_cast<float>(pt.z));
+      box.Expand(pt);
     }
   }
 
-  glm::vec3 center = 0.5f * (bbMinPoint + bbMaxPoint);
-  glm::vec3 size = bbMaxPoint - bbMinPoint;
+  glm::vec3 center = box.GetCenter();
+  glm::vec3 size = box.GetSize();
   float maxLenght = std::max(size.x, std::max(size.y, size.z));
   for (int i = 0; i < 3; ++i) {
-    float& cMin = *(&bbMinPoint.x + i);
-    float& cMax = *(&bbMaxPoint.x + i);
+    float& cMin = *(&box.min_.x + i);
+    float& cMax = *(&box.max_.x + i);
     if (cMin == cMax) {
       cMin = *(&center.x + i) - 0.5 * maxLenght;
       cMax = *(&center.x + i) + 0.5 * maxLenght;
     }
   }
-
-  // for(size_t i = 0; i < scene->NbNodes(); ++i) {
-  //     auto pt = scene->GetNode(i);
-  //     worldMin.x = std::min(worldMin.x, static_cast<float>(pt.x));
-  //     worldMin.y = std::min(worldMin.y, static_cast<float>(pt.y));
-  //     worldMin.z = std::min(worldMin.z, static_cast<float>(pt.z));
-  //     worldMax.x = std::max(worldMax.x, static_cast<float>(pt.x));
-  //     worldMax.y = std::max(worldMax.y, static_cast<float>(pt.y));
-  //     worldMax.z = std::max(worldMax.z, static_cast<float>(pt.z));
-  // }
+  return box;
 }
 }  // namespace
 
@@ -57,15 +42,15 @@ struct Application::Impl {
   const float fovy = glm::radians(45.0f);
 
   CTriMesh::Ptr scene;
-  glm::vec3 worldMin, worldMax;
+  AlignedBoundBox sceneBox;
 
   GpuManager* gpuManager;
 
   void updateScene(CTriMesh::Ptr newScene) {
     if (scene == newScene) return;
     scene = newScene;
-    ComputeBoundBox(scene, worldMin, worldMax);
-    camera.fitBox(worldMin, worldMax);
+    auto box = ComputeBoundBox(scene);
+    camera.fitBox(box);
   }
 };
 
@@ -77,7 +62,7 @@ Application::Application(int argc, char* argv[]) {
 Application::~Application() { delete m_pimpl; }
 
 void Application::fitScene() {
-  m_pimpl->camera.fitBox(m_pimpl->worldMin, m_pimpl->worldMax);
+  m_pimpl->camera.fitBox(m_pimpl->sceneBox);
   this->update();
 }
 
@@ -100,7 +85,7 @@ void Application::translateCamera(int x, int y, int dx, int dy) {
 void Application::rotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
-  glm::vec3 pivotPoint = 0.5f * (m_pimpl->worldMin + m_pimpl->worldMax);
+  glm::vec3 pivotPoint = m_pimpl->sceneBox.GetCenter();
   m_pimpl->camera.rotateAroundPivot(pivotPoint, screenOffset);
   this->update();
 }
@@ -118,7 +103,7 @@ glm::mat4 Application::getViewMatrix() const {
 }
 
 glm::mat4 Application::getProjectionMatrix() const {
-  return m_pimpl->camera.projectionMatrix(m_pimpl->worldMin, m_pimpl->worldMax);
+  return m_pimpl->camera.projectionMatrix(m_pimpl->sceneBox);
 }
 
 void Application::update() { m_pimpl->gpuManager->update(); }

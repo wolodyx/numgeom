@@ -31,12 +31,14 @@
 #include "glm/gtc/type_ptr.hpp"
 #include "glm/gtx/string_cast.hpp"
 
+#define VMA_IMPLEMENTATION
+#include "vk_mem_alloc.h"
+
 #include "boost/log/trivial.hpp"
 
 #include "numgeom/application.h"
-#include "numgeom/gpumemory.h"
+#include "numgeom/trimeshconnectivity.h"
 
-#include "meshchunk.h"
 #include "vkutilities.h"
 
 // Количество изображений в обращении.
@@ -117,6 +119,8 @@ struct VulkanState {
 
   VkDevice device = VK_NULL_HANDLE;
 
+  VmaAllocator allocator;
+
   std::optional<uint32_t> graphicsFamilyIndex, presentFamilyIndex;
 
   VkQueue queue = VK_NULL_HANDLE;
@@ -165,11 +169,23 @@ struct VulkanState {
 
   VkDescriptorSetLayout descLayout = VK_NULL_HANDLE;
 
-  GpuMemory* memory = nullptr;
+  //! Буферы и память под данные для отправки на GPU.
+  //! \{
+  VkBuffer buffer_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_vertex = VK_NULL_HANDLE;
 
-  GpuMemory* frameMemory = nullptr;
+  VkBuffer buffer_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_index = VK_NULL_HANDLE;
 
-  MeshChunk* mesh = nullptr;
+  VkBuffer buffer_normal = VK_NULL_HANDLE;
+  VmaAllocation alloc_normal = VK_NULL_HANDLE;
+
+  VkBuffer buffer_frame = VK_NULL_HANDLE;
+  VmaAllocation alloc_frame = VK_NULL_HANDLE;
+  //! \}
+
+  //! Количество примитивов для отрисовки.
+  uint32_t index_count = 0;
 
   //! Память устройства, в котором содержатся изображения в
   //! `ImageResources::msaaImage`.
@@ -424,10 +440,15 @@ bool createGraphicsPipeline(VulkanState* state) {
       },
   };
 
-  VkVertexInputBindingDescription vertexBindingDescriptions[] = {
+  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
       VkVertexInputBindingDescription{
         .binding = 0,
-        .stride = 6 * sizeof(float),
+        .stride = 3 * sizeof(float),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+      VkVertexInputBindingDescription{
+        .binding = 1,
+        .stride = 3 * sizeof(float),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
       },
   };
@@ -440,17 +461,18 @@ bool createGraphicsPipeline(VulkanState* state) {
       },
       VkVertexInputAttributeDescription{
         .location = 1,
-        .binding = 0,
+        .binding = 1,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 3 * sizeof(float)
+        .offset = 0
       },
   };
   VkPipelineVertexInputStateCreateInfo ci_vertexInputState{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = 1,
-      .pVertexBindingDescriptions = vertexBindingDescriptions,
+      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
+      .pVertexBindingDescriptions = vertex_binding_descs.data(),
       .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
-      .pVertexAttributeDescriptions = vertex_attr_descs.data()};
+      .pVertexAttributeDescriptions = vertex_attr_descs.data()
+  };
 
   VkPipelineInputAssemblyStateCreateInfo ci_inputAssemblyState{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
@@ -989,7 +1011,7 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
                        VK_SUBPASS_CONTENTS_INLINE);
 
   // Дальнейшие команды будут вызваны, только если сцена не пуста.
-  if (state->mesh) {
+  if (state->buffer_vertex) {
     vkCmdBindPipeline(frame.cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       state->pipeline);
 
@@ -998,13 +1020,13 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
                             nullptr);
 
     // Bind vertex buffers.
-    VkBuffer buffers[] = {state->memory->buffer()};
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(frame.cmdBuf, 0, 1, buffers, offsets);
+    std::vector<VkBuffer> buffers = {state->buffer_vertex, state->buffer_normal};
+    VkDeviceSize offsets[] = {0, 0};
+    vkCmdBindVertexBuffers(frame.cmdBuf, 0, buffers.size(), buffers.data(), offsets);
 
     // Bind index buffers.
-    vkCmdBindIndexBuffer(frame.cmdBuf, state->mesh->buffer(),
-                         state->mesh->indexOffset(), VK_INDEX_TYPE_UINT32);
+    vkCmdBindIndexBuffer(frame.cmdBuf, state->buffer_index, 0,
+                         VK_INDEX_TYPE_UINT32);
 
     const VkViewport viewport = {
         .x = 0,
@@ -1022,7 +1044,7 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
     };
     vkCmdSetScissor(frame.cmdBuf, 0, 1, &scissor);
 
-    vkCmdDrawIndexed(frame.cmdBuf, state->mesh->indexCount(), 1, 0, 0, 0);
+    vkCmdDrawIndexed(frame.cmdBuf, state->index_count, 1, 0, 0, 0);
   }
 
   vkCmdEndRenderPass(frame.cmdBuf);
@@ -1340,6 +1362,22 @@ bool createLogicalDevice(VulkanState* state) {
   BOOST_LOG_TRIVIAL(trace) << std::format("Logical device {} is created",
                                           static_cast<void*>(state->device));
 
+  // Создаем vma-аллокатор.
+  VmaAllocatorCreateInfo ci_allocator {
+      .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT,
+      .physicalDevice = state->physicalDevice,
+      .device = state->device,
+      .instance = state->instance,
+      .vulkanApiVersion = VK_API_VERSION_1_2,
+  };
+  r = vmaCreateAllocator(&ci_allocator, &state->allocator);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "VMA allocator creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+
   VkDeviceQueueInfo2 queueInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
       .queueFamilyIndex = state->graphicsFamilyIndex.value(),
@@ -1560,12 +1598,19 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
     initFrame(state, &state->frameRes[i]);
 
   // Память под данные фреймов.
-  state->frameMemory = new GpuMemory(state->physicalDevice, state->device,
-                                     VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT);
-  VkDeviceSize vbo_size = state->frameMemory->uniformBlockSize(sizeof(VertexBufferObject));
-  VkDeviceSize fbo_size = state->frameMemory->uniformBlockSize(sizeof(FragmentBufferObject));
+  VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
+  VkDeviceSize fbo_size = Aligned(sizeof(FragmentBufferObject), 256);
   size_t frame_memory_size = state->frameCount * (vbo_size + fbo_size);
-  state->frameMemory->resize(frame_memory_size);
+  VkBufferCreateInfo ci_buffer {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = frame_memory_size,
+      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+  };
+  VmaAllocationCreateInfo ci_allocation {
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+  };
+  vmaCreateBuffer(state->allocator, &ci_buffer, &ci_allocation,
+                  &state->buffer_frame, &state->alloc_frame, nullptr);
 
   state->stopRendering = false;
 
@@ -1590,6 +1635,136 @@ bool GpuManager::initialize() {
 }
 
 namespace {
+glm::vec3 computeTriangleNormal(const glm::vec3& a, const glm::vec3& b,
+                                const glm::vec3& c) {
+  glm::vec3 ab = b - a;
+  glm::vec3 ac = c - a;
+  glm::vec3 normal = glm::cross(ab, ac);
+  float length = glm::length(normal);
+  if (length < 1e-6f)
+    return glm::vec3();
+  return normal / length;
+}
+
+std::vector<glm::vec3> computeNormals(CTriMesh::Ptr mesh) {
+  size_t nodes_count = mesh->NbNodes();
+  std::vector<glm::vec3> normals(nodes_count);
+  auto* con = mesh->Connectivity();
+  std::vector<size_t> adjTrias;
+  for (size_t node_i = 0; node_i < nodes_count; ++node_i) {
+    glm::vec3 node_n(0.0f, 0.0f, 0.0f);
+    con->Node2Trias(node_i, adjTrias);
+    for (size_t tria_i : adjTrias) {
+      const auto& tria = mesh->GetCell(tria_i);
+      glm::vec3 tria_n = computeTriangleNormal(mesh->GetNode(tria.na),
+                                               mesh->GetNode(tria.nb),
+                                               mesh->GetNode(tria.nc));
+      node_n += tria_n;
+    }
+    normals[node_i] = glm::normalize(node_n);
+  }
+  return normals;
+}
+
+void UpdateScene(VulkanState* state, CTriMesh::Ptr scene) {
+  if (state->buffer_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
+    vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
+    vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
+    state->buffer_vertex = VK_NULL_HANDLE;
+    state->buffer_normal = VK_NULL_HANDLE;
+    state->buffer_index = VK_NULL_HANDLE;
+  }
+
+  size_t verts_count = scene->NbNodes();
+  size_t cells_count = scene->NbCells();
+  VkDeviceSize vertex_buffer_size = Aligned(6 * verts_count * sizeof(float), 256);
+  VkDeviceSize normal_buffer_size = Aligned(3 * cells_count * sizeof(float), 256);
+  VkDeviceSize index_buffer_size = Aligned(3 * cells_count * sizeof(uint32_t), 256);
+
+  {
+    // Выделяем память под буфер вершин.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = vertex_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_vertex,
+                    &state->alloc_vertex, nullptr);
+
+    // Копируем вершины.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_vertex, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    for (size_t i = 0; i < scene->NbNodes(); ++i) {
+      auto pt = scene->GetNode(i);
+      *data++ = pt.x;
+      *data++ = pt.y;
+      *data++ = pt.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_vertex);
+  }
+
+  {
+    // Выделяем память под буфер с нормалями.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = normal_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_normal,
+                    &state->alloc_normal, nullptr);
+
+    // Копируем нормали.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_normal, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    auto normals = computeNormals(scene);
+    for (const glm::vec3& n : normals) {
+      *data++ = n.x;
+      *data++ = n.y;
+      *data++ = n.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_normal);
+  }
+
+  {
+    // Выделяем память под индексный буфер.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = index_buffer_size,
+        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_index,
+                    &state->alloc_index, nullptr);
+
+    // Копируем индексный буфер.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_index, &mapped_data);
+    uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
+    for (size_t i = 0; i < scene->NbCells(); ++i) {
+      auto tria = scene->GetCell(i);
+      *data++ = tria.na;
+      *data++ = tria.nb;
+      *data++ = tria.nc;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_index);
+  }
+
+  state->index_count = 3 * scene->NbCells();
+}
 
 void updateDescriptorSets(Application* app, VulkanState* state) {
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
@@ -1609,25 +1784,27 @@ void updateDescriptorSets(Application* app, VulkanState* state) {
     .viewPos = glm::vec4(app->CameraPosition(), 0.0f)
   };
 
-  VkDeviceSize vbo_size = state->frameMemory->uniformBlockSize(sizeof(vbo));
-  VkDeviceSize fbo_size = state->frameMemory->uniformBlockSize(sizeof(fbo));
+  VkDeviceSize vbo_size = Aligned(sizeof(vbo), 256);
+  VkDeviceSize fbo_size = Aligned(sizeof(fbo), 256);
   VkDeviceSize frame_data_size = vbo_size + fbo_size;
   VkDeviceSize frame_offset = state->currentFrameIndex * frame_data_size;
 
-  auto mapping = state->frameMemory->access();
-  std::byte* data = mapping.data() + frame_offset;
-
+  // Осуществляем прямую запись данных в разделяемую память CPU и GPU.
+  void* mapped_data = nullptr;
+  vmaMapMemory(state->allocator, state->alloc_frame, &mapped_data);
+  std::byte* data = reinterpret_cast<std::byte*>(mapped_data) + frame_offset;
   std::memcpy(data, &vbo, sizeof(vbo));
   std::memcpy(data + vbo_size, &fbo, sizeof(fbo));
+  vmaUnmapMemory(state->allocator, state->alloc_frame);
 
   std::vector<VkDescriptorBufferInfo> bufferInfo{
       VkDescriptorBufferInfo{
-        .buffer = state->frameMemory->buffer(),
+        .buffer = state->buffer_frame,
         .offset = frame_offset,
         .range = sizeof(vbo)
       },
       VkDescriptorBufferInfo{
-        .buffer = state->frameMemory->buffer(),
+        .buffer = state->buffer_frame,
         .offset = frame_offset + vbo_size,
         .range = sizeof(fbo)
       },
@@ -1670,16 +1847,8 @@ void updateDataForFrame(Application* app, VulkanState* state) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
       s_oldSceneHash = nowSceneHash;
-      if (state->memory) {
-        delete state->memory;
-        state->memory = nullptr;
-        delete state->mesh;
-        state->mesh = nullptr;
-      }
-      state->memory = new GpuMemory(
-          state->physicalDevice, state->device,
-          VK_BUFFER_USAGE_VERTEX_BUFFER_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT);
-      state->mesh = new MeshChunk(state->memory, scene);
+      // Инициализируем память сценой.
+      UpdateScene(state, scene);
       state->stopRendering = false;
     }
   }
@@ -1772,13 +1941,16 @@ void GpuManager::finalize() {
   vkDestroyCommandPool(state->device, state->cmdPool, nullptr);
   state->cmdPool = VK_NULL_HANDLE;
 
-  delete state->mesh;
-  delete state->memory;
-  delete state->frameMemory;
+  vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
+  vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
+  vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
+  vmaDestroyBuffer(state->allocator, state->buffer_frame, state->alloc_frame);
 
   if (!state->externalSurface)
     vkDestroySurfaceKHR(state->instance, state->surface, nullptr);
   state->surface = VK_NULL_HANDLE;
+
+  vmaDestroyAllocator(state->allocator);
 
   vkDestroyDevice(state->device, nullptr);
 

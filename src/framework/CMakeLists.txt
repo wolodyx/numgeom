@@ -1,7 +1,6 @@
 set(PUBLIC_HEADERS
   include/numgeom/application.h
   include/numgeom/gpumanager.h
-  include/numgeom/gpumemory.h
   include/numgeom/userinputcontroller.h
 )
 
@@ -10,8 +9,6 @@ set(SOURCE_FILES
   application.cc
   camera.cc                 camera.h
   gpumanager.cc
-  gpumemory.cc
-  meshchunk.cc              meshchunk.h
   userinputcontroller.cc
   vkutilities.cc            vkutilities.h
 )

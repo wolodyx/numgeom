@@ -26,6 +26,8 @@ target_link_libraries(framework
     Vulkan::Vulkan
     Boost::log
     numgeom::core
+  PRIVATE
+    VulkanMemoryAllocator
 )
 
 #set_target_properties(framework PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")

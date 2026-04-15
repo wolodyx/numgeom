@@ -39,4 +39,8 @@ target_link_libraries(core
     glm::glm
 )
 
+if(WIN32)
+  target_compile_definitions(core PRIVATE _USE_MATH_DEFINES)
+endif()
+
 install(TARGETS core)

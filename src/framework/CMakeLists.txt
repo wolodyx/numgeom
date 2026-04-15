@@ -1,14 +1,27 @@
 set(PUBLIC_HEADERS
   include/numgeom/application.h
+  include/numgeom/axisindicator.h
+  include/numgeom/drawable.h
   include/numgeom/gpumanager.h
+  include/numgeom/scene.h
+  include/numgeom/sceneobject.h
+  include/numgeom/sceneobject_mesh.h
+  include/numgeom/scenewidget.h
   include/numgeom/userinputcontroller.h
 )
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   application.cc
+  axisindicator.cc
   camera.cc                 camera.h
+  drawable.cc
   gpumanager.cc
+  scene.cc
+  sceneiterators.cc         sceneiterators.h
+  sceneobject.cc
+  sceneobject_mesh.cc
+  scenewidget.cc
   userinputcontroller.cc
   vkutilities.cc            vkutilities.h
 )

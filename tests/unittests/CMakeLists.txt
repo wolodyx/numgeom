@@ -2,6 +2,8 @@ set(SOURCE_FILES
   main.cc
   testcircularlist.cc
   testexample.cc
+  testiterator.cc
+  testscene.cc
   testtrimesh.cc
   utilities.cc              utilities.h
 )
@@ -22,16 +24,17 @@ target_link_libraries(unittests
   GTest::gtest_main
   numgeom::core
   numgeom::io
+  numgeom::framework
 )
 
-if(TARGET numgeom)
+if(TARGET occ)
   list(APPEND SOURCE_FILES
     testclassificate.cc
     testoctree.cc
     testquadtree.cc
     testremovefaces.cc
   )
-  target_link_libraries(unittests numgeom::numgeom)
+  target_link_libraries(unittests numgeom::occ)
 endif()
 
 include(GoogleTest)

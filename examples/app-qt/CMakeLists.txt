@@ -27,7 +27,7 @@ target_link_libraries(app-qt
 include(QtUtils)
 get_qt_binary_dir(NUMGEOM_QT_BIN_DIR)
 set_target_properties(app-qt PROPERTIES
-  VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}"
+  VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}\nQT_PLUGIN_PATH=d:/projects/numgeom/bld/windows-vcpkg/vcpkg_installed/x64-windows/$<$<CONFIG:Debug>:debug/>Qt6/plugins"
 )
 
 # List of env variables to run application from vscode.

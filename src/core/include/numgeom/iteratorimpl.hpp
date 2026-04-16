@@ -166,7 +166,7 @@ IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::~IteratorImp
 
 template<typename InputValueType, typename OutputValueType, typename Transformer>
 void IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::advance() {
-  ++it_;
+  it_->advance();
 }
 
 template<typename InputValueType, typename OutputValueType, typename Transformer>
@@ -178,7 +178,7 @@ IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::current() co
 template<typename InputValueType, typename OutputValueType, typename Transformer>
 IteratorImpl<typename IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::value_type>*
 IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::clone() const {
-  return new IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>(it_);
+  return new IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>(it_->clone());
 }
 
 template<typename InputValueType, typename OutputValueType, typename Transformer>
@@ -198,7 +198,7 @@ bool IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::equals(
   auto ptr = dynamic_cast<const IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>*>(&other);
   if (!ptr)
     return false;
-  return ptr->it_ == it_;
+  return ptr->it_->equals(*it_);
 }
 
 #endif // !NUMGEOM_CORE_ITERATORIMPL_HPP

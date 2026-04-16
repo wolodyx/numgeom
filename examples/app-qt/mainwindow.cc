@@ -54,7 +54,7 @@ void MainWindow::initVulkan() {
       });
 
   gpu_manager->initialize();  //< Продолжить начатую выше инициализацию.
-  auto mesh = GetAxisIndicatorMesh();
+  auto mesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");//GetAxisIndicatorMesh();
   app_->add(mesh);
   app_->update();
 }

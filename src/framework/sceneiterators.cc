@@ -9,27 +9,6 @@ namespace {
 class SceneVertexIterator : public IteratorImpl<glm::vec3> {
  public:
 
-  // SceneVertexIterator(
-  //     const Scene& scene,
-  //     const Iterator<SceneObject*>& it_sceneobject = Iterator<SceneObject*>(),
-  //     const Iterator<Drawable*>& it_drawable = Iterator<Drawable*>(),
-  //     const Iterator<glm::vec3>& it_vertex = Iterator<glm::vec3>()) {
-  //   it_sceneobject_ = it_sceneobject;
-  //   it_drawable_ = it_drawable;
-  //   it_vertex_ = it_vertex;
-  //   if (it_sceneobject_.isEnd())
-  //     return;
-  //   if(it_sceneobject.isEmpty()) {
-  //     it_sceneobject_ = scene.Objects();
-  //     it_drawable_ = (*it_sceneobject_)->Drawables();
-  //     it_vertex_ = (*it_drawable_)->GetVertices();
-  //   } else if(it_drawable_.isEmpty()) {
-  //     it_drawable_ = (*it_sceneobject_)->Drawables();
-  //     it_vertex_ = (*it_drawable_)->GetVertices();
-  //   } else if(it_vertex_.isEmpty()) {
-  //     it_vertex_ = (*it_drawable_)->GetVertices();
-  //   }
-  // }
   SceneVertexIterator(const Scene& scene) {
     it_sceneobject_ = scene.Objects();
     if(!it_sceneobject_.isEnd()) {
@@ -45,7 +24,6 @@ class SceneVertexIterator : public IteratorImpl<glm::vec3> {
       const Iterator<Drawable*>& it_drawable = Iterator<Drawable*>(),
       const Iterator<glm::vec3>& it_vertex = Iterator<glm::vec3>()) {
     it_sceneobject_ = it_sceneobject;
-    bool is_end = it_sceneobject.isEnd();
     it_drawable_ = it_drawable;
     it_vertex_ = it_vertex;
   }
@@ -82,6 +60,8 @@ class SceneVertexIterator : public IteratorImpl<glm::vec3> {
     auto ptr = dynamic_cast<const SceneVertexIterator*>(&other);
     if(!ptr)
       return false;
+    if(it_sceneobject_.isEnd() && it_sceneobject_ == ptr->it_sceneobject_)
+      return true;
     return it_sceneobject_ == ptr->it_sceneobject_
         && it_drawable_ == ptr->it_drawable_
         && it_vertex_ == ptr->it_vertex_;
@@ -103,26 +83,24 @@ namespace {
 class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
  public:
 
-  SceneTriaIterator(
-      const Scene& scene,
-      const Iterator<SceneObject*>& it_sceneobject = Iterator<SceneObject*>(),
-      const Iterator<Drawable2*>& it_drawable = Iterator<Drawable2*>(),
-      const Iterator<glm::u32vec3>& it_tria = Iterator<glm::u32vec3>())
-      : scene_(scene) {
-    it_sceneobject_ = it_sceneobject;
-    it_drawable_ = it_drawable;
-    it_tria_ = it_tria;
-    if(it_sceneobject.isEmpty()) {
-      it_sceneobject_ = scene_.Objects();
-      it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
-      it_tria_ = (*it_drawable_)->GetTriangles();
-    } else if(it_drawable_.isEmpty()) {
-      it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
-      it_tria_ = (*it_drawable_)->GetTriangles();
-    } else if(it_tria_.isEmpty()) {
-      it_tria_ = (*it_drawable_)->GetTriangles();
-    }
-  }
+   SceneTriaIterator(const Scene& scene) {
+     it_sceneobject_ = scene.Objects();
+     if(!it_sceneobject_.isEnd()) {
+       it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
+       if(!it_drawable_.isEnd()) {
+         it_tria_ = (*it_drawable_)->GetTriangles();
+       }
+     }
+   }
+
+   SceneTriaIterator(
+       const Iterator<SceneObject*>& it_sceneobject,
+       const Iterator<Drawable2*>& it_drawable = Iterator<Drawable2*>(),
+       const Iterator<glm::u32vec3>& it_tria = Iterator<glm::u32vec3>()) {
+     it_sceneobject_ = it_sceneobject;
+     it_drawable_ = it_drawable;
+     it_tria_ = it_tria;
+   }
 
   virtual ~SceneTriaIterator() {}
 
@@ -143,12 +121,11 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
   glm::u32vec3 current() const override { return (*it_tria_); }
 
   IteratorImpl<glm::u32vec3>* clone() const override {
-    return new SceneTriaIterator(scene_, it_sceneobject_, it_drawable_,
-                                 it_tria_);
+    return new SceneTriaIterator(it_sceneobject_, it_drawable_, it_tria_);
   }
 
   IteratorImpl<glm::u32vec3>* last() const override {
-    return new SceneTriaIterator(scene_, scene_.Objects().end());
+    return new SceneTriaIterator(it_sceneobject_.end());
   }
 
   bool end() const override { return it_sceneobject_.isEnd(); }
@@ -157,13 +134,14 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
     auto other_ptr = dynamic_cast<const SceneTriaIterator*>(&other);
     if(!other_ptr)
       return false;
+    if(it_sceneobject_.isEnd() && it_sceneobject_ == other_ptr->it_sceneobject_)
+      return true;
     return it_sceneobject_ == other_ptr->it_sceneobject_
         && it_drawable_ == other_ptr->it_drawable_
         && it_tria_ == other_ptr->it_tria_;
   }
 
  private:
-  const Scene& scene_;
   Iterator<SceneObject*> it_sceneobject_;
   Iterator<Drawable2*> it_drawable_;
   Iterator<glm::u32vec3> it_tria_;
@@ -230,26 +208,24 @@ namespace {
 class IteratorImpl_Drawable2Normals : public IteratorImpl<glm::vec3> {
  public:
 
-  IteratorImpl_Drawable2Normals(
-      const Scene& scene,
-      const Iterator<SceneObject*>& it_sceneobject = Iterator<SceneObject*>(),
-      const Iterator<Drawable2*>& it_drawable = Iterator<Drawable2*>(),
-      const Iterator<glm::vec3>& it_normal = Iterator<glm::vec3>())
-      : scene_(scene) {
-    it_sceneobject_ = it_sceneobject;
-    it_drawable_ = it_drawable;
-    it_normal_ = it_normal;
-    if(it_sceneobject.isEmpty()) {
-      it_sceneobject_ = scene_.Objects();
-      it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
-      it_normal_ = (*it_drawable_)->GetNormals();
-    } else if(it_drawable_.isEmpty()) {
-      it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
-      it_normal_ = (*it_drawable_)->GetNormals();
-    } else if(it_normal_.isEmpty()) {
-      it_normal_ = (*it_drawable_)->GetNormals();
-    }
-  }
+   IteratorImpl_Drawable2Normals(const Scene& scene) {
+     it_sceneobject_ = scene.Objects();
+     if(!it_sceneobject_.isEnd()) {
+       it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
+       if(!it_drawable_.isEnd()) {
+         it_normal_ = (*it_drawable_)->GetNormals();
+       }
+     }
+   }
+
+   IteratorImpl_Drawable2Normals(
+     const Iterator<SceneObject*>& it_sceneobject,
+     const Iterator<Drawable2*>& it_drawable = Iterator<Drawable2*>(),
+     const Iterator<glm::vec3>& it_normal = Iterator<glm::vec3>()) {
+     it_sceneobject_ = it_sceneobject;
+     it_drawable_ = it_drawable;
+     it_normal_ = it_normal;
+   }
 
   virtual ~IteratorImpl_Drawable2Normals() {}
 
@@ -270,27 +246,28 @@ class IteratorImpl_Drawable2Normals : public IteratorImpl<glm::vec3> {
   glm::vec3 current() const override { return (*it_normal_); }
 
   IteratorImpl<glm::vec3>* clone() const override {
-    return new IteratorImpl_Drawable2Normals(scene_, it_sceneobject_, it_drawable_,
-                                   it_normal_);
+    return new IteratorImpl_Drawable2Normals(it_sceneobject_, it_drawable_,
+                                             it_normal_);
   }
 
   IteratorImpl<glm::vec3>* last() const override {
-    return new IteratorImpl_Drawable2Normals(scene_, scene_.Objects().end());
+    return new IteratorImpl_Drawable2Normals(it_sceneobject_.end());
   }
 
   bool end() const override { return it_sceneobject_.isEnd(); }
 
   bool equals(const IteratorImpl<glm::vec3>& other) const override {
-    auto other_ptr = dynamic_cast<const IteratorImpl_Drawable2Normals*>(&other);
-    if(!other_ptr)
+    auto ptr = dynamic_cast<const IteratorImpl_Drawable2Normals*>(&other);
+    if (!ptr)
       return false;
-    return it_sceneobject_ == other_ptr->it_sceneobject_
-        && it_drawable_ == other_ptr->it_drawable_
-        && it_normal_ == other_ptr->it_normal_;
+    if(it_sceneobject_.isEnd() && it_sceneobject_ == ptr->it_sceneobject_)
+      return true;
+    return it_sceneobject_ == ptr->it_sceneobject_
+        && it_drawable_ == ptr->it_drawable_
+        && it_normal_ == ptr->it_normal_;
   }
 
  private:
-  const Scene& scene_;
   Iterator<SceneObject*> it_sceneobject_;
   Iterator<Drawable2*> it_drawable_;
   Iterator<glm::vec3> it_normal_;

@@ -35,6 +35,22 @@ function(get_qt_binary_dir qt_binary_dir)
   set(${qt_binary_dir} ${dir} PARENT_SCOPE)
 endfunction()
 
+function(get_qt_plugins_dir plugins_dir)
+  set(property_name "LOCATION")
+  if(ARGC GREATER 1)
+    if(ARGV1 STREQUAL "Debug")
+      set(property_name "LOCATION_DEBUG")
+    elseif(ARGV1 STREQUAL "Release")
+      set(property_name "LOCATION_RELEASE")
+    else()
+      message(FATAL_ERROR "Error: unknown config name.")
+    endif()
+  endif()
+  get_target_property(dir "Qt${NUMGEOM_QT_MAJOR_VERSION}::QJpegPlugin" ${property_name})
+  get_filename_component(dir "${dir}/../.." ABSOLUTE)
+  set(${plugins_dir} ${dir} PARENT_SCOPE)
+endfunction()
+
 function(_deploy_qt6_app tgt)
   qt_generate_deploy_app_script(
     TARGET ${tgt}
@@ -89,6 +105,30 @@ function(deploy_qt_app)
     install(FILES
       "${LAUNCHER_FILE}"
       DESTINATION bin
+    )
+  endif()
+endfunction()
+
+function(generate_qt_conf)
+  if(WIN32)
+    get_qt_plugins_dir(NUMGEOM_QT_PLUGIN_PATH Release)
+    configure_file(
+      "${PROJECT_SOURCE_DIR}/cmake/qt.conf.in"
+      "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Release/qt.conf"
+      @ONLY
+    )
+    get_qt_plugins_dir(NUMGEOM_QT_PLUGIN_PATH Debug)
+    configure_file(
+      "${PROJECT_SOURCE_DIR}/cmake/qt.conf.in"
+      "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug/qt.conf"
+      @ONLY
+    )
+  elseif(UNIX)
+    get_qt_plugins_dir(NUMGEOM_QT_PLUGIN_PATH)
+    configure_file(
+      "${PROJECT_SOURCE_DIR}/cmake/qt.conf.in"
+      "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/qt.conf"
+      @ONLY
     )
   endif()
 endfunction()

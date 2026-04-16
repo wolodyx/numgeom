@@ -25,10 +25,12 @@ target_link_libraries(app-qt
 
 # Добавляем перед запуском app-qt путь к библиотекам Qt.
 include(QtUtils)
-get_qt_binary_dir(NUMGEOM_QT_BIN_DIR)
-set_target_properties(app-qt PROPERTIES
-  VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}"
-)
+if(WIN32)
+  get_qt_binary_dir(NUMGEOM_QT_BIN_DIR)
+  set_target_properties(app-qt PROPERTIES
+    VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}"
+  )
+endif()
 
 # List of env variables to run application from vscode.
 if(UNIX)
@@ -67,7 +69,7 @@ set(used_qt_plugins
 )
 if(LINUX)
   list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin)
-elseif(WINDOWS)
+elseif(WIN32)
   list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QWindowsIntegrationPlugin)
 endif()
 
@@ -83,6 +85,7 @@ install(
   FILES appimage/qt.conf
   DESTINATION bin
 )
+
 set(executable_files $<TARGET_FILE:app-qt>)
 foreach(plugin ${used_qt_plugins})
   get_target_property(loc ${plugin} LOCATION)
@@ -92,6 +95,9 @@ endforeach()
 install(
   CODE "set(executable_files ${executable_files})"
   CODE [[
+  if(POLICY CMP0207)
+    cmake_policy(SET CMP0207 NEW)
+  endif()
   if(DEFINED VCPKG_INSTALLED_DIR AND NOT ${VCPKG_INSTALLED_DIR} STREQUAL "")
     set(DEPENDENCY_PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
   endif()

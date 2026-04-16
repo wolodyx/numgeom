@@ -1,9 +1,5 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
-if(POLICY CMP0207)
-  cmake_policy(SET CMP0207 NEW)
-endif()
-
 project(NumGeom
   LANGUAGES CXX C
   VERSION 0.0.1
@@ -70,6 +66,10 @@ set(PROJECT_VERSION_PATCH ${GITVERSIONDETECT_VERSION_PATCH})
 set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
 include(GenerateExportHeader)
+
+# Готовим файл `qt.conf` для связывания приложений Qt с ресурсами Qt.
+include(QtUtils)
+generate_qt_conf()
 
 add_subdirectory(extern)
 add_subdirectory(src)

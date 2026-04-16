@@ -7,7 +7,7 @@ on:
     paths-ignore:
       - '.devcontainer'
       - '.github/**'
-      - '!.github/workflows/linux.yml'
+      - '!.github/workflows/windows.yml'
       - '.vscode'
       - 'docs/**'
       - 'vcpkg/**'
@@ -17,7 +17,7 @@ on:
     paths-ignore:
       - '.devcontainer'
       - '.github/**'
-      - '!.github/workflows/linux.yml'
+      - '!.github/workflows/windows.yml'
       - '.vscode'
       - 'docs/**'
       - 'vcpkg/**'
@@ -80,13 +80,10 @@ jobs:
       - uses: lukka/get-cmake@latest
       - name: Install NSIS
         uses: negrutiu/nsis-install@v2
-        if: github.ref_type == 'tag'
       - uses: actions/setup-dotnet@v4
-        if: github.ref_type == 'tag'
         with:
           dotnet-version: '8.0.x'
       - name: Install WiX Toolset v4
-        if: github.ref_type == 'tag'
         run: |
           dotnet tool install --global wix --version 4.0.4
           wix extension add --global WixToolset.UI.wixext

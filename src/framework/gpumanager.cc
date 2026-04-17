@@ -37,12 +37,8 @@
 #include "boost/log/trivial.hpp"
 
 #include "numgeom/application.h"
-#include "numgeom/drawable.h"
-#include "numgeom/scene.h"
-#include "numgeom/sceneobject.h"
 #include "numgeom/trimeshconnectivity.h"
 
-#include "sceneiterators.h"
 #include "vkutilities.h"
 
 // Количество изображений в обращении.
@@ -1643,7 +1639,38 @@ bool GpuManager::initialize() {
 }
 
 namespace {
-void UpdateScene(VulkanState* state, const Scene& scene) {
+glm::vec3 computeTriangleNormal(const glm::vec3& a, const glm::vec3& b,
+                                const glm::vec3& c) {
+  glm::vec3 ab = b - a;
+  glm::vec3 ac = c - a;
+  glm::vec3 normal = glm::cross(ab, ac);
+  float length = glm::length(normal);
+  if (length < 1e-6f)
+    return glm::vec3();
+  return normal / length;
+}
+
+std::vector<glm::vec3> computeNormals(CTriMesh::Ptr mesh) {
+  size_t nodes_count = mesh->NbNodes();
+  std::vector<glm::vec3> normals(nodes_count);
+  auto* con = mesh->Connectivity();
+  std::vector<size_t> adjTrias;
+  for (size_t node_i = 0; node_i < nodes_count; ++node_i) {
+    glm::vec3 node_n(0.0f, 0.0f, 0.0f);
+    con->Node2Trias(node_i, adjTrias);
+    for (size_t tria_i : adjTrias) {
+      const auto& tria = mesh->GetCell(tria_i);
+      glm::vec3 tria_n = computeTriangleNormal(mesh->GetNode(tria.na),
+                                               mesh->GetNode(tria.nb),
+                                               mesh->GetNode(tria.nc));
+      node_n += tria_n;
+    }
+    normals[node_i] = glm::normalize(node_n);
+  }
+  return normals;
+}
+
+void UpdateScene(VulkanState* state, CTriMesh::Ptr scene) {
   if (state->buffer_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
     vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
@@ -1653,19 +1680,11 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
     state->buffer_index = VK_NULL_HANDLE;
   }
 
-  size_t n_verts = 0, n_cells = 0;
-  for (const SceneObject* o : scene.Objects()) {
-    for (Drawable* d : o->Drawables()) {
-      if(d->Type() != Drawable::PrimitiveType::Triangles)
-        continue;
-      n_verts += d->GetVertsCount();
-      n_cells += d->GetCellsCount();
-    }
-  }
-
-  VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
-  VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
-  VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
+  size_t verts_count = scene->NbNodes();
+  size_t cells_count = scene->NbCells();
+  VkDeviceSize vertex_buffer_size = Aligned(6 * verts_count * sizeof(float), 256);
+  VkDeviceSize normal_buffer_size = Aligned(3 * cells_count * sizeof(float), 256);
+  VkDeviceSize index_buffer_size = Aligned(3 * cells_count * sizeof(uint32_t), 256);
 
   {
     // Выделяем память под буфер вершин.
@@ -1680,11 +1699,13 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
     vmaCreateBuffer(state->allocator,
                     &ci_buffer, &ci_allocation, &state->buffer_vertex,
                     &state->alloc_vertex, nullptr);
+
     // Копируем вершины.
     void* mapped_data = nullptr;
     vmaMapMemory(state->allocator, state->alloc_vertex, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 pt : GetVertexIterator(scene)) {
+    for (size_t i = 0; i < scene->NbNodes(); ++i) {
+      auto pt = scene->GetNode(i);
       *data++ = pt.x;
       *data++ = pt.y;
       *data++ = pt.z;
@@ -1705,11 +1726,13 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
     vmaCreateBuffer(state->allocator,
                     &ci_buffer, &ci_allocation, &state->buffer_normal,
                     &state->alloc_normal, nullptr);
+
     // Копируем нормали.
     void* mapped_data = nullptr;
     vmaMapMemory(state->allocator, state->alloc_normal, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 n : GetNormalIterator(scene)) {
+    auto normals = computeNormals(scene);
+    for (const glm::vec3& n : normals) {
       *data++ = n.x;
       *data++ = n.y;
       *data++ = n.z;
@@ -1735,15 +1758,16 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
     void* mapped_data = nullptr;
     vmaMapMemory(state->allocator, state->alloc_index, &mapped_data);
     uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
-    for (glm::u32vec3 tr : GetTriaIterator(scene)) {
-      *data++ = tr.x;
-      *data++ = tr.y;
-      *data++ = tr.z;
+    for (size_t i = 0; i < scene->NbCells(); ++i) {
+      auto tria = scene->GetCell(i);
+      *data++ = tria.na;
+      *data++ = tria.nb;
+      *data++ = tria.nc;
     }
     vmaUnmapMemory(state->allocator, state->alloc_index);
   }
 
-  state->index_count = 3 * n_cells;
+  state->index_count = 3 * scene->NbCells();
 }
 
 void updateDescriptorSets(Application* app, VulkanState* state) {
@@ -1821,12 +1845,14 @@ void updateDataForFrame(Application* app, VulkanState* state) {
   {
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
-    Scene& scene = app->scene();
-    if (scene.HasChanges()) {
+    auto scene = app->geometry();
+    void* nowSceneHash = scene.get();
+    if (s_oldSceneHash != nowSceneHash) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
+      s_oldSceneHash = nowSceneHash;
+      // Инициализируем память сценой.
       UpdateScene(state, scene);
-      scene.ClearChanges();
       state->stopRendering = false;
     }
   }

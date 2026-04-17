@@ -11,7 +11,6 @@
 
 #include "numgeom/application.h"
 #include "numgeom/gpumanager.h"
-#include "numgeom/axisindicator.h"
 
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
@@ -54,7 +53,8 @@ void MainWindow::initVulkan() {
       });
 
   gpu_manager->initialize();  //< Продолжить начатую выше инициализацию.
-  auto mesh = GetAxisIndicatorMesh();
+  auto mesh =
+      LoadToTriMesh("/home/tim/projects/numgeom/tests/data/polydata-cube.vtk");
   app_->add(mesh);
   app_->update();
 }

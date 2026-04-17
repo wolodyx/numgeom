@@ -5,8 +5,6 @@
 
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/gpumanager.h"
-#include "numgeom/scene.h"
-#include "numgeom/sceneobject_mesh.h"
 #include "numgeom/trimesh.h"
 
 #include "camera.h"
@@ -43,16 +41,17 @@ struct Application::Impl {
 
   const float fovy = glm::radians(45.0f);
 
-  Scene scene;
+  CTriMesh::Ptr scene;
+  AlignedBoundBox sceneBox;
 
   GpuManager* gpuManager;
 
-  // void updateScene(CTriMesh::Ptr newScene) {
-  //   if (scene == newScene) return;
-  //   scene = newScene;
-  //   auto box = ComputeBoundBox(scene);
-  //   camera.fitBox(box);
-  // }
+  void updateScene(CTriMesh::Ptr newScene) {
+    if (scene == newScene) return;
+    scene = newScene;
+    auto box = ComputeBoundBox(scene);
+    camera.fitBox(box);
+  }
 };
 
 Application::Application(int argc, char* argv[]) {
@@ -63,7 +62,7 @@ Application::Application(int argc, char* argv[]) {
 Application::~Application() { delete m_pimpl; }
 
 void Application::fitScene() {
-  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
+  m_pimpl->camera.fitBox(m_pimpl->sceneBox);
   this->update();
 }
 
@@ -86,7 +85,7 @@ void Application::translateCamera(int x, int y, int dx, int dy) {
 void Application::rotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
-  glm::vec3 pivotPoint = m_pimpl->scene.GetBoundBox().GetCenter();
+  glm::vec3 pivotPoint = m_pimpl->sceneBox.GetCenter();
   m_pimpl->camera.rotateAroundPivot(pivotPoint, screenOffset);
   this->update();
 }
@@ -104,23 +103,23 @@ glm::mat4 Application::getViewMatrix() const {
 }
 
 glm::mat4 Application::getProjectionMatrix() const {
-  return m_pimpl->camera.projectionMatrix(m_pimpl->scene.GetBoundBox());
+  return m_pimpl->camera.projectionMatrix(m_pimpl->sceneBox);
 }
 
 void Application::update() { m_pimpl->gpuManager->update(); }
 
 GpuManager* Application::gpuManager() { return m_pimpl->gpuManager; }
 
-const Scene& Application::scene() const { return m_pimpl->scene; }
-Scene& Application::scene() { return m_pimpl->scene; }
+CTriMesh::Ptr Application::geometry() const { return m_pimpl->scene; }
 
 void Application::add(CTriMesh::Ptr mesh) {
-  m_pimpl->scene.AddObject<SceneObject_Mesh>(mesh);
+  m_pimpl->updateScene(mesh);
   this->update();
 }
 
 void Application::clearScene() {
-  m_pimpl->scene.Clear();
+  if (!m_pimpl->scene) return;
+  m_pimpl->updateScene(TriMesh::Ptr());
   this->update();
 }
 

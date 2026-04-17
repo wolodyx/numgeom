@@ -50,11 +50,7 @@ class Iterator {
   }
 
   bool operator==(const Iterator& other) const {
-    if (m_impl == other.m_impl)
-      return true;
-    if(!m_impl || !other.m_impl)
-      return false;
-    return m_impl->equals(*other.m_impl);
+    return m_impl == other.m_impl || m_impl->equals(*other.m_impl);
   }
 
   bool operator!=(const Iterator& other) const { return !(*this == other); }
@@ -64,15 +60,12 @@ class Iterator {
   Iterator& operator=(const Iterator& other) {
     if (this != &other) {
       delete m_impl;
-      if(other.m_impl != nullptr)
-        m_impl = other.m_impl->clone();
+      m_impl = other.m_impl->clone();
     }
     return *this;
   }
 
   bool isEnd() const { return !m_impl || m_impl->end(); }
-
-  bool isEmpty() const { return !m_impl; }
 
   Iterator begin() const { return *this; }
 

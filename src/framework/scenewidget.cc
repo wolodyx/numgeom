@@ -1,2 +1,0 @@
-#include "numgeom/scenewidget.h"
-

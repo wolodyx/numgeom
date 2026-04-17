@@ -3,6 +3,7 @@ set(PUBLIC_HEADERS
   include/numgeom/circularlist.h
   include/numgeom/iterator.h
   include/numgeom/iteratorimpl.h
+  include/numgeom/iteratorimpl.hpp
   include/numgeom/outcome.h
   include/numgeom/shapes.h
   include/numgeom/staticjaggedarray.h

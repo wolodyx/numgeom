@@ -2,6 +2,7 @@ set(SOURCE_FILES
   main.cc
   testcircularlist.cc
   testexample.cc
+  testiterator.cc
   testtrimesh.cc
   utilities.cc              utilities.h
 )

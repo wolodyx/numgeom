@@ -22,10 +22,10 @@ glm::vec3 computeTriangleNormal(const glm::vec3& a, const glm::vec3& b,
   return normal / length;
 }
 
-glm::vec3 computeNormal(CTriMesh::Ptr mesh, TriMeshConnectivity* con,
-                        size_t vertex_index) {
+glm::vec3 computeNormal(CTriMesh::Ptr mesh, size_t vertex_index) {
   std::vector<size_t> adj_trias;
   glm::vec3 node_n(0.0f, 0.0f, 0.0f);
+  TriMeshConnectivity* con = mesh->Connectivity();
   con->Node2Trias(vertex_index, adj_trias);
   for (size_t tria_i : adj_trias) {
     const auto& tria = mesh->GetCell(tria_i);
@@ -40,17 +40,9 @@ glm::vec3 computeNormal(CTriMesh::Ptr mesh, TriMeshConnectivity* con,
 class IteratorImpl_DrawableNormals : public IteratorImpl<glm::vec3> {
  public:
 
-  IteratorImpl_DrawableNormals(CTriMesh::Ptr mesh) {
-    mesh_ = mesh;
-    con_ = std::shared_ptr<TriMeshConnectivity>(mesh->Connectivity());
-    vertex_index_ = 0;
-  }
-
   IteratorImpl_DrawableNormals(CTriMesh::Ptr mesh,
-                               const std::shared_ptr<TriMeshConnectivity>& con,
-                               size_t vertex_index) {
+                               size_t vertex_index = 0) {
     mesh_ = mesh;
-    con_ = con;
     vertex_index_ = vertex_index;
   }
 
@@ -61,31 +53,30 @@ class IteratorImpl_DrawableNormals : public IteratorImpl<glm::vec3> {
   }
 
   glm::vec3 current() const override {
-    return computeNormal(mesh_, con_.get(), vertex_index_);
+    return computeNormal(mesh_, vertex_index_);
   }
 
   IteratorImpl<glm::vec3>* clone() const override {
-    return new IteratorImpl_DrawableNormals(mesh_, con_, vertex_index_);
+    return new IteratorImpl_DrawableNormals(mesh_, vertex_index_);
   }
 
   IteratorImpl<glm::vec3>* last() const override {
-    return new IteratorImpl_DrawableNormals(mesh_, con_, con_->NbNodes());
+    return new IteratorImpl_DrawableNormals(mesh_, mesh_->NbNodes());
   }
 
   bool end() const override {
-    return vertex_index_ == con_->NbNodes();
+    return vertex_index_ == mesh_->NbNodes();
   }
 
   bool equals(const IteratorImpl<glm::vec3>& other) const override {
     auto ptr = dynamic_cast<const IteratorImpl_DrawableNormals*>(&other);
     if (!ptr)
       return false;
-    return con_ == ptr->con_ && vertex_index_ == ptr->vertex_index_;
+    return mesh_ == ptr->mesh_ && vertex_index_ == ptr->vertex_index_;
   }
 
  private:
   CTriMesh::Ptr mesh_;
-  std::shared_ptr<TriMeshConnectivity> con_;
   size_t vertex_index_;
 };
 

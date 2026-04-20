@@ -116,6 +116,7 @@ Scene& Application::scene() { return m_pimpl->scene; }
 
 void Application::add(CTriMesh::Ptr mesh) {
   m_pimpl->scene.AddObject<SceneObject_Mesh>(mesh);
+  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
   this->update();
 }
 

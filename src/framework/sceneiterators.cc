@@ -96,10 +96,12 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
    SceneTriaIterator(
        const Iterator<SceneObject*>& it_sceneobject,
        const Iterator<Drawable2*>& it_drawable = Iterator<Drawable2*>(),
-       const Iterator<glm::u32vec3>& it_tria = Iterator<glm::u32vec3>()) {
+       const Iterator<glm::u32vec3>& it_tria = Iterator<glm::u32vec3>(),
+       uint32_t vertex_offset = 0) {
      it_sceneobject_ = it_sceneobject;
      it_drawable_ = it_drawable;
      it_tria_ = it_tria;
+     vertex_offset_ = vertex_offset;
    }
 
   virtual ~SceneTriaIterator() {}
@@ -107,6 +109,7 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
   void advance() override {
     ++it_tria_;
     if(it_tria_.isEnd()) {
+      vertex_offset_ += (*it_drawable_)->GetVertsCount();
       ++it_drawable_;
       if(it_drawable_.isEnd()) {
         ++it_sceneobject_;
@@ -118,10 +121,17 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
     }
   }
 
-  glm::u32vec3 current() const override { return (*it_tria_); }
+  glm::u32vec3 current() const override {
+    glm::u32vec3 t = (*it_tria_);
+    t.x += vertex_offset_;
+    t.y += vertex_offset_;
+    t.z += vertex_offset_;
+    return t;
+  }
 
   IteratorImpl<glm::u32vec3>* clone() const override {
-    return new SceneTriaIterator(it_sceneobject_, it_drawable_, it_tria_);
+    return new SceneTriaIterator(it_sceneobject_, it_drawable_, it_tria_,
+                                 vertex_offset_);
   }
 
   IteratorImpl<glm::u32vec3>* last() const override {
@@ -145,6 +155,7 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
   Iterator<SceneObject*> it_sceneobject_;
   Iterator<Drawable2*> it_drawable_;
   Iterator<glm::u32vec3> it_tria_;
+  uint32_t vertex_offset_ = 0;
 };
 }
 

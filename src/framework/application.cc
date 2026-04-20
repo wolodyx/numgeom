@@ -86,13 +86,6 @@ void Application::rotateCamera(int x, int y, int dx, int dy) {
 
 glm::mat4 Application::getViewMatrix() const {
   auto x = m_pimpl->camera.viewMatrix();
-  // std::cout << std::endl;
-  // for(int i = 0; i < 4; ++i) {
-  //     for(int j = 0; j < 4; ++j) {
-  //         std::cout << x[i][j] << ' ';
-  //     }
-  //     std::cout << std::endl;
-  // }
   return x;
 }
 
@@ -108,6 +101,8 @@ const Scene& Application::scene() const { return m_pimpl->scene; }
 Scene& Application::scene() { return m_pimpl->scene; }
 
 void Application::add(CTriMesh::Ptr mesh) {
+  if(!mesh)
+    return;
   m_pimpl->scene.AddObject<SceneObject_Mesh>(mesh);
   m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
   this->update();

@@ -1,7 +1,7 @@
 #ifndef numgeom_framework_vkutilities_h
 #define numgeom_framework_vkutilities_h
 
-#include "vulkan/vulkan.h"
+#include "volk.h"
 
 //! Возвращает значение, не меньшее `s`, но кратное `byteAlign`.
 //! Функцию используют для вычисления размера памяти с учетом выравнивания ее

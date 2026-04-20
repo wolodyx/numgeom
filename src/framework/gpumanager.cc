@@ -8,22 +8,11 @@
 #include <set>
 #include <vector>
 
-#if defined(_WIN32)
-#define USE_PLATFORM_WIN32_KHR
-#elif defined(__linux__)
-#define USE_PLATFORM_XCB_KHR
-#endif
-
-#define VK_PROTOTYPES
-#include "vulkan/vulkan.h"
-
-#if defined(USE_PLATFORM_XCB_KHR)
+#if defined(VK_USE_PLATFORM_XCB_KHR)
 #include "xcb/xcb.h"
-#include "vulkan/vulkan_xcb.h"
 #endif
 #if defined(_WIN32)
 #include "windows.h"
-#include "vulkan/vulkan_win32.h"
 #endif
 
 #define GLM_ENABLE_EXPERIMENTAL
@@ -1126,9 +1115,18 @@ bool checkExtensions(const std::vector<const char*>& extensionNames) {
 
 //! Создаем экземпляр vulkan.
 bool initInstance(VulkanState* state) {
+  VkResult r;
+
+  r = volkInitialize();
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Volk initialization error ({}).", VkResultToString(r));
+    return false;
+  }
+
   std::vector<const char*> extensionNames{
       VK_KHR_SURFACE_EXTENSION_NAME,
-#if defined(USE_PLATFORM_XCB_KHR)
+#if defined(VK_USE_PLATFORM_XCB_KHR)
       VK_KHR_XCB_SURFACE_EXTENSION_NAME,
 #endif
 #if defined(_WIN32)
@@ -1174,7 +1172,7 @@ bool initInstance(VulkanState* state) {
   ci_instance.pNext = &ci_debugUtilsMessenger;
 #endif
 
-  VkResult r = vkCreateInstance(&ci_instance, nullptr, &state->instance);
+  r = vkCreateInstance(&ci_instance, nullptr, &state->instance);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
         "Vulkan instance creation error ({}).", VkResultToString(r));
@@ -1184,15 +1182,11 @@ bool initInstance(VulkanState* state) {
       "Success of create vulkan instance ({})",
       static_cast<void*>(&state->instance));
 
+  // Load instance-level Vulkan functions
+  volkLoadInstance(state->instance);
+
 #ifdef ENABLE_VALIDATION_LAYERS
-  auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(
-      vkGetInstanceProcAddr(state->instance, "vkCreateDebugUtilsMessengerEXT"));
-  if (!func) {
-    BOOST_LOG_TRIVIAL(trace)
-        << "Function `vkCreateDebugUtilsMessengerEXT` is not found.";
-    return false;
-  }
-  r = func(state->instance, &ci_debugUtilsMessenger, nullptr,
+  r = vkCreateDebugUtilsMessengerEXT(state->instance, &ci_debugUtilsMessenger, nullptr,
            &state->debugMessenger);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
@@ -1370,6 +1364,8 @@ bool createLogicalDevice(VulkanState* state) {
   BOOST_LOG_TRIVIAL(trace) << std::format("Logical device {} is created",
                                           static_cast<void*>(state->device));
 
+  volkLoadDevice(state->device);
+
   // Создаем vma-аллокатор.
   VmaAllocatorCreateInfo ci_allocator {
       .flags = VMA_ALLOCATOR_CREATE_EXT_MEMORY_BUDGET_BIT,
@@ -1378,6 +1374,9 @@ bool createLogicalDevice(VulkanState* state) {
       .instance = state->instance,
       .vulkanApiVersion = VK_API_VERSION_1_2,
   };
+  VmaVulkanFunctions vulkanFunctions = {};
+  vmaImportVulkanFunctionsFromVolk(&ci_allocator, &vulkanFunctions);
+  ci_allocator.pVulkanFunctions = &vulkanFunctions;
   r = vmaCreateAllocator(&ci_allocator, &state->allocator);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
@@ -1667,6 +1666,9 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
   VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
   VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
 
+  if(vertex_buffer_size == 0)
+    return;
+
   {
     // Выделяем память под буфер вершин.
     VkBufferCreateInfo ci_buffer {
@@ -1677,9 +1679,10 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
     VmaAllocationCreateInfo ci_allocation {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
-    vmaCreateBuffer(state->allocator,
-                    &ci_buffer, &ci_allocation, &state->buffer_vertex,
-                    &state->alloc_vertex, nullptr);
+    VkResult r = vmaCreateBuffer(state->allocator,
+                                 &ci_buffer, &ci_allocation,
+                                 &state->buffer_vertex, &state->alloc_vertex,
+                                 nullptr);
     // Копируем вершины.
     void* mapped_data = nullptr;
     vmaMapMemory(state->allocator, state->alloc_vertex, &mapped_data);

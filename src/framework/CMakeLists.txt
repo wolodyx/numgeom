@@ -36,12 +36,20 @@ add_library(numgeom::framework ALIAS framework)
 
 target_link_libraries(framework
   PUBLIC
-    Vulkan::Vulkan
+    volk
     Boost::log
     numgeom::core
   PRIVATE
     VulkanMemoryAllocator
 )
+
+# Use VK_NO_PROTOTYPES to disable the use of prototypes in the Vulkan header.
+target_compile_definitions(framework PUBLIC VK_NO_PROTOTYPES)
+if(WIN32)
+  target_compile_definitions(framework PUBLIC VK_USE_PLATFORM_WIN32_KHR)
+elseif(LINUX AND ENABLE_XCB)
+  target_compile_definitions(framework PUBLIC VK_USE_PLATFORM_XCB_KHR)
+endif()
 
 #set_target_properties(framework PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")
 

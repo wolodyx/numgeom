@@ -5,8 +5,9 @@
 #include <cstdint>
 #include <functional>
 
+#include "volk.h"
+
 #include "glm/glm.hpp"
-#include "vulkan/vulkan.h"
 
 class Application;
 

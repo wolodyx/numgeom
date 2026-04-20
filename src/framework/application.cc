@@ -46,13 +46,6 @@ struct Application::Impl {
   Scene scene;
 
   GpuManager* gpuManager;
-
-  // void updateScene(CTriMesh::Ptr newScene) {
-  //   if (scene == newScene) return;
-  //   scene = newScene;
-  //   auto box = ComputeBoundBox(scene);
-  //   camera.fitBox(box);
-  // }
 };
 
 Application::Application(int argc, char* argv[]) {

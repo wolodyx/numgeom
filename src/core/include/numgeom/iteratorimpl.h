@@ -95,7 +95,7 @@ private:
 };
 
 /**
-\class IteratorImpl_Transform 
+\class IteratorImpl_Transform
 \brief Итератор, преобразующий элементы.
 */
 template<typename InputValueType, typename OutputValueType, typename Transformer>

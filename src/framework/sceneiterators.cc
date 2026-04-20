@@ -289,3 +289,77 @@ Iterator<glm::vec3> GetNormalIterator(const Scene& scene) {
   auto impl = new IteratorImpl_Drawable2Normals(scene);
   return Iterator<glm::vec3>(impl);
 }
+
+namespace {
+class SceneColorIterator : public IteratorImpl<glm::vec3> {
+ public:
+
+  SceneColorIterator(const Scene& scene) {
+    it_sceneobject_ = scene.Objects();
+    if(!it_sceneobject_.isEnd()) {
+      it_drawable_ = (*it_sceneobject_)->Drawables();
+      if(!it_drawable_.isEnd()) {
+        vertex_index_ = 0;
+      }
+    }
+  }
+
+  SceneColorIterator(
+      const Iterator<SceneObject*>& it_sceneobject,
+      const Iterator<Drawable*>& it_drawable = Iterator<Drawable*>(),
+      size_t vertex_index = 0) {
+    it_sceneobject_ = it_sceneobject;
+    it_drawable_ = it_drawable;
+    vertex_index_ = vertex_index;
+  }
+
+  virtual ~SceneColorIterator() {}
+
+  void advance() override {
+    ++vertex_index_;
+    if(vertex_index_ >= (*it_drawable_)->GetVertsCount()) {
+      ++it_drawable_;
+      if(it_drawable_.isEnd()) {
+        ++it_sceneobject_;
+        if(it_sceneobject_.isEnd())
+          return;
+        it_drawable_ = (*it_sceneobject_)->Drawables();
+      }
+      vertex_index_ = 0;
+    }
+  }
+
+  glm::vec3 current() const override { return (*it_drawable_)->GetColor(); }
+
+  IteratorImpl<glm::vec3>* clone() const override {
+    return new SceneColorIterator(it_sceneobject_, it_drawable_, vertex_index_);
+  }
+
+  IteratorImpl<glm::vec3>* last() const override {
+    return new SceneColorIterator(it_sceneobject_.end());
+  }
+
+  bool end() const override { return it_sceneobject_.isEnd(); }
+
+  bool equals(const IteratorImpl<glm::vec3>& other) const override {
+    auto ptr = dynamic_cast<const SceneColorIterator*>(&other);
+    if(!ptr)
+      return false;
+    if(it_sceneobject_.isEnd() && it_sceneobject_ == ptr->it_sceneobject_)
+      return true;
+    return it_sceneobject_ == ptr->it_sceneobject_
+        && it_drawable_ == ptr->it_drawable_
+        && vertex_index_ == ptr->vertex_index_;
+  }
+
+ private:
+  Iterator<SceneObject*> it_sceneobject_;
+  Iterator<Drawable*> it_drawable_;
+  size_t vertex_index_;
+};
+}; // namespace
+
+Iterator<glm::vec3> GetColorIterator(const Scene& scene) {
+  auto impl = new SceneColorIterator(scene);
+  return Iterator<glm::vec3>(impl);
+}

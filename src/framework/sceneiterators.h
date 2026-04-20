@@ -15,6 +15,9 @@ Iterator<glm::vec3> GetVertexIterator(const Scene&);
 //! Итератор по нормалям, заданным в вершинах треугольников сцены.
 Iterator<glm::vec3> GetNormalIterator(const Scene&);
 
+//! Итератор по цветам, связанных с вершинами сцены.
+Iterator<glm::vec3> GetColorIterator(const Scene&);
+
 //! Итератор по индексам треугольников сцены.
 Iterator<glm::u32vec3> GetTriaIterator(const Scene&);
 

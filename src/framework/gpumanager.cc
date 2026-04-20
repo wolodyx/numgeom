@@ -173,6 +173,9 @@ struct VulkanState {
   VkBuffer buffer_normal = VK_NULL_HANDLE;
   VmaAllocation alloc_normal = VK_NULL_HANDLE;
 
+  VkBuffer buffer_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_color = VK_NULL_HANDLE;
+
   VkBuffer buffer_frame = VK_NULL_HANDLE;
   VmaAllocation alloc_frame = VK_NULL_HANDLE;
   //! \}
@@ -444,6 +447,11 @@ bool createGraphicsPipeline(VulkanState* state) {
         .stride = 3 * sizeof(float),
         .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
       },
+      VkVertexInputBindingDescription{
+        .binding = 2,
+        .stride = 3 * sizeof(float),
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
   };
   std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
       VkVertexInputAttributeDescription{
@@ -455,6 +463,12 @@ bool createGraphicsPipeline(VulkanState* state) {
       VkVertexInputAttributeDescription{
         .location = 1,
         .binding = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 2,
+        .binding = 2,
         .format = VK_FORMAT_R32G32B32_SFLOAT,
         .offset = 0
       },
@@ -1017,8 +1031,8 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
                             nullptr);
 
     // Bind vertex buffers.
-    std::vector<VkBuffer> buffers = {state->buffer_vertex, state->buffer_normal};
-    VkDeviceSize offsets[] = {0, 0};
+    std::vector<VkBuffer> buffers = {state->buffer_vertex, state->buffer_normal, state->buffer_color};
+    VkDeviceSize offsets[] = {0, 0, 0};
     vkCmdBindVertexBuffers(frame.cmdBuf, 0, buffers.size(), buffers.data(), offsets);
 
     // Bind index buffers.
@@ -1384,7 +1398,6 @@ bool createLogicalDevice(VulkanState* state) {
     return false;
   }
 
-
   VkDeviceQueueInfo2 queueInfo{
       .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2,
       .queueFamilyIndex = state->graphicsFamilyIndex.value(),
@@ -1646,9 +1659,11 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
   if (state->buffer_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
     vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
+    vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_color);
     vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
     state->buffer_vertex = VK_NULL_HANDLE;
     state->buffer_normal = VK_NULL_HANDLE;
+    state->buffer_color = VK_NULL_HANDLE;
     state->buffer_index = VK_NULL_HANDLE;
   }
 
@@ -1664,6 +1679,7 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
 
   VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
   VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
+  VkDeviceSize color_buffer_size = Aligned(3 * n_verts * sizeof(float), 256);
   VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
 
   if(vertex_buffer_size == 0)
@@ -1718,6 +1734,31 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
       *data++ = n.z;
     }
     vmaUnmapMemory(state->allocator, state->alloc_normal);
+  }
+
+  {
+    // Выделяем память под буфер с цветами.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = color_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_color,
+                    &state->alloc_color, nullptr);
+    // Копируем цвета.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_color, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    for (glm::vec3 c : GetColorIterator(scene)) {
+      *data++ = c.x;
+      *data++ = c.y;
+      *data++ = c.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_color);
   }
 
   {
@@ -1924,6 +1965,7 @@ void GpuManager::finalize() {
 
   vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
   vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
+  vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_normal);
   vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
   vmaDestroyBuffer(state->allocator, state->buffer_frame, state->alloc_frame);
 

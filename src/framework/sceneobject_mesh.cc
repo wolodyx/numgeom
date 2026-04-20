@@ -138,8 +138,19 @@ class Drawable2_TriMesh : public Drawable2 {
 
 SceneObject_Mesh::SceneObject_Mesh(Scene* scene, CTriMesh::Ptr mesh)
     : SceneObject(scene) {
+  static std::array<glm::vec3,5> s_colors = {
+      glm::vec3(0.20,0.31,0.90),
+      glm::vec3(0.50,0.17,0.78),
+      glm::vec3(0.10,0.73,0.18),
+      glm::vec3(0.20,0.50,0.10),
+      glm::vec3(0.31,0.59,0.83),
+  };
+  static int s_color_index = 0;
+
   if(mesh) {
-    this->AddDrawable<Drawable2_TriMesh>(mesh);
+    auto d = this->AddDrawable<Drawable2_TriMesh>(mesh);
+    d->SetColor(s_colors[s_color_index]);
+    s_color_index = (s_color_index + 1) % s_colors.size();
   }
 }
 

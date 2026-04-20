@@ -25,6 +25,8 @@ class FRAMEWORK_EXPORT Drawable {
   virtual size_t GetCellsCount() const = 0;
   virtual Iterator<glm::vec3> GetVertices() const = 0;
   virtual AlignedBoundBox GetBoundBox() const = 0;
+  void SetColor(const glm::vec3& color) { color_ = color; }
+  glm::vec3 GetColor() const { return color_; }
   bool HasChanges() const { return has_changes_; }
   void ClearChanges() { has_changes_ = false; }
 
@@ -33,6 +35,7 @@ class FRAMEWORK_EXPORT Drawable {
 
  private:
   SceneObject* parent_;
+  glm::vec3 color_;
 };
 
 class FRAMEWORK_EXPORT Drawable0 : public Drawable {

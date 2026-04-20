@@ -73,7 +73,7 @@ generate_qt_conf()
 
 add_subdirectory(extern)
 add_subdirectory(src)
-add_subdirectory(examples)
+add_subdirectory(demo)
 
 include(CTest)
 if(BUILD_TESTING)

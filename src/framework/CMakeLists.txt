@@ -1,6 +1,8 @@
 set(PUBLIC_HEADERS
   include/numgeom/application.h
   include/numgeom/drawable.h
+  include/numgeom/drawable_cone.h
+  include/numgeom/drawable_cylinder.h
   include/numgeom/drawable_sphere.h
   include/numgeom/gpumanager.h
   include/numgeom/scene.h
@@ -16,6 +18,8 @@ set(SOURCE_FILES
   application.cc
   camera.cc                 camera.h
   drawable.cc
+  drawable_cone.cc
+  drawable_cylinder.cc
   drawable_sphere.cc
   gpumanager.cc
   scene.cc

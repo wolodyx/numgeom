@@ -35,6 +35,7 @@ class FRAMEWORK_EXPORT Drawable {
   virtual AlignedBoundBox GetBoundBox() const;
 
   void SetColor(const glm::vec3& color) { color_ = color; }
+  void SetColor(float r, float g, float b) { color_ = glm::vec3(r,g,b); }
   glm::vec3 GetColor() const { return color_; }
   bool HasChanges() const { return has_changes_; }
   void ClearChanges() { has_changes_ = false; }

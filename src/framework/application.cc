@@ -7,6 +7,7 @@
 #include "numgeom/gpumanager.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
+#include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/trimesh.h"
 
 #include "camera.h"
@@ -115,4 +116,10 @@ void Application::clearScene() {
 
 void Application::set_aspect_function(std::function<float()> func) {
   m_pimpl->camera.setAspectFunction(func);
+}
+
+void Application::AddAxisIndicator() {
+  m_pimpl->scene.AddObject<SceneWidget_AxisIndicator>();
+  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
+  this->update();
 }

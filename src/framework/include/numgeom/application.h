@@ -63,6 +63,8 @@ class FRAMEWORK_EXPORT Application {
 
   void add(CTriMesh::Ptr);
 
+  void AddAxisIndicator();
+
   void clearScene();
   //!@}
 

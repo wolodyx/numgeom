@@ -10,5 +10,12 @@ class SceneWidget_AxisIndicator : public SceneWidget {
   virtual ~SceneWidget_AxisIndicator();
 
  private:
+  Drawable* sphere_;
+  Drawable* x_cylinder_;
+  Drawable* y_cylinder_;
+  Drawable* z_cylinder_;
+  Drawable* x_cone_;
+  Drawable* y_cone_;
+  Drawable* z_cone_;
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENEWIDGET_AXISINDICATOR_H

@@ -6,6 +6,7 @@
 
 class FRAMEWORK_EXPORT SceneWidget : public SceneObject {
  public:
+  SceneWidget(Scene*);
   virtual ~SceneWidget();
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENEWIDGET_H

@@ -2,6 +2,8 @@
 #define NUMGEOM_CORE_ALIGNEDBOUNDBOX_H
 
 #include <limits>
+#include <cmath>
+#include <algorithm>
 
 #include <glm/glm.hpp>
 
@@ -77,6 +79,45 @@ class AlignedBoundBox {
   AlignedBoundBox Intersection(const AlignedBoundBox& other) const {
     if (!Intersects(other)) return AlignedBoundBox(); // пустая
     return AlignedBoundBox(glm::max(min_, other.min_), glm::min(max_, other.max_));
+  }
+
+  //! Сравнение двух габаритных коробок с заданной точностью.
+  bool IsEqual(const AlignedBoundBox& other, float tolerance) const {
+    if (IsEmpty() && other.IsEmpty()) return true;
+    if (IsEmpty() || other.IsEmpty()) return false;
+    return std::abs(min_.x - other.min_.x) <= tolerance &&
+           std::abs(min_.y - other.min_.y) <= tolerance &&
+           std::abs(min_.z - other.min_.z) <= tolerance &&
+           std::abs(max_.x - other.max_.x) <= tolerance &&
+           std::abs(max_.y - other.max_.y) <= tolerance &&
+           std::abs(max_.z - other.max_.z) <= tolerance;
+  }
+
+  //! Возвращает максимальное отклонение между двумя коробками.
+  //! Вычисляется как наибольшая из абсолютных разностей соответствующих
+  //! координат min и max. Если одна из коробок пуста, возвращает
+  //! std::numeric_limits<float>::max().
+  float Deviation(const AlignedBoundBox& other) const {
+    if (IsEmpty() || other.IsEmpty()) {
+      return std::numeric_limits<float>::max();
+    }
+    float dx_min = std::abs(min_.x - other.min_.x);
+    float dy_min = std::abs(min_.y - other.min_.y);
+    float dz_min = std::abs(min_.z - other.min_.z);
+    float dx_max = std::abs(max_.x - other.max_.x);
+    float dy_max = std::abs(max_.y - other.max_.y);
+    float dz_max = std::abs(max_.z - other.max_.z);
+    return std::max({dx_min, dy_min, dz_min, dx_max, dy_max, dz_max});
+  }
+
+  //! Оператор точного равенства (с точностью 1e-6).
+  bool operator==(const AlignedBoundBox& other) const {
+    return IsEqual(other, 1e-6f);
+  }
+
+  //! Оператор неравенства.
+  bool operator!=(const AlignedBoundBox& other) const {
+    return !(*this == other);
   }
 
   glm::vec3 GetCenter() const {

@@ -24,7 +24,16 @@ class FRAMEWORK_EXPORT Drawable {
   virtual size_t GetVertsCount() const = 0;
   virtual size_t GetCellsCount() const = 0;
   virtual Iterator<glm::vec3> GetVertices() const = 0;
-  virtual AlignedBoundBox GetBoundBox() const = 0;
+
+  /**
+  \brief Возвращает габаритную коробку.
+
+  Если производный класс обладает более быстрым способом вычисления коробки, чем
+  пройтись по всем вершинам и расширять коробку, то следует этой реализацией
+  переопределить этот метод.
+  */
+  virtual AlignedBoundBox GetBoundBox() const;
+
   void SetColor(const glm::vec3& color) { color_ = color; }
   glm::vec3 GetColor() const { return color_; }
   bool HasChanges() const { return has_changes_; }

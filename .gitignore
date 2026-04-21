@@ -1,3 +1,6 @@
 /bld/
 /vcpkg_installed/
 /CMakeUserPresets.json
+/.codeassistant
+/.claude
+/.roo

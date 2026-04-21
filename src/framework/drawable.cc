@@ -10,6 +10,13 @@ Drawable::Drawable(SceneObject* parent) {
 Drawable::~Drawable() {
 }
 
+AlignedBoundBox Drawable::GetBoundBox() const {
+  AlignedBoundBox box;
+  for (auto pt : this->GetVertices())
+    box.Expand(pt);
+  return box;
+}
+
 Drawable0::Drawable0(SceneObject* parent) : Drawable(parent) {
 }
 

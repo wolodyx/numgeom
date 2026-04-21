@@ -1,6 +1,7 @@
 set(SOURCE_FILES
   main.cc
   testcircularlist.cc
+  testdrawable.cc
   testexample.cc
   testiterator.cc
   testscene.cc

@@ -1965,7 +1965,7 @@ void GpuManager::finalize() {
 
   vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
   vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
-  vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_normal);
+  vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_color);
   vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
   vmaDestroyBuffer(state->allocator, state->buffer_frame, state->alloc_frame);
 

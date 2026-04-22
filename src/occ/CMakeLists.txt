@@ -1,5 +1,6 @@
 set(PUBLIC_HEADERS
   include/numgeom/classificate.h
+  include/numgeom/drawable_occshape.h
   include/numgeom/enums.h
   include/numgeom/ijk.h
   include/numgeom/iterator.h
@@ -7,6 +8,7 @@ set(PUBLIC_HEADERS
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
+  include/numgeom/sceneobject_tdocstd_document.h
   include/numgeom/tesselate.h
   include/numgeom/utilities.h
 )
@@ -15,6 +17,7 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   classificate.cc
   curvemetriclength.cc      curvemetriclength.h
+  drawable_occshape.cc
   ffextintersections.cc     ffextintersections.h
   intersections.cc          intersections.h
   iterator_ijk.cc           iterator_ijk.h
@@ -22,6 +25,7 @@ set(SOURCE_FILES
   octree.cc
   quadtree.cc
   removefaces.cc
+  sceneobject_tdocstd_document.cc
   tesselate.cc
   utilities.cc
   writevtk.cc               writevtk.h
@@ -43,6 +47,7 @@ target_link_libraries(occ
     TKG3d
     TKernel
   PRIVATE
+    numgeom::framework
     nlohmann_json
     TKBO
     TKBRep

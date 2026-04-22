@@ -11,6 +11,12 @@
 
 #include "numgeom/application.h"
 #include "numgeom/gpumanager.h"
+#include "numgeom/loadusingocc.h"
+#include "numgeom/scene.h"
+#include "numgeom/sceneobject_mesh.h"
+#ifdef USE_NUMGEOM_MODULE_OCC
+#  include "numgeom/sceneobject_tdocstd_document.h"
+#endif
 
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
@@ -53,10 +59,6 @@ void MainWindow::initVulkan() {
       });
 
   gpu_manager->initialize();  //< Продолжить начатую выше инициализацию.
-  auto mesh =
-      LoadToTriMesh("/home/tim/projects/numgeom/tests/data/polydata-cube.vtk");
-  app_->add(mesh);
-  app_->update();
 }
 
 void MainWindow::createActions() {
@@ -115,16 +117,39 @@ void MainWindow::onQuit() {
     this->close();
 }
 
+namespace {
+bool IsStepFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "step" || suffix == "stp";
+}
+}
+
 void MainWindow::onOpenFile() {
   QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"));
   if (filename.isEmpty()) return;
-
+  Scene& scene = app_->scene();
+  scene.Clear();
+#ifdef USE_NUMGEOM_MODULE_OCC
+  if(IsStepFile(filename)) {
+    auto document = LoadStepDocument(filename.toStdWString());
+    if (!document) {
+      qDebug() << "Ошибка при загрузке файла '" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_TDocStd_Document>(document);
+    app_->fitScene();
+    return;
+  }
+#endif
   auto mesh = LoadToTriMesh(filename.toStdString());
-  std::cout << "Nodes: " << (mesh ? mesh->NbNodes() : 0) << std::endl;
-  std::cout << "Cells: " << (mesh ? mesh->NbCells() : 0) << std::endl;
-  app_->add(mesh);
+  if(mesh) {
+    scene.AddObject<SceneObject_Mesh>(mesh);
+    app_->fitScene();
+  }
 }
 
 void MainWindow::onFitScene() {
-    app_->fitScene();
+  app_->fitScene();
 }

@@ -10,6 +10,7 @@ class QWindow;
 
 class GpuManager;
 class Scene;
+class SceneObject;
 
 /** \class Application
 \brief Сущность, в которой содержится все состояние приложения.
@@ -60,10 +61,6 @@ class FRAMEWORK_EXPORT Application {
 
   const Scene& scene() const;
   Scene& scene();
-
-  void add(CTriMesh::Ptr);
-
-  void AddAxisIndicator();
 
   void clearScene();
   //!@}

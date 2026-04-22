@@ -101,14 +101,6 @@ GpuManager* Application::gpuManager() { return m_pimpl->gpuManager; }
 const Scene& Application::scene() const { return m_pimpl->scene; }
 Scene& Application::scene() { return m_pimpl->scene; }
 
-void Application::add(CTriMesh::Ptr mesh) {
-  if(!mesh)
-    return;
-  m_pimpl->scene.AddObject<SceneObject_Mesh>(mesh);
-  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
-  this->update();
-}
-
 void Application::clearScene() {
   m_pimpl->scene.Clear();
   this->update();
@@ -116,10 +108,4 @@ void Application::clearScene() {
 
 void Application::set_aspect_function(std::function<float()> func) {
   m_pimpl->camera.setAspectFunction(func);
-}
-
-void Application::AddAxisIndicator() {
-  m_pimpl->scene.AddObject<SceneWidget_AxisIndicator>();
-  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
-  this->update();
 }

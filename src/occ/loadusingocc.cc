@@ -3,8 +3,11 @@
 #include <algorithm>
 
 #include "BRepTools.hxx"
-#include "STEPControl_Reader.hxx"
 #include "ShapeFix_Shape.hxx"
+#include "STEPCAFControl_Reader.hxx"
+#include "STEPControl_Reader.hxx"
+#include "XCAFApp_Application.hxx"
+
 #include "numgeom/utilities.h"
 
 TriMesh::Ptr LoadUsingOCC(const std::filesystem::path& filename) {
@@ -35,4 +38,28 @@ TriMesh::Ptr LoadUsingOCC(const std::filesystem::path& filename) {
   }
 
   return ConvertToTriMesh(shape);
+}
+
+Handle(TDocStd_Document) LoadStepDocument(const std::filesystem::path& filename) {
+  Handle(XCAFApp_Application) app = XCAFApp_Application::GetApplication();
+  Handle(TDocStd_Document) document;
+  app->NewDocument("MDTV-XCAF", document);
+
+  STEPCAFControl_Reader reader;
+  reader.SetColorMode(true);
+  reader.SetNameMode(true);
+  reader.SetLayerMode(true);
+
+  std::u8string u8_filename = filename.u8string();
+  auto occ_filename = reinterpret_cast<const char*>(u8_filename.c_str());
+  IFSelect_ReturnStatus status = reader.ReadFile(occ_filename);
+  if (status != IFSelect_RetDone) {
+    return Handle(TDocStd_Document)();
+  }
+
+  if (!reader.Transfer(document)) {
+    return Handle(TDocStd_Document)();
+  }
+
+  return document;
 }

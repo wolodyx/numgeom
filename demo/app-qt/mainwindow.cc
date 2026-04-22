@@ -11,10 +11,10 @@
 
 #include "numgeom/application.h"
 #include "numgeom/gpumanager.h"
-#include "numgeom/loadusingocc.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
+#  include "numgeom/loadusingocc.h"
 #  include "numgeom/sceneobject_tdocstd_document.h"
 #endif
 

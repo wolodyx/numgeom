@@ -1,6 +1,8 @@
 #ifndef NUMGEOM_OCC_OCCSHAPE_H
 #define NUMGEOM_OCC_OCCSHAPE_H
 
+#include <list>
+
 #include "TopoDS_Shape.hxx"
 #include "gp_Trsf.hxx"
 

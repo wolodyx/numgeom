@@ -57,6 +57,7 @@ target_link_libraries(occ
     TKMesh
     TKShHealing
     TKTopAlgo
+    TKXDESTEP
     TKXSBase
 )
 

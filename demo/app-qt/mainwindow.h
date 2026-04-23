@@ -18,10 +18,16 @@ class MainWindow : public QMainWindow {
 
  private:
   void createActions();
+  void updateRecentFilesMenu();
+  void loadRecentFiles();
+  void saveRecentFiles();
+  void addToRecentFiles(const QString& filepath);
+  void openFile(const QString&);
 
- public slots:
+ private slots:
   void onScreenshot();
   void onOpenFile();
+  void onOpenRecentFile();
   void onQuit();
   void onFitScene();
 
@@ -30,5 +36,8 @@ class MainWindow : public QMainWindow {
   SceneWindow* scene_window_;
   QVulkanInstance vulkan_instance_;
   QSettings settings_;
+  QStringList recent_files_;
+  static const int kMaxRecentFiles = 10;
+  QMenu* recent_files_menu_;
 };
 #endif  // NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_

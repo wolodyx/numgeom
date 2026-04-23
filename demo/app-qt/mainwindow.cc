@@ -3,8 +3,11 @@
 #include <iostream>
 
 #include "qapplication.h"
+#include "qdir.h"
 #include "qevent.h"
+#include "qfile.h"
 #include "qfiledialog.h"
+#include "qfileinfo.h"
 #include "qmenu.h"
 #include "qmenubar.h"
 #include "qscreen.h"
@@ -23,6 +26,7 @@
 
 MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   app_ = app;
+  loadRecentFiles();
   this->createActions();
   scene_window_ = new SceneWindow(app_);
   scene_window_->setSurfaceType(QSurface::VulkanSurface);
@@ -75,6 +79,13 @@ void MainWindow::createActions() {
     file_menu->addAction(act);
   }
 
+  file_menu->addSeparator();
+
+  recent_files_menu_ = file_menu->addMenu(tr("Open &Recent"));
+  updateRecentFilesMenu();
+
+  file_menu->addSeparator();
+
   {
     QIcon icon;
     icon.addFile(QString::fromUtf8(":/resources/icons/screenshot-16.png"),
@@ -126,14 +137,7 @@ bool IsStepFile(const QString& filename) {
 }
 }
 
-void MainWindow::onOpenFile() {
-  QString last_directory =
-    settings_.value("MainWindow/lastDirectory", QDir::homePath()).toString();
-  QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"),
-                                                  last_directory);
-  if (filename.isEmpty()) return;
-  settings_.setValue("MainWindow/lastDirectory",
-                     QFileInfo(filename).absolutePath());
+void MainWindow::openFile(const QString& filename) {
   Scene& scene = app_->scene();
   scene.Clear();
 #ifdef USE_NUMGEOM_MODULE_OCC
@@ -155,6 +159,82 @@ void MainWindow::onOpenFile() {
   }
 }
 
+void MainWindow::onOpenFile() {
+  QString last_directory =
+    settings_.value("MainWindow/lastDirectory", QDir::homePath()).toString();
+  QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"),
+                                                  last_directory);
+  if (filename.isEmpty()) return;
+  settings_.setValue("MainWindow/lastDirectory",
+                     QFileInfo(filename).absolutePath());
+  addToRecentFiles(filename);
+  this->openFile(filename);
+}
+
 void MainWindow::onFitScene() {
   app_->fitScene();
+}
+
+void MainWindow::loadRecentFiles() {
+  recent_files_.clear();
+  int size = settings_.beginReadArray("MainWindow/recentFiles");
+  for (int i = 0; i < size; ++i) {
+    settings_.setArrayIndex(i);
+    QString file = settings_.value("file").toString();
+    if (QFile::exists(file)) {
+      recent_files_.append(file);
+    }
+  }
+  settings_.endArray();
+}
+
+void MainWindow::saveRecentFiles() {
+  settings_.beginWriteArray("MainWindow/recentFiles");
+  for (int i = 0; i < recent_files_.size(); ++i) {
+    settings_.setArrayIndex(i);
+    settings_.setValue("file", recent_files_.at(i));
+  }
+  settings_.endArray();
+}
+
+void MainWindow::addToRecentFiles(const QString& filepath) {
+  recent_files_.removeAll(filepath);
+  recent_files_.prepend(filepath);
+  while (recent_files_.size() > kMaxRecentFiles) {
+    recent_files_.removeLast();
+  }
+  saveRecentFiles();
+  updateRecentFilesMenu();
+}
+
+void MainWindow::updateRecentFilesMenu() {
+  if (!recent_files_menu_) return;
+  recent_files_menu_->clear();
+  if (recent_files_.isEmpty()) {
+    QAction* act = new QAction(tr("No recent files"), this);
+    act->setEnabled(false);
+    recent_files_menu_->addAction(act);
+    return;
+  }
+  for (const QString& file : recent_files_) {
+    QAction* act = new QAction(QFileInfo(file).fileName(), this);
+    act->setData(file);
+    act->setStatusTip(file);
+    connect(act, SIGNAL(triggered()), this, SLOT(onOpenRecentFile()));
+    recent_files_menu_->addAction(act);
+  }
+}
+
+void MainWindow::onOpenRecentFile() {
+  QAction* action = qobject_cast<QAction*>(sender());
+  if (!action) return;
+  QString filename = action->data().toString();
+  if (!QFile::exists(filename)) {
+    recent_files_.removeAll(filename);
+    saveRecentFiles();
+    updateRecentFilesMenu();
+    return;
+  }
+  this->openFile(filename);
+  addToRecentFiles(filename);
 }

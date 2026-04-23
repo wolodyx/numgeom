@@ -1795,10 +1795,18 @@ void updateDescriptorSets(Application* app, VulkanState* state) {
     .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),
     .normalMatrixRow2 = glm::vec4(normal_matrix[2], 0.0f)
   };
-  glm::vec3 lightPos = glm::inverse(model_view_matrix) * glm::vec4(10.27f, 10.27f, 10.92f, 0.0f);
+  // Адаптивное размещение источника освещения на основе размера сцены
+  AlignedBoundBox box = app->scene().GetBoundBox();
+  glm::vec3 cameraPos = app->CameraPosition();
+  glm::vec3 sceneCenter = box.GetCenter();
+  glm::vec3 sceneSize = box.GetSize();
+  float sceneRadius = glm::length(sceneSize) * 0.5f;
+  float lightDistance = sceneRadius * 2.0f;
+  glm::vec3 lightOffset = glm::normalize(glm::vec3(1.0f, 1.0f, -0.5f)) * lightDistance;
+  glm::vec3 lightPos = cameraPos + lightOffset;
   FragmentBufferObject fbo{
     .lightPos = glm::vec4(lightPos, 0.0f),
-    .viewPos = glm::vec4(app->CameraPosition(), 0.0f)
+    .viewPos = glm::vec4(cameraPos, 0.0f)
   };
 
   VkDeviceSize vbo_size = Aligned(sizeof(vbo), 256);

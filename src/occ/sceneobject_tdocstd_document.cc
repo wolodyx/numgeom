@@ -111,7 +111,7 @@ SceneObject_TDocStd_Document::SceneObject_TDocStd_Document(
     auto d = this->AddDrawable<Drawable2_OccShape>(tShape.shape, tShape.trsf);
     Quantity_Color clr;
     if (!color_tool->GetColor(tShape.shape,XCAFDoc_ColorSurf,clr))
-      clr = Quantity_Color(0.0, 0.0, 0.0, Quantity_TOC_RGB);
+      clr = Quantity_Color(0.647,0.647,0.647,Quantity_TOC_RGB);
     d->SetColor(clr.Red(), clr.Green(), clr.Blue());
   }
 }

@@ -1,6 +1,7 @@
 #include "numgeom/drawable_occshape.h"
 
 #include "BRep_Tool.hxx"
+#include "BRepLib_ToolTriangulatedShape.hxx"
 #include "BRepMesh_IncrementalMesh.hxx"
 #include "gp_Trsf.hxx"
 #include "TopExp_Explorer.hxx"
@@ -228,7 +229,7 @@ class OccNormalIterator : public IteratorImpl<glm::vec3> {
     const Handle(Poly_Triangulation)& trng = std::get<0>(*trng_it_);
     gp_Dir normal;
     if (!trng->HasNormals())
-      return glm::vec3(0.0f);
+      return glm::vec3(0.0f, 0.0f, 1.0f);
     normal = trng->Normal(current_index_ + 1);
     if (reverse_normal_)
       normal.Reverse();
@@ -282,6 +283,9 @@ Drawable2_OccShape::Drawable2_OccShape(SceneObject* parent,
     }
     if (!tr)
       continue;
+    if (!tr->HasNormals() && tr->HasUVNodes()) {
+      BRepLib_ToolTriangulatedShape::ComputeNormals(f,tr);
+    }
     verts_num_ += tr->NbNodes();
     cells_num_ += tr->NbTriangles();
     bool reverse_normals = (f.Orientation() == TopAbs_REVERSED);

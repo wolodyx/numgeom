@@ -7,11 +7,11 @@
 template<typename DrawableType>
 class SceneObject_WithDrawable : public SceneObject {
  public:
-   template<class... _Types>
-   SceneObject_WithDrawable(Scene* scene, _Types&&... _Args) : SceneObject(scene) {
+  template<class... _Types>
+  SceneObject_WithDrawable(Scene* scene, _Types&&... _Args) : SceneObject(scene) {
     this->AddDrawable<DrawableType>(_Args...);
-  }
-  virtual ~SceneObject_WithDrawable() {}
+ }
+ virtual ~SceneObject_WithDrawable() {}
 };
 
 template<typename DrawableType, class... _Types>

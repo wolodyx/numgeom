@@ -35,8 +35,8 @@
    especially those whose name start with YY_ or yy_.  They are
    private implementation details that can be changed or removed.  */
 
-#ifndef YY_VTK_HOME_BOB_NUMGEOM_BLD_LINUX_VCPKG_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED
-# define YY_VTK_HOME_BOB_NUMGEOM_BLD_LINUX_VCPKG_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED
+#ifndef YY_VTK_HOME_TIM_PROJECTS_NUMGEOM_BLD_LINUX_SYSTEM_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED
+# define YY_VTK_HOME_TIM_PROJECTS_NUMGEOM_BLD_LINUX_SYSTEM_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED
 /* Debug traces.  */
 #ifndef VTKDEBUG
 # if defined YYDEBUG
@@ -87,13 +87,11 @@ extern int vtkdebug;
 #if ! defined VTKSTYPE && ! defined VTKSTYPE_IS_DECLARED
 union VTKSTYPE
 {
-#line 16 "/home/bob/numgeom/src/io/vtk.y"
 
   double real;
   int integer;
   char* string;
 
-#line 97 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.h"
 
 };
 typedef union VTKSTYPE VTKSTYPE;
@@ -122,4 +120,4 @@ extern VTKLTYPE vtklloc;
 int vtkparse (void);
 
 
-#endif /* !YY_VTK_HOME_BOB_NUMGEOM_BLD_LINUX_VCPKG_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED  */
+#endif /* !YY_VTK_HOME_TIM_PROJECTS_NUMGEOM_BLD_LINUX_SYSTEM_RELEASE_SRC_IO_VTK_PARSER_H_INCLUDED  */

@@ -77,7 +77,6 @@
 #define yylloc          vtklloc
 
 /* First part of user prologue.  */
-#line 1 "/home/bob/numgeom/src/io/vtk.y"
 
 #include <stdio.h>
 #include "vtk_parser.h"
@@ -91,7 +90,6 @@ void PreparePointArray(int);
 void PrepareVtkLoading();
 void PreparePolygonArray(int, int);
 
-#line 95 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
 
 # ifndef YY_CAST
 #  ifdef __cplusplus
@@ -146,13 +144,14 @@ enum yysymbol_kind_t
   YYSYMBOL_DataSet = 24,                   /* DataSet  */
   YYSYMBOL_StructuredGrid = 25,            /* StructuredGrid  */
   YYSYMBOL_UnstructuredGrid = 26,          /* UnstructuredGrid  */
-  YYSYMBOL_Polydata = 27,                  /* Polydata  */
-  YYSYMBOL_28_2 = 28,                      /* $@2  */
+  YYSYMBOL_27_2 = 27,                      /* $@2  */
+  YYSYMBOL_Polydata = 28,                  /* Polydata  */
   YYSYMBOL_29_3 = 29,                      /* $@3  */
-  YYSYMBOL_ValueType = 30,                 /* ValueType  */
-  YYSYMBOL_NumericValues = 31,             /* NumericValues  */
-  YYSYMBOL_IntValues = 32,                 /* IntValues  */
-  YYSYMBOL_Fields = 33                     /* Fields  */
+  YYSYMBOL_30_4 = 30,                      /* $@4  */
+  YYSYMBOL_ValueType = 31,                 /* ValueType  */
+  YYSYMBOL_NumericValues = 32,             /* NumericValues  */
+  YYSYMBOL_IntValues = 33,                 /* IntValues  */
+  YYSYMBOL_Fields = 34                     /* Fields  */
 };
 typedef enum yysymbol_kind_t yysymbol_kind_t;
 
@@ -488,11 +487,11 @@ union yyalloc
 /* YYNTOKENS -- Number of terminals.  */
 #define YYNTOKENS  20
 /* YYNNTS -- Number of nonterminals.  */
-#define YYNNTS  14
+#define YYNNTS  15
 /* YYNRULES -- Number of rules.  */
-#define YYNRULES  22
+#define YYNRULES  23
 /* YYNSTATES -- Number of states.  */
-#define YYNSTATES  55
+#define YYNSTATES  56
 
 /* YYMAXUTOK -- Last valid token kind.  */
 #define YYMAXUTOK   274
@@ -544,8 +543,8 @@ static const yytype_int8 yytranslate[] =
 static const yytype_int8 yyrline[] =
 {
        0,    47,    47,    47,    54,    54,    56,    56,    56,    59,
-      66,    77,    79,    76,    83,    83,    86,    87,    88,    89,
-      92,    93,    96
+      67,    66,    77,    79,    76,    83,    83,    86,    87,    88,
+      89,    92,    93,    96
 };
 #endif
 
@@ -566,7 +565,7 @@ static const char *const yytname[] =
   "DATASET", "DIMENSIONS", "DOUBLE", "FLOAT", "POINTS", "POLYDATA",
   "POLYGONS", "STRUCTURED_GRID", "TITLE", "UNSTRUCTURED_GRID", "real",
   "integer", "$accept", "Input", "$@1", "FileFormat", "DataSet",
-  "StructuredGrid", "UnstructuredGrid", "Polydata", "$@2", "$@3",
+  "StructuredGrid", "UnstructuredGrid", "$@2", "Polydata", "$@3", "$@4",
   "ValueType", "NumericValues", "IntValues", "Fields", YY_NULLPTR
 };
 
@@ -577,7 +576,7 @@ yysymbol_name (yysymbol_kind_t yysymbol)
 }
 #endif
 
-#define YYPACT_NINF (-44)
+#define YYPACT_NINF (-47)
 
 #define yypact_value_is_default(Yyn) \
   ((Yyn) == YYPACT_NINF)
@@ -591,12 +590,12 @@ yysymbol_name (yysymbol_kind_t yysymbol)
    STATE-NUM.  */
 static const yytype_int8 yypact[] =
 {
-       2,   -44,    19,    -9,   -44,     7,   -44,   -44,    17,     5,
-     -44,   -44,   -44,   -44,     9,    21,    20,   -44,    12,    14,
-      15,    13,    16,    13,   -44,   -44,   -44,    18,     8,     8,
-      24,   -44,   -44,    -5,   -10,    22,    23,   -44,   -44,    25,
-      13,    26,    27,     8,    28,   -44,    10,   -44,    -3,    28,
-      29,   -44,    30,    28,    30
+       0,   -47,    13,     4,   -47,     7,   -47,   -47,    -1,     6,
+     -47,   -47,   -47,   -47,    18,    22,    20,   -47,     3,    15,
+      16,    14,    17,    14,   -47,   -47,   -47,    19,   -47,     8,
+      21,     8,   -47,   -47,    -9,    23,    -3,    24,   -47,   -47,
+      14,    25,    26,     8,    27,   -47,    10,    28,    28,   -47,
+      -5,    29,    30,   -47,    28,    29
 };
 
 /* YYDEFACT[STATE-NUM] -- Default reduction number in state STATE-NUM.
@@ -605,25 +604,25 @@ static const yytype_int8 yypact[] =
 static const yytype_int8 yydefact[] =
 {
        0,     2,     0,     0,     1,     0,     4,     5,     0,     0,
-      22,     6,     7,     8,     0,     0,     0,     3,     0,     0,
-       0,     0,     0,     0,    15,    14,    11,     0,     0,     0,
-       0,    16,    17,     0,     0,     0,     0,    18,    19,     0,
-       0,     0,     0,     0,     0,    12,     9,    20,     0,     0,
-       0,    21,    13,     0,    10
+      23,     6,     7,     8,     0,     0,     0,     3,     0,     0,
+       0,     0,     0,     0,    16,    15,    12,     0,    10,     0,
+       0,     0,    17,    18,     0,     0,     0,     0,    19,    20,
+       0,     0,     0,     0,     0,    13,     9,     0,     0,    21,
+       0,    14,     0,    22,     0,    11
 };
 
 /* YYPGOTO[NTERM-NUM].  */
 static const yytype_int8 yypgoto[] =
 {
-     -44,   -44,   -44,   -44,   -44,   -44,   -44,   -44,   -44,   -44,
-     -23,   -28,   -43,   -44
+     -47,   -47,   -47,   -47,   -47,   -47,   -47,   -47,   -47,   -47,
+     -47,   -23,   -25,   -46,   -47
 };
 
 /* YYDEFGOTO[NTERM-NUM].  */
 static const yytype_int8 yydefgoto[] =
 {
-       0,     2,     3,     8,    10,    11,    12,    13,    29,    49,
-      26,    33,    48,    17
+       0,     2,     3,     8,    10,    11,    12,    31,    13,    29,
+      48,    26,    34,    50,    17
 };
 
 /* YYTABLE[YYPACT[STATE-NUM]] -- What to do in state STATE-NUM.  If
@@ -631,20 +630,20 @@ static const yytype_int8 yydefgoto[] =
    number is the opposite.  If YYTABLE_NINF, syntax error.  */
 static const yytype_int8 yytable[] =
 {
-      28,    34,    36,    50,    39,     1,    52,     5,    37,    38,
-      54,     6,     7,    37,    38,    46,    51,    43,    14,     4,
-      15,    18,    16,    24,    25,     9,    31,    32,    37,    38,
-      19,    21,    20,    22,    23,    27,    35,    30,     0,     0,
-       0,    40,    41,     0,    42,    44,    45,    47,    53,    51
+      28,    52,    51,     1,    41,    37,    36,     9,    55,    38,
+      39,     6,     7,     4,    53,    38,    39,    43,    46,    14,
+       5,    15,    21,    16,    24,    25,    32,    33,    38,    39,
+      18,    19,    20,    35,    22,    23,    27,     0,    30,     0,
+       0,     0,    40,    42,    44,    45,    47,    49,    53,    54
 };
 
 static const yytype_int8 yycheck[] =
 {
-      23,    29,     7,     6,    14,     3,    49,    16,    18,    19,
-      53,     4,     5,    18,    19,    43,    19,    40,    13,     0,
-      15,    12,    17,    10,    11,     8,    18,    19,    18,    19,
-       9,    19,    12,    19,    19,    19,    12,    19,    -1,    -1,
-      -1,    19,    19,    -1,    19,    19,    19,    19,    19,    19
+      23,     6,    48,     3,     7,    14,    31,     8,    54,    18,
+      19,     4,     5,     0,    19,    18,    19,    40,    43,    13,
+      16,    15,    19,    17,    10,    11,    18,    19,    18,    19,
+      12,     9,    12,    12,    19,    19,    19,    -1,    19,    -1,
+      -1,    -1,    19,    19,    19,    19,    19,    19,    19,    19
 };
 
 /* YYSTOS[STATE-NUM] -- The symbol kind of the accessing symbol of
@@ -652,27 +651,27 @@ static const yytype_int8 yycheck[] =
 static const yytype_int8 yystos[] =
 {
        0,     3,    21,    22,     0,    16,     4,     5,    23,     8,
-      24,    25,    26,    27,    13,    15,    17,    33,    12,     9,
-      12,    19,    19,    19,    10,    11,    30,    19,    30,    28,
-      19,    18,    19,    31,    31,    12,     7,    18,    19,    14,
-      19,    19,    19,    30,    19,    19,    31,    19,    32,    29,
-       6,    19,    32,    19,    32
+      24,    25,    26,    28,    13,    15,    17,    34,    12,     9,
+      12,    19,    19,    19,    10,    11,    31,    19,    31,    29,
+      19,    27,    18,    19,    32,    12,    32,    14,    18,    19,
+      19,     7,    19,    31,    19,    19,    32,    19,    30,    19,
+      33,    33,     6,    19,    19,    33
 };
 
 /* YYR1[RULE-NUM] -- Symbol kind of the left-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr1[] =
 {
        0,    20,    22,    21,    23,    23,    24,    24,    24,    25,
-      26,    28,    29,    27,    30,    30,    31,    31,    31,    31,
-      32,    32,    33
+      27,    26,    29,    30,    28,    31,    31,    32,    32,    32,
+      32,    33,    33,    34
 };
 
 /* YYR2[RULE-NUM] -- Number of symbols on the right-hand side of rule RULE-NUM.  */
 static const yytype_int8 yyr2[] =
 {
        0,     2,     0,     6,     1,     1,     1,     1,     1,    10,
-      13,     0,     0,    12,     1,     1,     1,     1,     2,     2,
-       1,     2,     0
+       0,    14,     0,     0,    12,     1,     1,     1,     1,     2,
+       2,     1,     2,     0
 };
 
 
@@ -1520,61 +1519,46 @@ yyreduce:
   switch (yyn)
     {
   case 2: /* $@1: %empty  */
-#line 47 "/home/bob/numgeom/src/io/vtk.y"
                              { PrepareVtkLoading(); }
-#line 1526 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 11: /* $@2: %empty  */
-#line 77 "/home/bob/numgeom/src/io/vtk.y"
+  case 10: /* $@2: %empty  */
                              { PreparePointArray((yyvsp[-1].integer)); }
-#line 1532 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
   case 12: /* $@3: %empty  */
-#line 79 "/home/bob/numgeom/src/io/vtk.y"
+                             { PreparePointArray((yyvsp[-1].integer)); }
+    break;
+
+  case 13: /* $@4: %empty  */
                              { PreparePolygonArray((yyvsp[-1].integer), (yyvsp[0].integer)); }
-#line 1538 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 16: /* NumericValues: real  */
-#line 86 "/home/bob/numgeom/src/io/vtk.y"
+  case 17: /* NumericValues: real  */
                           { InsertNextValue((yyvsp[0].real)); }
-#line 1544 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 17: /* NumericValues: integer  */
-#line 87 "/home/bob/numgeom/src/io/vtk.y"
+  case 18: /* NumericValues: integer  */
                           { InsertNextValue((yyvsp[0].integer)); }
-#line 1550 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 18: /* NumericValues: NumericValues real  */
-#line 88 "/home/bob/numgeom/src/io/vtk.y"
+  case 19: /* NumericValues: NumericValues real  */
                           { InsertNextValue((yyvsp[0].real)); }
-#line 1556 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 19: /* NumericValues: NumericValues integer  */
-#line 89 "/home/bob/numgeom/src/io/vtk.y"
+  case 20: /* NumericValues: NumericValues integer  */
                           { InsertNextValue((yyvsp[0].integer)); }
-#line 1562 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 20: /* IntValues: integer  */
-#line 92 "/home/bob/numgeom/src/io/vtk.y"
+  case 21: /* IntValues: integer  */
                           { InsertNextValue((yyvsp[0].integer)); }
-#line 1568 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
-  case 21: /* IntValues: IntValues integer  */
-#line 93 "/home/bob/numgeom/src/io/vtk.y"
+  case 22: /* IntValues: IntValues integer  */
                           { InsertNextValue((yyvsp[0].integer)); }
-#line 1574 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
     break;
 
 
-#line 1578 "/home/bob/numgeom/bld/linux-vcpkg-release/src/io/vtk_parser.c"
 
       default: break;
     }
@@ -1803,5 +1787,4 @@ yyreturnlab:
   return yyresult;
 }
 
-#line 98 "/home/bob/numgeom/src/io/vtk.y"
 

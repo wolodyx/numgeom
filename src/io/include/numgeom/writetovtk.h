@@ -5,6 +5,8 @@
 
 #include "numgeom/trimesh.h"
 
-bool WriteToVtk(CTriMesh::Ptr, const std::filesystem::path& filename);
+bool WriteToUnstructuredVtk(CTriMesh::Ptr,const std::filesystem::path&);
+
+bool WriteToPolydataVtk(CTriMesh::Ptr, const std::filesystem::path&);
 
 #endif  // !NUMGEOM_IO_WRITETOVTK_H

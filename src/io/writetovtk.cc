@@ -2,7 +2,8 @@
 
 #include <fstream>
 
-bool WriteToVtk(CTriMesh::Ptr mesh, const std::filesystem::path& filename) {
+bool WriteToUnstructuredVtk(CTriMesh::Ptr mesh,
+                            const std::filesystem::path& filename) {
   std::ofstream file(filename);
   if (!file.is_open()) return false;
 
@@ -29,6 +30,35 @@ bool WriteToVtk(CTriMesh::Ptr mesh, const std::filesystem::path& filename) {
 
   file << "CELL_TYPES " << nbCells << std::endl;
   for (size_t i = 0; i < nbCells; ++i) file << "5 ";  //< VTK_TRIANGLE
+  file << std::endl;
+
+  return true;
+}
+
+bool WriteToPolydataVtk(CTriMesh::Ptr mesh,
+                        const std::filesystem::path& filename) {
+  std::ofstream file(filename);
+  if (!file.is_open()) return false;
+
+  file << "# vtk DataFile Version 3.0" << std::endl;
+  file << "numgeom output" << std::endl;
+  file << "ASCII" << std::endl;
+  file << "DATASET POLYDATA" << std::endl;
+
+  size_t nodes_count = mesh->NbNodes();
+  file << "POINTS " << nodes_count << " double" << std::endl;
+  for (size_t i = 0; i < nodes_count; ++i) {
+    const auto& pt = mesh->GetNode(i);
+    file << pt.x << ' ' << pt.y << ' ' << pt.z << ' ';
+  }
+  file << std::endl;
+
+  size_t cells_count = mesh->NbCells();
+  file << "POLYGONS " << cells_count << ' ' << 4 * cells_count << std::endl;
+  for (size_t i = 0; i < cells_count; ++i) {
+    const CTriMesh::Cell& cell = mesh->GetCell(i);
+    file << "3 " << cell.na << ' ' << cell.nb << ' ' << cell.nc << ' ';
+  }
   file << std::endl;
 
   return true;

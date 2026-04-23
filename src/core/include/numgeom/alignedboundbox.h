@@ -131,6 +131,20 @@ class AlignedBoundBox {
     return max_ - min_;
   }
 
+  //! Масштабирование коробки относительно её центра.
+  //! Коэффициент factor может быть любым вещественным числом.
+  //! Если |factor| == 1, размер не меняется.
+  //! Если коробка пуста, ничего не делает.
+  void Scale(float factor) {
+    if (IsEmpty()) return;
+    float absFactor = std::abs(factor);
+    glm::vec3 center = GetCenter();
+    glm::vec3 halfSize = (max_ - min_) * 0.5f;
+    halfSize *= absFactor;
+    min_ = center - halfSize;
+    max_ = center + halfSize;
+  }
+
   const glm::vec3& min() const { return min_; }
   const glm::vec3& max() const { return max_; }
 

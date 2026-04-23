@@ -57,7 +57,9 @@ Application::Application(int argc, char* argv[]) {
 Application::~Application() { delete m_pimpl; }
 
 void Application::fitScene() {
-  m_pimpl->camera.fitBox(m_pimpl->scene.GetBoundBox());
+  AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
+  box.Scale(1.3);
+  m_pimpl->camera.fitBox(box);
   this->update();
 }
 

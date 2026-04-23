@@ -1,0 +1,18 @@
+# vtk DataFile Version 3.0
+Cube 10x10x10 centered at origin
+ASCII
+DATASET UNSTRUCTURED_GRID
+POINTS 8 float
+-5 -5 -5
+ 5 -5 -5
+ 5  5 -5
+-5  5 -5
+-5 -5  5
+ 5 -5  5
+ 5  5  5
+-5  5  5
+CELLS 1 9
+8 0 1 2 3 4 5 6 7
+
+CELL_TYPES 1
+12

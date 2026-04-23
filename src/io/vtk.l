@@ -7,8 +7,8 @@ alpha       [A-Za-z]
 dig         [0-9]
 string      \"(\\.|[^"\\])*\"
 name        {alpha}({alpha}|{dig})*
-integer     {dig}+
-real        [-]?{dig}+"."{dig}*([eE][-+]?{dig}+)?
+integer     [-]?{dig}+
+real        [-]?{dig}+("."{dig}*)?([eE][-+]?{dig}+)?
 
 
 %option yylineno
@@ -27,14 +27,14 @@ real        [-]?{dig}+"."{dig}*([eE][-+]?{dig}+)?
 <SC_TITLE>.*    { return TITLE; }
 <SC_TITLE>\n    { BEGIN(INITIAL); }
 
-{real}          {
-                  vtklval.real = atof(yytext);
-                  return real;
-                }
-
 {integer}       {
                   vtklval.integer = atoi(yytext);
                   return integer;
+                }
+
+{real}          {
+                  vtklval.real = atof(yytext);
+                  return real;
                 }
 "ASCII"         { return ASCII; }
 "BINARY"        { return BINARY; }

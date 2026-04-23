@@ -1,13 +1,17 @@
 #include "numgeom/drawable_occshape.h"
 
 #include "BRep_Tool.hxx"
-#include "BRepLib_ToolTriangulatedShape.hxx"
 #include "BRepMesh_IncrementalMesh.hxx"
 #include "gp_Trsf.hxx"
 #include "TopExp_Explorer.hxx"
 #include "TopoDS.hxx"
 #include "TopoDS_Face.hxx"
 #include "TopoDS_Shape.hxx"
+#if OCC_VERSION_HEX >= 0x070700
+#  include "BRepLib_ToolTriangulatedShape.hxx"
+#else
+#  include "StdPrs_ToolTriangulatedShape.hxx"
+#endif
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -284,7 +288,11 @@ Drawable2_OccShape::Drawable2_OccShape(SceneObject* parent,
     if (!tr)
       continue;
     if (!tr->HasNormals() && tr->HasUVNodes()) {
+#if OCC_VERSION_HEX >= 0x070700
       BRepLib_ToolTriangulatedShape::ComputeNormals(f,tr);
+#else
+      StdPrs_ToolTriangulatedShape::ComputeNormals(f,tr);
+#endif
     }
     verts_num_ += tr->NbNodes();
     cells_num_ += tr->NbTriangles();

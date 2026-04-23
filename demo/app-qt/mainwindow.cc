@@ -21,7 +21,7 @@
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
 
-MainWindow::MainWindow(Application* app) {
+MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   app_ = app;
   this->createActions();
   scene_window_ = new SceneWindow(app_);
@@ -127,8 +127,13 @@ bool IsStepFile(const QString& filename) {
 }
 
 void MainWindow::onOpenFile() {
-  QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"));
+  QString last_directory =
+    settings_.value("MainWindow/lastDirectory", QDir::homePath()).toString();
+  QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"),
+                                                  last_directory);
   if (filename.isEmpty()) return;
+  settings_.setValue("MainWindow/lastDirectory",
+                     QFileInfo(filename).absolutePath());
   Scene& scene = app_->scene();
   scene.Clear();
 #ifdef USE_NUMGEOM_MODULE_OCC

@@ -2,6 +2,7 @@
 #define NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_
 
 #include "qmainwindow.h"
+#include "qsettings.h"
 #include "qvulkaninstance.h"
 
 class Application;
@@ -28,5 +29,6 @@ class MainWindow : public QMainWindow {
   Application* app_;
   SceneWindow* scene_window_;
   QVulkanInstance vulkan_instance_;
+  QSettings settings_;
 };
 #endif  // NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_

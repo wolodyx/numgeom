@@ -5,6 +5,18 @@
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject.h"
 
+void GetElementsCount(const Scene& scene, size_t& n_verts, size_t& n_cells) {
+  n_verts = 0, n_cells = 0;
+  for (const SceneObject* o : scene.Objects()) {
+    for (Drawable* d : o->Drawables()) {
+      if(d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      n_verts += d->GetVertsCount();
+      n_cells += d->GetCellsCount();
+    }
+  }
+}
+
 namespace {
 class SceneVertexIterator : public IteratorImpl<glm::vec3> {
  public:

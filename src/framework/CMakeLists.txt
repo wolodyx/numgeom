@@ -1,5 +1,6 @@
 set(PUBLIC_HEADERS
   include/numgeom/application.h
+  include/numgeom/debug_framework.h
   include/numgeom/drawable.h
   include/numgeom/drawable_cone.h
   include/numgeom/drawable_cylinder.h
@@ -17,6 +18,7 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   application.cc
   camera.cc                 camera.h
+  debug_framework.cc
   drawable.cc
   drawable_cone.cc
   drawable_cylinder.cc

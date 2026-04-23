@@ -1668,14 +1668,7 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
   }
 
   size_t n_verts = 0, n_cells = 0;
-  for (const SceneObject* o : scene.Objects()) {
-    for (Drawable* d : o->Drawables()) {
-      if(d->Type() != Drawable::PrimitiveType::Triangles)
-        continue;
-      n_verts += d->GetVertsCount();
-      n_cells += d->GetCellsCount();
-    }
-  }
+  GetElementsCount(scene, n_verts, n_cells);
 
   VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
   VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);

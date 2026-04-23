@@ -64,7 +64,7 @@ StructuredGrid:
 
 UnstructuredGrid:
     DATASET UNSTRUCTURED_GRID
-    POINTS integer ValueType
+    POINTS integer ValueType { PreparePointArray($4); }
     NumericValues
     CELLS integer integer
     IntValues

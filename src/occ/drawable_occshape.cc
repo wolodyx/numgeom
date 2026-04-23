@@ -184,81 +184,77 @@ class OccNormalIterator : public IteratorImpl<glm::vec3> {
    typedef std::tuple<Handle(Poly_Triangulation),gp_Trsf,bool> TrngInfo;
 
  public:
-   OccNormalIterator(const std::list<TrngInfo>& triangulations)
-       : triangulations_(triangulations),
-         trng_it_(triangulations_.end()),
-         current_index_(0),
-         index_count_(0),
-         reverse_normal_(false) {
-     if(!triangulations_.empty()) {
-       trng_it_ = triangulations_.begin();
-       index_count_ = std::get<0>(*trng_it_)->NbNodes();
-       reverse_normal_ = std::get<2>(*trng_it_);
-     }
-   }
+  OccNormalIterator(const std::list<TrngInfo>& triangulations)
+      : triangulations_(triangulations),
+        trng_it_(triangulations_.end()),
+        current_index_(0),
+        index_count_(0),
+        reverse_normal_(false) {
+    if(!triangulations_.empty()) {
+      trng_it_ = triangulations_.begin();
+      index_count_ = std::get<0>(*trng_it_)->NbNodes();
+      reverse_normal_ = std::get<2>(*trng_it_);
+    }
+  }
 
-   OccNormalIterator(const std::list<TrngInfo>& triangulations,
-                     std::list<TrngInfo>::const_iterator trng_it,
-                     size_t current_index = 0,
-                     size_t index_count = 0)
-       : triangulations_(triangulations),
-         trng_it_(trng_it),
-         current_index_(current_index),
-         index_count_(index_count),
-         reverse_normal_(false) {
-     if(trng_it_ != triangulations_.end())
-       reverse_normal_ = std::get<2>(*trng_it_);
-   }
+  OccNormalIterator(const std::list<TrngInfo>& triangulations,
+                    std::list<TrngInfo>::const_iterator trng_it,
+                    size_t current_index = 0,
+                    size_t index_count = 0)
+      : triangulations_(triangulations),
+        trng_it_(trng_it),
+        current_index_(current_index),
+        index_count_(index_count),
+        reverse_normal_(false) {
+    if(trng_it_ != triangulations_.end())
+      reverse_normal_ = std::get<2>(*trng_it_);
+  }
 
-   virtual ~OccNormalIterator() {}
+  virtual ~OccNormalIterator() {}
 
-   void advance() override {
-     ++current_index_;
-     if (current_index_ == index_count_) {
-       ++trng_it_;
-       if(trng_it_ == triangulations_.end())
-         return;
-       current_index_ = 0;
-       index_count_ = std::get<0>(*trng_it_)->NbNodes();
-       reverse_normal_ = std::get<2>(*trng_it_);
-     }
-   }
+  void advance() override {
+    ++current_index_;
+    if (current_index_ == index_count_) {
+      ++trng_it_;
+      if(trng_it_ == triangulations_.end())
+        return;
+      current_index_ = 0;
+      index_count_ = std::get<0>(*trng_it_)->NbNodes();
+      reverse_normal_ = std::get<2>(*trng_it_);
+    }
+  }
 
-   glm::vec3 current() const override {
-     const Handle(Poly_Triangulation)& trng = std::get<0>(*trng_it_);
-     gp_Dir normal;
-     if (trng->HasNormals()) {
-       normal = trng->Normal(current_index_ + 1); // 1-based index
-       if (reverse_normal_)
-         normal.Reverse();
-     } else {
-       // Default normal (e.g., Z-axis)
-       normal = gp_Dir(0.0, 0.0, 1.0);
-     }
-     // Apply transformation (rotation only)
-     normal.Transform(std::get<1>(*trng_it_));
-     return glm::vec3(normal.X(), normal.Y(), normal.Z());
-   }
+  glm::vec3 current() const override {
+    const Handle(Poly_Triangulation)& trng = std::get<0>(*trng_it_);
+    gp_Dir normal;
+    if (!trng->HasNormals())
+      return glm::vec3(0.0f);
+    normal = trng->Normal(current_index_ + 1);
+    if (reverse_normal_)
+      normal.Reverse();
+    normal.Transform(std::get<1>(*trng_it_));
+    return glm::vec3(normal.X(), normal.Y(), normal.Z());
+  }
 
-   IteratorImpl<glm::vec3>* clone() const override {
-     return new OccNormalIterator(triangulations_, trng_it_, current_index_,
-                                  index_count_);
-   }
+  IteratorImpl<glm::vec3>* clone() const override {
+    return new OccNormalIterator(triangulations_, trng_it_, current_index_,
+                                 index_count_);
+  }
 
-   IteratorImpl<glm::vec3>* last() const override {
-     return new OccNormalIterator(triangulations_, triangulations_.end());
-   }
+  IteratorImpl<glm::vec3>* last() const override {
+    return new OccNormalIterator(triangulations_, triangulations_.end());
+  }
 
-   bool end() const override {
-     return trng_it_ == triangulations_.end();
-   }
+  bool end() const override {
+    return trng_it_ == triangulations_.end();
+  }
 
-   bool equals(const IteratorImpl<glm::vec3>& other) const override {
-     auto ptr = dynamic_cast<const OccNormalIterator*>(&other);
-     if (!ptr) return false;
-     return trng_it_ == ptr->trng_it_ &&
-            current_index_ == ptr->current_index_;
-   }
+  bool equals(const IteratorImpl<glm::vec3>& other) const override {
+    auto ptr = dynamic_cast<const OccNormalIterator*>(&other);
+    if (!ptr) return false;
+    return trng_it_ == ptr->trng_it_ &&
+           current_index_ == ptr->current_index_;
+  }
 
   private:
    const std::list<TrngInfo>& triangulations_;

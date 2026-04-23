@@ -9,6 +9,8 @@ class Drawable;
 class Drawable2;
 class Scene;
 
+void GetElementsCount(const Scene& scene, size_t& n_verts, size_t& n_cells);
+
 //! Итератор по координатам вершин сцены.
 Iterator<glm::vec3> GetVertexIterator(const Scene&);
 

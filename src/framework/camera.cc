@@ -41,8 +41,13 @@ float distanceBetweenPointAndCube(const glm::vec3& pt,
 }  // namespace
 
 glm::mat4 Camera::projectionMatrix(const AlignedBoundBox& box) const {
-  return glm::perspective(glm::radians(45.0f), m_aspectFunction(), 0.001f,
-                          1000.0f);
+  glm::vec3 center = box.GetCenter();
+  glm::vec3 size = box.GetSize();
+  float radius = glm::length(size) * 0.5f;
+  float distance = glm::length(m_position - center);
+  float near = std::max(0.001f, distance - radius * 2.0f);
+  float far = distance + radius * 2.0f;
+  return glm::perspective(glm::radians(45.0f), m_aspectFunction(), near, far);
 }
 
 void Camera::translate(const glm::vec3& v) { m_position += v; }

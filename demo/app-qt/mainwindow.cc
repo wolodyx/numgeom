@@ -18,6 +18,7 @@
 #include "numgeom/sceneobject_mesh.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
 #  include "numgeom/loadusingocc.h"
+#  include "numgeom/sceneobject_polytriangulation.h"
 #  include "numgeom/sceneobject_tdocstd_document.h"
 #endif
 
@@ -135,13 +136,20 @@ bool IsStepFile(const QString& filename) {
   suffix = suffix.toLower();
   return suffix == "step" || suffix == "stp";
 }
+
+bool IsStlFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "stl";
+}
 }
 
 void MainWindow::openFile(const QString& filename) {
   Scene& scene = app_->scene();
   scene.Clear();
 #ifdef USE_NUMGEOM_MODULE_OCC
-  if(IsStepFile(filename)) {
+  if (IsStepFile(filename)) {
     auto document = LoadStepDocument(filename.toStdWString());
     if (!document) {
       qDebug() << "Ошибка при загрузке файла '" << filename << "'";
@@ -150,9 +158,18 @@ void MainWindow::openFile(const QString& filename) {
     scene.AddObject<SceneObject_TDocStd_Document>(document);
     app_->fitScene();
     return;
+  } else if (IsStlFile(filename)) {
+    auto triangulation = LoadStl(filename.toStdWString());
+    if (!triangulation) {
+      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
+    app_->fitScene();
+    return;
   }
 #endif
-  auto mesh = LoadToTriMesh(filename.toStdString());
+  auto mesh = LoadToTriMesh(filename.toStdWString());
   if(mesh) {
     scene.AddObject<SceneObject_Mesh>(mesh);
     app_->fitScene();

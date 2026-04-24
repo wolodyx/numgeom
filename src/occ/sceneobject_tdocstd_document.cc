@@ -112,7 +112,9 @@ SceneObject_TDocStd_Document::SceneObject_TDocStd_Document(
     Quantity_Color clr;
     if (!color_tool->GetColor(tShape.shape,XCAFDoc_ColorSurf,clr))
       clr = Quantity_Color(0.647,0.647,0.647,Quantity_TOC_RGB);
-    d->SetColor(clr.Red(), clr.Green(), clr.Blue());
+    d->SetColor(static_cast<float>(clr.Red()),
+                static_cast<float>(clr.Green()),
+                static_cast<float>(clr.Blue()));
   }
 }
 

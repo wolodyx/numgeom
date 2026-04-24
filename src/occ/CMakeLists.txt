@@ -1,6 +1,7 @@
 set(PUBLIC_HEADERS
   include/numgeom/classificate.h
   include/numgeom/drawable_occshape.h
+  include/numgeom/drawable_polytriangulation.h
   include/numgeom/enums.h
   include/numgeom/ijk.h
   include/numgeom/iterator.h
@@ -8,6 +9,7 @@ set(PUBLIC_HEADERS
   include/numgeom/octree.h
   include/numgeom/quadtree.h
   include/numgeom/removefaces.h
+  include/numgeom/sceneobject_polytriangulation.h
   include/numgeom/sceneobject_tdocstd_document.h
   include/numgeom/tesselate.h
   include/numgeom/utilities.h
@@ -18,6 +20,7 @@ set(SOURCE_FILES
   classificate.cc
   curvemetriclength.cc      curvemetriclength.h
   drawable_occshape.cc
+  drawable_polytriangulation.cc
   ffextintersections.cc     ffextintersections.h
   intersections.cc          intersections.h
   iterator_ijk.cc           iterator_ijk.h
@@ -25,6 +28,7 @@ set(SOURCE_FILES
   octree.cc
   quadtree.cc
   removefaces.cc
+  sceneobject_polytriangulation.cc
   sceneobject_tdocstd_document.cc
   tesselate.cc
   utilities.cc
@@ -63,10 +67,10 @@ target_link_libraries(occ
 target_compile_definitions(occ PUBLIC USE_NUMGEOM_MODULE_OCC)
 
 if(${OpenCASCADE_VERSION} VERSION_LESS "7.8.0")
-  target_link_libraries(occ PRIVATE TKSTEP TKXDESTEP)
+  target_link_libraries(occ PRIVATE TKSTEP TKXDESTEP TKSTL)
   target_include_directories(occ PUBLIC ${OpenCASCADE_INCLUDE_DIR})
 else()
-  target_link_libraries(occ PRIVATE TKDESTEP)
+  target_link_libraries(occ PRIVATE TKDESTEP TKDESTL)
 endif()
 
 target_include_directories(occ

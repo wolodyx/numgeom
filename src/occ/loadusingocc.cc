@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "BRepTools.hxx"
+#include "RWStl.hxx"
 #include "ShapeFix_Shape.hxx"
 #include "STEPCAFControl_Reader.hxx"
 #include "STEPControl_Reader.hxx"
@@ -62,4 +63,11 @@ Handle(TDocStd_Document) LoadStepDocument(const std::filesystem::path& filename)
   }
 
   return document;
+}
+
+Handle(Poly_Triangulation) LoadStl(const std::filesystem::path& filename) {
+  std::u8string u8_filename = filename.u8string();
+  auto occ_filename = reinterpret_cast<const char*>(u8_filename.c_str());
+  Handle(Poly_Triangulation) tr = RWStl::ReadFile(occ_filename);
+  return tr;
 }

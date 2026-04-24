@@ -7,9 +7,13 @@
 
 #include "numgeom/trimesh.h"
 
+class Poly_Triangulation;
 class TDocStd_Document;
 
 TriMesh::Ptr LoadUsingOCC(const std::filesystem::path&);
 
 Handle(TDocStd_Document) LoadStepDocument(const std::filesystem::path&);
+
+Handle(Poly_Triangulation) LoadStl(const std::filesystem::path&);
+
 #endif  // !numgeom_io_loadusingocc_h

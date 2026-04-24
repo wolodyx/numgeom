@@ -17,6 +17,25 @@ AlignedBoundBox Drawable::GetBoundBox() const {
   return box;
 }
 
+void Drawable::SetColor(const glm::vec3& color) {
+  color_ = color;
+}
+
+void Drawable::SetColor(float r, float g, float b) {
+  color_ = glm::vec3(r,g,b);
+}
+
+void Drawable::SetColor(int r,int g,int b) {
+  assert(r > 0 && r < 256);
+  assert(g > 0 && g < 256);
+  assert(b > 0 && b < 256);
+  color_ = glm::vec3(r/255.0,g/255.0,b/255.0);
+}
+
+glm::vec3 Drawable::GetColor() const {
+  return color_;
+}
+
 Drawable0::Drawable0(SceneObject* parent) : Drawable(parent) {
 }
 

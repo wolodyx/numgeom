@@ -32,9 +32,9 @@ SceneWidget_AxisIndicator::SceneWidget_AxisIndicator(Scene* scene)
   y_cylinder_->SetColor(0.0f,1.0f,0.0f);
   z_cylinder_->SetColor(0.0f,0.0f,1.0f);
   sphere_->SetColor(1.0f, 1.0f, 0.0);
-  x_cone_->SetColor(0.788, 0.580, 0.165);
-  y_cone_->SetColor(0.788, 0.580, 0.165);
-  z_cone_->SetColor(0.788, 0.580, 0.165);
+  x_cone_->SetColor(0.788f, 0.580f, 0.165f);
+  y_cone_->SetColor(0.788f, 0.580f, 0.165f);
+  z_cone_->SetColor(0.788f, 0.580f, 0.165f);
 }
 
 SceneWidget_AxisIndicator::~SceneWidget_AxisIndicator() {

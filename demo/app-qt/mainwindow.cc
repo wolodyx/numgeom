@@ -143,6 +143,34 @@ bool IsStlFile(const QString& filename) {
   suffix = suffix.toLower();
   return suffix == "stl";
 }
+
+bool IsIgesFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "iges" || suffix == "igs";
+}
+
+bool IsObjFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "obj";
+}
+
+bool IsVrmlFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "wrl";
+}
+
+bool IsGltfFile(const QString& filename) {
+  QFileInfo fileInfo(filename);
+  QString suffix = fileInfo.suffix();
+  suffix = suffix.toLower();
+  return suffix == "glb";
+}
 }
 
 void MainWindow::openFile(const QString& filename) {
@@ -165,6 +193,44 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
+    app_->fitScene();
+    return;
+  } else if (IsIgesFile(filename)) {
+    auto document = LoadIges(filename.toStdWString());
+    if (!document) {
+      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_TDocStd_Document>(document);
+    app_->fitScene();
+    return;
+  } else if (IsObjFile(filename)) {
+    auto triangulation = LoadObj(filename.toStdWString());
+    if (!triangulation) {
+      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
+    app_->fitScene();
+    return;
+#ifdef NUMGEOM_OCC_LOAD_VRML
+  } else if (IsVrmlFile(filename)) {
+    auto document = LoadVrml(filename.toStdWString());
+    if (!document) {
+      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_TDocStd_Document>(document);
+    app_->fitScene();
+    return;
+#endif
+  } else if (IsGltfFile(filename)) {
+    auto document = LoadGltf(filename.toStdWString());
+    if (!document) {
+      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
+      return;
+    }
+    scene.AddObject<SceneObject_TDocStd_Document>(document);
     app_->fitScene();
     return;
   }

@@ -67,10 +67,27 @@ target_link_libraries(occ
 target_compile_definitions(occ PUBLIC USE_NUMGEOM_MODULE_OCC)
 
 if(${OpenCASCADE_VERSION} VERSION_LESS "7.8.0")
-  target_link_libraries(occ PRIVATE TKSTEP TKXDESTEP TKSTL)
+  target_link_libraries(occ
+    PRIVATE
+      TKIGES
+      TKRWMesh
+      TKSTEP
+      TKSTL
+      TKXDEIGES
+      TKXDESTEP
+  )
   target_include_directories(occ PUBLIC ${OpenCASCADE_INCLUDE_DIR})
 else()
-  target_link_libraries(occ PRIVATE TKDESTEP TKDESTL)
+  target_link_libraries(occ
+    PRIVATE
+      TKDEGLTF
+      TKDEIGES
+      TKDEOBJ
+      TKDESTEP
+      TKDESTL
+      TKDEVRML
+  )
+  target_compile_definitions(occ PUBLIC NUMGEOM_OCC_LOAD_VRML)
 endif()
 
 target_include_directories(occ

@@ -9,7 +9,7 @@
 #include "qvulkaninstance.h"
 
 SceneWindow::SceneWindow(Application* app) {
-  gpu_manager_ = app->gpuManager();
+  gpu_manager_ = app->GetGpuManager();
   user_input_controller_ = new UserInputController(app);
 }
 

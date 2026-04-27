@@ -80,7 +80,7 @@ void UserInputController::mouseMove(int x, int y) {
     const int dx = x - m_pimpl->mouseLeftButtonState.xPrev;
     const int dy = y - m_pimpl->mouseLeftButtonState.yPrev;
 
-    m_pimpl->app->translateCamera(x, y, dx, dy);
+    m_pimpl->app->TranslateCamera(x, y, dx, dy);
 
     m_pimpl->mouseLeftButtonState.xPrev = x;
     m_pimpl->mouseLeftButtonState.yPrev = y;
@@ -96,7 +96,7 @@ void UserInputController::mouseMove(int x, int y) {
     const int dx = x - m_pimpl->mouseRightButtonState.xPrev;
     const int dy = y - m_pimpl->mouseRightButtonState.yPrev;
 
-    m_pimpl->app->rotateCamera(x, y, dx, dy);
+    m_pimpl->app->RotateCamera(x, y, dx, dy);
 
     m_pimpl->mouseRightButtonState.xPrev = x;
     m_pimpl->mouseRightButtonState.yPrev = y;
@@ -104,7 +104,7 @@ void UserInputController::mouseMove(int x, int y) {
 }
 
 void UserInputController::mouseWheelRotate(int numDegrees) {
-  m_pimpl->app->zoomCamera(numDegrees / 30.0f);
+  m_pimpl->app->ZoomCamera(numDegrees / 30.0f);
 }
 
 void UserInputController::keyPressed(int key) {}

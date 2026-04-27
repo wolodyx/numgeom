@@ -56,58 +56,59 @@ Application::Application(int argc, char* argv[]) {
 
 Application::~Application() { delete m_pimpl; }
 
-void Application::fitScene() {
+void Application::FitScene() {
   AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
   box.Scale(1.3);
   m_pimpl->camera.fitBox(box);
-  this->update();
+  this->Update();
 }
 
-void Application::zoomCamera(float k) {
+void Application::ZoomCamera(float k) {
   m_pimpl->camera.zoom(k);
-  this->update();
+  this->Update();
 }
 
 glm::vec3 Application::CameraPosition() const {
   return m_pimpl->camera.m_position;
 }
 
-void Application::translateCamera(int x, int y, int dx, int dy) {
+void Application::TranslateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
   m_pimpl->camera.translate(screenOffset);
-  this->update();
+  this->Update();
 }
 
-void Application::rotateCamera(int x, int y, int dx, int dy) {
+void Application::RotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
   glm::vec3 pivotPoint = m_pimpl->scene.GetBoundBox().GetCenter();
   m_pimpl->camera.rotateAroundPivot(pivotPoint, screenOffset);
-  this->update();
+  this->Update();
 }
 
-glm::mat4 Application::getViewMatrix() const {
+glm::mat4 Application::GetViewMatrix() const {
   auto x = m_pimpl->camera.viewMatrix();
   return x;
 }
 
-glm::mat4 Application::getProjectionMatrix() const {
+glm::mat4 Application::GetProjectionMatrix() const {
   return m_pimpl->camera.projectionMatrix(m_pimpl->scene.GetBoundBox());
 }
 
-void Application::update() { m_pimpl->gpuManager->update(); }
+void Application::Update() { m_pimpl->gpuManager->update(); }
 
-GpuManager* Application::gpuManager() { return m_pimpl->gpuManager; }
+GpuManager* Application::GetGpuManager() { return m_pimpl->gpuManager; }
 
-const Scene& Application::scene() const { return m_pimpl->scene; }
-Scene& Application::scene() { return m_pimpl->scene; }
+const Scene& Application::GetScene() const { return m_pimpl->scene; }
 
-void Application::clearScene() {
+Scene& Application::GetScene() { return m_pimpl->scene; }
+
+void Application::ClearScene() {
   m_pimpl->scene.Clear();
-  this->update();
+  this->Update();
 }
 
-void Application::set_aspect_function(std::function<float()> func) {
+void Application::SetAspectFunction(std::function<float()> func) {
   m_pimpl->camera.setAspectFunction(func);
 }

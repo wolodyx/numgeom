@@ -38,7 +38,7 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
 MainWindow::~MainWindow() {}
 
 void MainWindow::initVulkan() {
-  GpuManager* gpu_manager = app_->gpuManager();
+  GpuManager* gpu_manager = app_->GetGpuManager();
   vulkan_instance_.setVkInstance(gpu_manager->instance());
   if (!vulkan_instance_.create()) qFatal("Vulkan instance creating error");
   scene_window_->setVulkanInstance(&vulkan_instance_);
@@ -47,7 +47,7 @@ void MainWindow::initVulkan() {
   assert(surface != VK_NULL_HANDLE);
   gpu_manager->setSurface(surface);
 
-  app_->set_aspect_function([this]() -> float {
+  app_->SetAspectFunction([this]() -> float {
     QSize sz = scene_window_->size();
     qreal r = scene_window_->devicePixelRatio();
     uint32_t width = static_cast<uint32_t>(sz.width() * r);
@@ -174,7 +174,7 @@ bool IsGltfFile(const QString& filename) {
 }
 
 void MainWindow::openFile(const QString& filename) {
-  Scene& scene = app_->scene();
+  Scene& scene = app_->GetScene();
   scene.Clear();
 #ifdef USE_NUMGEOM_MODULE_OCC
   if (IsStepFile(filename)) {
@@ -184,7 +184,7 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->fitScene();
+    app_->FitScene();
     return;
   } else if (IsStlFile(filename)) {
     auto triangulation = LoadStl(filename.toStdWString());
@@ -193,7 +193,7 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
-    app_->fitScene();
+    app_->FitScene();
     return;
   } else if (IsIgesFile(filename)) {
     auto document = LoadIges(filename.toStdWString());
@@ -202,7 +202,7 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->fitScene();
+    app_->FitScene();
     return;
   } else if (IsObjFile(filename)) {
     auto triangulation = LoadObj(filename.toStdWString());
@@ -211,7 +211,7 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
-    app_->fitScene();
+    app_->FitScene();
     return;
 #ifdef NUMGEOM_OCC_LOAD_VRML
   } else if (IsVrmlFile(filename)) {
@@ -221,7 +221,7 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->fitScene();
+    app_->FitScene();
     return;
 #endif
   } else if (IsGltfFile(filename)) {
@@ -231,14 +231,14 @@ void MainWindow::openFile(const QString& filename) {
       return;
     }
     scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->fitScene();
+    app_->FitScene();
     return;
   }
 #endif
   auto mesh = LoadToTriMesh(filename.toStdWString());
   if(mesh) {
     scene.AddObject<SceneObject_Mesh>(mesh);
-    app_->fitScene();
+    app_->FitScene();
   }
 }
 
@@ -255,7 +255,7 @@ void MainWindow::onOpenFile() {
 }
 
 void MainWindow::onFitScene() {
-  app_->fitScene();
+  app_->FitScene();
 }
 
 void MainWindow::loadRecentFiles() {

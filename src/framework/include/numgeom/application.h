@@ -31,43 +31,43 @@ class FRAMEWORK_EXPORT Application {
   //!@{
   //! Манипуляции камерой и запрос ее состояния.
 
-  void fitScene();
+  void FitScene();
 
-  void zoomCamera(float k);
+  void ZoomCamera(float k);
 
   //! Позиция камеры в глобальной системе координат.
   glm::vec3 CameraPosition() const;
 
   //! Перемещение камеры вдоль плоскости экрана
   //! в направлении экранного вектора `(dx,dy)`.
-  void translateCamera(int x, int y, int dx, int dy);
+  void TranslateCamera(int x, int y, int dx, int dy);
 
-  void rotateCamera(int x, int y, int dx, int dy);
+  void RotateCamera(int x, int y, int dx, int dy);
 
-  glm::mat4 getViewMatrix() const;
+  glm::mat4 GetViewMatrix() const;
 
-  glm::mat4 getProjectionMatrix() const;
+  glm::mat4 GetProjectionMatrix() const;
 
   //!@}
 
   //!@{
   //! Методы для управления рисованием.
 
-  void update();
+  void Update();
   //!@}
 
   //!@{
   //! Взаимодействие со сценой.
 
-  const Scene& scene() const;
-  Scene& scene();
+  const Scene& GetScene() const;
+  Scene& GetScene();
 
-  void clearScene();
+  void ClearScene();
   //!@}
 
-  GpuManager* gpuManager();
+  GpuManager* GetGpuManager();
 
-  void set_aspect_function(std::function<float()>);
+  void SetAspectFunction(std::function<float()>);
 
  private:
   Application(const Application&) = delete;

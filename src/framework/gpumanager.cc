@@ -1786,17 +1786,17 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
 void updateDescriptorSets(Application* app, VulkanState* state) {
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
-  glm::mat4 model_view_matrix = app->getViewMatrix();
+  glm::mat4 model_view_matrix = app->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
   VertexBufferObject vbo{
-    .mvpMatrix = app->getProjectionMatrix() * model_view_matrix,
+    .mvpMatrix = app->GetProjectionMatrix() * model_view_matrix,
     .mvMatrix = model_view_matrix,
     .normalMatrixRow0 = glm::vec4(normal_matrix[0], 0.0f),
     .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),
     .normalMatrixRow2 = glm::vec4(normal_matrix[2], 0.0f)
   };
   // Адаптивное размещение источника освещения на основе размера сцены
-  AlignedBoundBox box = app->scene().GetBoundBox();
+  AlignedBoundBox box = app->GetScene().GetBoundBox();
   glm::vec3 cameraPos = app->CameraPosition();
   glm::vec3 sceneCenter = box.GetCenter();
   glm::vec3 sceneSize = box.GetSize();
@@ -1866,7 +1866,7 @@ void updateDataForFrame(Application* app, VulkanState* state) {
   {
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
-    Scene& scene = app->scene();
+    Scene& scene = app->GetScene();
     if (scene.HasChanges()) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);

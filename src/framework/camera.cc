@@ -17,15 +17,29 @@ float Camera::computeCameraDistance(float radius) const {
 Camera::Camera() {
   m_aspectFunction = []() { return 1.0f; };
   m_position = glm::vec3(0.0f, 0.0f, 0.0f);
-  m_direction = glm::vec3(0.0f, 0.0f, 1.0f);
-  m_up = glm::vec3(0.0f, 1.0f, 0.0f);
+  m_direction = glm::vec3(0.0f, 1.0f, 0.0f);
+  m_up = glm::vec3(0.0f, 0.0f, 1.0f);
 }
 
 Camera::Camera(const glm::vec3& pos, const glm::vec3& dir, const glm::vec3& up)
     : m_position(pos), m_direction(dir), m_up(up) {}
 
 glm::mat4 Camera::viewMatrix() const {
-  return glm::lookAt(m_position, m_position + m_direction, m_up);
+  const glm::vec3 eye = m_position;
+  const glm::vec3 center = m_position + m_direction;
+  const glm::vec3 up = m_up;
+
+  const glm::vec3 f = glm::normalize(center - eye);
+  const glm::vec3 s = glm::normalize(glm::cross(f, up));
+  const glm::vec3 u = glm::normalize(glm::cross(f, s));
+  const float tx = glm::dot(s, eye);
+  const float ty = glm::dot(u, eye);
+  const float tz = glm::dot(f, eye);
+  glm::mat4 m(glm::vec4(s.x, u.x, f.x, 0.0f),
+              glm::vec4(s.y, u.y, f.y, 0.0f),
+              glm::vec4(s.z, u.z, f.z, 0.0f),
+              glm::vec4(-tx, -ty, -tz, 1.0));
+  return m;
 }
 
 namespace {
@@ -45,9 +59,17 @@ glm::mat4 Camera::projectionMatrix(const AlignedBoundBox& box) const {
   glm::vec3 size = box.GetSize();
   float radius = glm::length(size) * 0.5f;
   float distance = glm::length(m_position - center);
-  float near = std::max(0.001f, distance - radius * 2.0f);
-  float far = distance + radius * 2.0f;
-  return glm::perspective(glm::radians(45.0f), m_aspectFunction(), near, far);
+  float zNear = std::max(0.001f, distance - radius * 2.0f);
+  float zFar = distance + radius * 2.0f;
+  float aspect = m_aspectFunction();
+  const float tanHalfFovy = std::tan(s_fovY / 2.0f);
+  glm::mat4 m(0.0f);
+  m[0][0] = 1.0f / (aspect * tanHalfFovy);
+  m[1][1] = 1.0f / tanHalfFovy;
+  m[2][2] = zFar / (zFar - zNear);
+  m[2][3] = 1.0f;
+  m[3][2] = -(zFar * zNear) / (zFar - zNear);
+  return m;
 }
 
 void Camera::translate(const glm::vec3& v) { m_position += v; }

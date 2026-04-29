@@ -3,7 +3,6 @@
 #include <cassert>
 #include <cmath>
 
-#define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 
 TriMesh::Ptr MakeBox(const std::array<glm::vec3, 8>& corners) {

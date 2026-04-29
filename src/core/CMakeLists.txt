@@ -43,5 +43,10 @@ target_link_libraries(core
 if(WIN32)
   target_compile_definitions(core PRIVATE _USE_MATH_DEFINES)
 endif()
+target_compile_definitions(core
+  PUBLIC
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+    GLM_ENABLE_EXPERIMENTAL
+)
 
 install(TARGETS core)

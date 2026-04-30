@@ -67,7 +67,7 @@ class FRAMEWORK_EXPORT Application {
 
   GpuManager* GetGpuManager();
 
-  void SetAspectFunction(std::function<float()>);
+  void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
  private:
   Application(const Application&) = delete;

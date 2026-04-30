@@ -16,6 +16,7 @@
 #include "numgeom/gpumanager.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
+#include "numgeom/scenewidget_axisindicator.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
 #  include "numgeom/loadusingocc.h"
 #  include "numgeom/sceneobject_polytriangulation.h"
@@ -47,12 +48,12 @@ void MainWindow::initVulkan() {
   assert(surface != VK_NULL_HANDLE);
   gpu_manager->setSurface(surface);
 
-  app_->SetAspectFunction([this]() -> float {
+  app_->SetViewportSizeFunction([this]() {
     QSize sz = scene_window_->size();
     qreal r = scene_window_->devicePixelRatio();
     uint32_t width = static_cast<uint32_t>(sz.width() * r);
     uint32_t height = static_cast<uint32_t>(sz.height() * r);
-    return width / static_cast<float>(height);
+    return std::make_tuple(width, height);
   });
   gpu_manager->setImageExtentFunction(
       [this]() -> std::tuple<uint32_t, uint32_t> {
@@ -64,6 +65,9 @@ void MainWindow::initVulkan() {
       });
 
   gpu_manager->initialize();  //< Продолжить начатую выше инициализацию.
+
+  app_->GetScene().AddObject<SceneWidget_AxisIndicator>();
+  app_->FitScene();
 }
 
 void MainWindow::createActions() {

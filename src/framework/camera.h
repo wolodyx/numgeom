@@ -2,6 +2,7 @@
 #define NUMGEOM_FRAMEWORK_CAMERA_H
 
 #include <functional>
+#include <optional>
 
 #include "glm/glm.hpp"
 
@@ -21,22 +22,27 @@ class Camera {
   glm::mat4 GetProjectionMatrix(const AlignedBoundBox&) const;
 
   glm::vec3 GetPosition() const;
+  glm::vec3 GetPivotPoint() const;
+  void SetPivotPoint(const glm::vec3&);
 
   void Translate(const glm::vec3& v);
 
-  //! Смещение камеры вдоль экранных координат.
-  void Translate(const glm::vec2& v);
+  //! Moves the camera along the screen coordinate system.
+  //! The offset vector is set in the number of pixels.
+  void Translate(const glm::ivec2& v);
 
-  void RotateAroundPivot(const glm::vec3& pivotPoint,
-                         const glm::vec2& screenOffset);
+  void RotateAroundPivot(const glm::vec2& screenOffset);
 
   void Zoom(float k);
 
   void FitBox(const AlignedBoundBox&);
 
-  void SetAspectFunction(std::function<float()>);
+  void SetBoundBoxFunction(std::function<AlignedBoundBox()>);
+  void SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()>);
 
  private:
+  AlignedBoundBox GetSceneBox() const;
+  float GetAspect() const;
   float ComputeCameraDistance(float radius) const;
 
  private:
@@ -44,8 +50,12 @@ class Camera {
   glm::vec3 eye_;
   glm::vec3 forward_;
   glm::vec3 up_;
-  //! Функция, запрашивающая соотношение сторон экрана в сцену.
-  std::function<float()> aspect_function_;
+  std::optional<glm::vec3> pivot_point_;
+  //! \name Requesting functions.
+  //! \{
+  std::function<std::tuple<uint32_t,uint32_t>()> get_viewport_size_function_;
+  std::function<AlignedBoundBox()> get_boundbox_function_;
+  //! \}
 };
 
 #endif  // !NUMGEOM_FRAMEWORK_CAMERA_H

@@ -6,8 +6,22 @@
 
 const float Camera::fov_y_ = glm::radians(45.0f);
 
+AlignedBoundBox Camera::GetSceneBox() const {
+  if (!get_boundbox_function_)
+    return AlignedBoundBox();
+  return get_boundbox_function_();
+}
+
+float Camera::GetAspect() const {
+  if (!get_viewport_size_function_)
+    return 1.0f;
+  int width, height;
+  std::tie(width, height) = get_viewport_size_function_();
+  return width / static_cast<float>(height);
+}
+
 float Camera::ComputeCameraDistance(float radius) const {
-  float aspect = aspect_function_();
+  float aspect = this->GetAspect();
   float distance_vertical = radius / std::tan(fov_y_ * 0.5f);
   float fov_x = 2.0f * std::atan(std::tan(fov_y_ * 0.5f) * aspect);
   float distance_horizontal = radius / std::tan(fov_x * 0.5f);
@@ -15,7 +29,6 @@ float Camera::ComputeCameraDistance(float radius) const {
 }
 
 Camera::Camera() {
-  aspect_function_ = []() { return 1.0f; };
   eye_ = glm::vec3(0.0f, 0.0f, 0.0f);
   forward_ = glm::vec3(0.0f, 1.0f, 0.0f);
   up_ = glm::vec3(0.0f, 0.0f, 1.0f);
@@ -45,7 +58,7 @@ glm::mat4 Camera::GetProjectionMatrix(const AlignedBoundBox& box) const {
   float distance = glm::length(eye_ - center);
   float z_near = std::max(0.001f, distance - radius * 2.0f);
   float z_far = distance + radius * 2.0f;
-  float aspect = aspect_function_();
+  float aspect = this->GetAspect();
   const float tan_half_fov_y = std::tan(fov_y_ / 2.0f);
   glm::mat4 m(0.0f);
   m[0][0] = 1.0f / (aspect * tan_half_fov_y);
@@ -58,28 +71,35 @@ glm::mat4 Camera::GetProjectionMatrix(const AlignedBoundBox& box) const {
 
 glm::vec3 Camera::GetPosition() const { return eye_; }
 
+glm::vec3 Camera::GetPivotPoint() const {
+  return pivot_point_.value_or(glm::vec3(0.0f));
+}
+
+void Camera::SetPivotPoint(const glm::vec3& pivot_point) {
+  pivot_point_ = pivot_point;
+}
+
 void Camera::Translate(const glm::vec3& v) { eye_ += v; }
 
-void Camera::Translate(const glm::vec2& screen_offset) {
-  static const float base_speed = 0.1f;
-  static const float sensitivity = 0.3f;
-
-  // Коррекция для разных соотношений сторон: замедляем
-  // * горизонтальное движение для широких экранов;
-  // * вертикальное движение для высоких экранов.
-  glm::vec2 scaled_offset = screen_offset * sensitivity;
-  glm::vec2 corrected_offset = scaled_offset;
-  float aspect = aspect_function_();
-  if (aspect > 1.0f)
-    corrected_offset.x /= aspect;
-  else
-    corrected_offset.y *= aspect;
-
+void Camera::Translate(const glm::ivec2& pixels_offset) {
+  // Оси экрана в мировой системе координат.
   glm::vec3 x_screen_axis = glm::normalize(glm::cross(forward_, up_));
   glm::vec3 y_screen_axis = glm::normalize(glm::cross(x_screen_axis, forward_));
-  glm::vec3 offset =
-      corrected_offset.x * x_screen_axis + corrected_offset.y * y_screen_axis;
-  eye_ += (offset * base_speed);
+  // Преобразуем пиксельное смещение в экранное.
+  // Учитываем, что ось Y окна не совпадает с оригинальной системой координат.
+  glm::vec2 screen_offset(static_cast<float>(-pixels_offset.x),
+                          static_cast<float>(+pixels_offset.y));
+  const AlignedBoundBox box = this->GetSceneBox();
+  int vp_width, vp_height;
+  std::tie(vp_width, vp_height) = get_viewport_size_function_();
+  if (!box.IsEmpty()) {
+    auto box_size = box.GetSize();
+    screen_offset.x *= box_size.x / static_cast<float>(vp_width);
+    screen_offset.y *= box_size.y / static_cast<float>(vp_height);
+  }
+  glm::vec3 global_offset = screen_offset.x * x_screen_axis +
+                            screen_offset.y * y_screen_axis;
+  eye_ += global_offset;
 }
 
 void Camera::Zoom(float k) { eye_ += (k * forward_); }
@@ -93,15 +113,25 @@ void Camera::FitBox(const AlignedBoundBox& box) {
   up_ = glm::normalize(up_);
 }
 
-void Camera::SetAspectFunction(std::function<float()> func) {
-  aspect_function_ = func;
+void Camera::SetBoundBoxFunction(std::function<AlignedBoundBox()> func) {
+  get_boundbox_function_ = func;
+  if (get_boundbox_function_ && !pivot_point_.has_value()) {
+    AlignedBoundBox box = get_boundbox_function_();
+    if (!box.IsEmpty())
+      pivot_point_ = box.GetCenter();
+  }
 }
 
-void Camera::RotateAroundPivot(const glm::vec3& pivot_point,
-                               const glm::vec2& screen_offset) {
+void Camera::SetViewportSizeFunction(
+    std::function<std::tuple<uint32_t,uint32_t>()> func) {
+  get_viewport_size_function_ = func;
+}
+
+void Camera::RotateAroundPivot(const glm::vec2& screen_offset) {
   static const float base_sensitivity = 0.01f;
   static const float min_pitch = -glm::half_pi<float>() + 0.01f;
   static const float max_pitch = glm::half_pi<float>() - 0.01f;
+  glm::vec3 pivot_point = this->GetPivotPoint();
 
   // Вычисляем вектор от точки опоры до камеры
   glm::vec3 vec_to_camera = eye_ - pivot_point;

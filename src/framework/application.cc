@@ -52,6 +52,8 @@ struct Application::Impl {
 Application::Application(int argc, char* argv[]) {
   m_pimpl = new Impl();
   m_pimpl->gpuManager = new GpuManager(this);
+  m_pimpl->camera.SetBoundBoxFunction(
+    [this](){ return this->m_pimpl->scene.GetBoundBox(); });
 }
 
 Application::~Application() { delete m_pimpl; }
@@ -74,16 +76,18 @@ glm::vec3 Application::CameraPosition() const {
 
 void Application::TranslateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
-  glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
-  m_pimpl->camera.Translate(screenOffset);
+  m_pimpl->camera.Translate(glm::ivec2{dx,dy});
   this->Update();
 }
 
 void Application::RotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
-  glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
-  glm::vec3 pivotPoint = m_pimpl->scene.GetBoundBox().GetCenter();
-  m_pimpl->camera.RotateAroundPivot(pivotPoint, screenOffset);
+  AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
+  if (box.IsEmpty())
+    return;
+  m_pimpl->camera.SetPivotPoint(box.GetCenter());
+  glm::vec2 screen_offset(static_cast<float>(dx), static_cast<float>(dy));
+  m_pimpl->camera.RotateAroundPivot(screen_offset);
   this->Update();
 }
 
@@ -109,6 +113,6 @@ void Application::ClearScene() {
   this->Update();
 }
 
-void Application::SetAspectFunction(std::function<float()> func) {
-  m_pimpl->camera.SetAspectFunction(func);
+void Application::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
+  m_pimpl->camera.SetViewportSizeFunction(func);
 }

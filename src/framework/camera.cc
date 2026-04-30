@@ -102,7 +102,27 @@ void Camera::Translate(const glm::ivec2& pixels_offset) {
   eye_ += global_offset;
 }
 
-void Camera::Zoom(float k) { eye_ += (k * forward_); }
+void Camera::Zoom(float k) {
+  const float sensitivity = 0.2f;
+  const float min_factor = 0.01f;
+  const float max_factor = 0.5f;
+  const float min_distance = 0.01f;
+  glm::vec3 pivot_point = this->GetPivotPoint();
+  glm::vec3 to_focus = pivot_point - eye_;
+  float current_distance = glm::length(to_focus);
+  if (current_distance < 0.001f) {
+    eye_ += (k * forward_);
+    return;
+  }
+  glm::vec3 direction = to_focus / current_distance;
+  float factor = sensitivity * std::abs(k);
+  factor = glm::clamp(factor, min_factor, max_factor);
+  if (k < 0) factor = -factor;
+  float new_distance = current_distance * (1.0f - factor);
+  if (new_distance < min_distance)
+    new_distance = min_distance;
+  eye_ = pivot_point - direction * new_distance;
+}
 
 void Camera::FitBox(const AlignedBoundBox& box) {
   glm::vec3 center = box.GetCenter();

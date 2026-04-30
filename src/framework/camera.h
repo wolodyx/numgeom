@@ -33,6 +33,8 @@ class Camera {
 
   void RotateAroundPivot(const glm::vec2& screenOffset);
 
+  //! Exponential zoom to the pivot point of focus
+  //! k > 0 - close to, k < 0 - move away from the pivot point.
   void Zoom(float k);
 
   void FitBox(const AlignedBoundBox&);

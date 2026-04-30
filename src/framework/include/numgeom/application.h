@@ -4,6 +4,7 @@
 #include <functional>
 
 #include "numgeom/framework_export.h"
+#include "numgeom/orthobasis.h"
 #include "numgeom/trimesh.h"
 
 class QWindow;
@@ -43,6 +44,8 @@ class FRAMEWORK_EXPORT Application {
   void TranslateCamera(int x, int y, int dx, int dy);
 
   void RotateCamera(int x, int y, int dx, int dy);
+
+  void OrientCamera(const OrthoBasis<float>&);
 
   glm::mat4 GetViewMatrix() const;
 

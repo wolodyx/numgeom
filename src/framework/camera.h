@@ -6,6 +6,8 @@
 
 #include "glm/glm.hpp"
 
+#include "numgeom/orthobasis.h"
+
 class AlignedBoundBox;
 
 /** \class Camera
@@ -38,6 +40,8 @@ class Camera {
   void Zoom(float k);
 
   void FitBox(const AlignedBoundBox&);
+
+  void Orient(const OrthoBasis<float>&);
 
   void SetBoundBoxFunction(std::function<AlignedBoundBox()>);
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()>);

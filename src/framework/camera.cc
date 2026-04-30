@@ -133,6 +133,11 @@ void Camera::FitBox(const AlignedBoundBox& box) {
   up_ = glm::normalize(up_);
 }
 
+void Camera::Orient(const OrthoBasis<float>& ortho_basis) {
+  forward_ = ortho_basis.GetForward();
+  up_ = ortho_basis.GetUp();
+}
+
 void Camera::SetBoundBoxFunction(std::function<AlignedBoundBox()> func) {
   get_boundbox_function_ = func;
   if (get_boundbox_function_ && !pivot_point_.has_value()) {

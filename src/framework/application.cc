@@ -91,6 +91,11 @@ void Application::RotateCamera(int x, int y, int dx, int dy) {
   this->Update();
 }
 
+void Application::OrientCamera(const OrthoBasis<float>& ortho_basis) {
+  m_pimpl->camera.Orient(ortho_basis);
+  this->FitScene();
+}
+
 glm::mat4 Application::GetViewMatrix() const {
   auto x = m_pimpl->camera.GetViewMatrix();
   return x;

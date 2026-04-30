@@ -71,7 +71,12 @@ void MainWindow::initVulkan() {
 }
 
 void MainWindow::createActions() {
-  QMenu* file_menu = menuBar()->addMenu(tr("&File"));
+  this->createFileMenu();
+  this->createViewMenu();
+}
+
+void MainWindow::createFileMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&File"));
 
   {
     QIcon icon;
@@ -81,15 +86,15 @@ void MainWindow::createActions() {
     act->setShortcuts(QKeySequence::Open);
     act->setStatusTip(tr("Open a file"));
     connect(act, SIGNAL(triggered()), this, SLOT(onOpenFile()));
-    file_menu->addAction(act);
+    menu->addAction(act);
   }
 
-  file_menu->addSeparator();
+  menu->addSeparator();
 
-  recent_files_menu_ = file_menu->addMenu(tr("Open &Recent"));
+  recent_files_menu_ = menu->addMenu(tr("Open &Recent"));
   updateRecentFilesMenu();
 
-  file_menu->addSeparator();
+  menu->addSeparator();
 
   {
     QIcon icon;
@@ -97,7 +102,7 @@ void MainWindow::createActions() {
                  QSize(), QIcon::Normal, QIcon::Off);
     QAction* act = new QAction(icon, tr("Screenshot"), this);
     connect(act, SIGNAL(triggered()), this, SLOT(onScreenshot()));
-    file_menu->addAction(act);
+    menu->addAction(act);
   }
 
   {
@@ -106,8 +111,12 @@ void MainWindow::createActions() {
                  QSize(), QIcon::Normal, QIcon::Off);
     QAction* act = new QAction(icon, tr("Quit"), this);
     connect(act, SIGNAL(triggered()), this, SLOT(onQuit()));
-    file_menu->addAction(act);
+    menu->addAction(act);
   }
+}
+
+void MainWindow::createViewMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&View"));
 
   {
     QIcon icon;
@@ -116,7 +125,81 @@ void MainWindow::createActions() {
     QAction* act = new QAction(icon, tr("Fit scene"), this);
     connect(act, SIGNAL(triggered()), this, SLOT(onFitScene()));
     act->setShortcut(QKeySequence(tr("F5")));
-    file_menu->addAction(act);
+    menu->addAction(act);
+  }
+
+  QMenu* std_view = menu->addMenu(tr("Standard views"));
+  {
+    QAction* act = new QAction(tr("Front"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(0,1,0),
+                  glm::vec3(0,0,1));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("1")));
+    std_view->addAction(act);
+  }
+  {
+    QAction* act = new QAction(tr("Top"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(0,0,-1),
+                  glm::vec3(0,1,0));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("2")));
+    std_view->addAction(act);
+  }
+  {
+    QAction* act = new QAction(tr("Right"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(-1,0,0),
+                  glm::vec3(0,0,1));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("3")));
+    std_view->addAction(act);
+  }
+  {
+    QAction* act = new QAction(tr("Rear"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(0,-1,0),
+                  glm::vec3(0,0,1));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("4")));
+    std_view->addAction(act);
+  }
+  {
+    QAction* act = new QAction(tr("Bottom"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(0,0,1),
+                  glm::vec3(0,-1,0));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("5")));
+    std_view->addAction(act);
+  }
+  {
+    QAction* act = new QAction(tr("Left"), this);
+    connect(act, &QAction::triggered,
+            [=](){
+              auto ortho_basis = OrthoBasis<float>::FromZY(
+                  glm::vec3(1,0,0),
+                  glm::vec3(0,0,1));
+              app_->OrientCamera(ortho_basis);
+            });
+    act->setShortcut(QKeySequence(tr("6")));
+    std_view->addAction(act);
   }
 }
 

@@ -4,6 +4,7 @@ set(PUBLIC_HEADERS
   include/numgeom/iterator.h
   include/numgeom/iteratorimpl.h
   include/numgeom/iteratorimpl.hpp
+  include/numgeom/orthobasis.h
   include/numgeom/outcome.h
   include/numgeom/shapes.h
   include/numgeom/staticjaggedarray.h

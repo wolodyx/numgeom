@@ -18,6 +18,8 @@ class MainWindow : public QMainWindow {
 
  private:
   void createActions();
+  void createFileMenu();
+  void createViewMenu();
   void updateRecentFilesMenu();
   void loadRecentFiles();
   void saveRecentFiles();

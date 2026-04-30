@@ -8,47 +8,44 @@
 class AlignedBoundBox;
 
 /** \class Camera
-Вспомогательный класс для управления параметрами камеры.
+An auxiliary class for controlling camera parameters.
 */
 class Camera {
- public:
-  static const float s_fovY;
-  glm::vec3 m_position;
-  glm::vec3 m_direction;
-  glm::vec3 m_up;
-
  public:
   Camera();
 
   Camera(const glm::vec3& pos, const glm::vec3& dir, const glm::vec3& up);
 
-  //! Матрица вида.
-  glm::mat4 viewMatrix() const;
+  glm::mat4 GetViewMatrix() const;
 
-  //! Матрица проекции.
-  glm::mat4 projectionMatrix(const AlignedBoundBox&) const;
+  glm::mat4 GetProjectionMatrix(const AlignedBoundBox&) const;
 
-  void translate(const glm::vec3& v);
+  glm::vec3 GetPosition() const;
+
+  void Translate(const glm::vec3& v);
 
   //! Смещение камеры вдоль экранных координат.
-  void translate(const glm::vec2& v);
+  void Translate(const glm::vec2& v);
 
-  //! Поворот камеры вокруг точки опоры.
-  void rotateAroundPivot(const glm::vec3& pivotPoint,
+  void RotateAroundPivot(const glm::vec3& pivotPoint,
                          const glm::vec2& screenOffset);
 
-  void zoom(float k);
+  void Zoom(float k);
 
-  void fitBox(const AlignedBoundBox&);
+  void FitBox(const AlignedBoundBox&);
 
-  void setAspectFunction(std::function<float()>);
-
- private:
-  float computeCameraDistance(float radius) const;
+  void SetAspectFunction(std::function<float()>);
 
  private:
+  float ComputeCameraDistance(float radius) const;
+
+ private:
+  static const float fov_y_;
+  glm::vec3 eye_;
+  glm::vec3 forward_;
+  glm::vec3 up_;
   //! Функция, запрашивающая соотношение сторон экрана в сцену.
-  std::function<float()> m_aspectFunction;
+  std::function<float()> aspect_function_;
 };
 
 #endif  // !NUMGEOM_FRAMEWORK_CAMERA_H

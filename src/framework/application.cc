@@ -59,23 +59,23 @@ Application::~Application() { delete m_pimpl; }
 void Application::FitScene() {
   AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
   box.Scale(1.3);
-  m_pimpl->camera.fitBox(box);
+  m_pimpl->camera.FitBox(box);
   this->Update();
 }
 
 void Application::ZoomCamera(float k) {
-  m_pimpl->camera.zoom(k);
+  m_pimpl->camera.Zoom(k);
   this->Update();
 }
 
 glm::vec3 Application::CameraPosition() const {
-  return m_pimpl->camera.m_position;
+  return m_pimpl->camera.GetPosition();
 }
 
 void Application::TranslateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
-  m_pimpl->camera.translate(screenOffset);
+  m_pimpl->camera.Translate(screenOffset);
   this->Update();
 }
 
@@ -83,17 +83,17 @@ void Application::RotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
   glm::vec2 screenOffset(static_cast<float>(dx), static_cast<float>(dy));
   glm::vec3 pivotPoint = m_pimpl->scene.GetBoundBox().GetCenter();
-  m_pimpl->camera.rotateAroundPivot(pivotPoint, screenOffset);
+  m_pimpl->camera.RotateAroundPivot(pivotPoint, screenOffset);
   this->Update();
 }
 
 glm::mat4 Application::GetViewMatrix() const {
-  auto x = m_pimpl->camera.viewMatrix();
+  auto x = m_pimpl->camera.GetViewMatrix();
   return x;
 }
 
 glm::mat4 Application::GetProjectionMatrix() const {
-  return m_pimpl->camera.projectionMatrix(m_pimpl->scene.GetBoundBox());
+  return m_pimpl->camera.GetProjectionMatrix(m_pimpl->scene.GetBoundBox());
 }
 
 void Application::Update() { m_pimpl->gpuManager->update(); }
@@ -110,5 +110,5 @@ void Application::ClearScene() {
 }
 
 void Application::SetAspectFunction(std::function<float()> func) {
-  m_pimpl->camera.setAspectFunction(func);
+  m_pimpl->camera.SetAspectFunction(func);
 }

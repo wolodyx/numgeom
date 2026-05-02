@@ -49,6 +49,7 @@ target_link_libraries(framework
     numgeom::core
   PRIVATE
     VulkanMemoryAllocator
+    stb_image
 )
 
 # Use VK_NO_PROTOTYPES to disable the use of prototypes in the Vulkan header.

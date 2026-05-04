@@ -17,6 +17,8 @@ set(PUBLIC_HEADERS
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   application.cc
+  applicationinner.cc       applicationinner.h
+  applicationstate.cc       applicationstate.h
   camera.cc                 camera.h
   debug_framework.cc
   drawable.cc

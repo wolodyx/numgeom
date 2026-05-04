@@ -10,6 +10,7 @@
 #include "qfileinfo.h"
 #include "qmenu.h"
 #include "qmenubar.h"
+#include "qresource.h"
 #include "qscreen.h"
 
 #include "numgeom/application.h"
@@ -34,6 +35,10 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   scene_window_->setSurfaceType(QSurface::VulkanSurface);
   QWidget* widget = QWidget::createWindowContainer(scene_window_, this);
   this->setCentralWidget(widget);
+
+  QResource resource(":/logo.jpg");
+  assert(resource.isValid());
+  app_->SetLogo(resource.data(), resource.size(), glm::ivec2(0,0));
 }
 
 MainWindow::~MainWindow() {}

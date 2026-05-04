@@ -1,5 +1,6 @@
 <RCC>
   <qresource prefix="/resources">
+    <file>logo.jpg</file>
     <file>icons/screenshot-16.png</file>
     <file>icons/openfile-32.png</file>
     <file>icons/closeapp-16.png</file>

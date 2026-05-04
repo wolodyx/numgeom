@@ -1,7 +1,8 @@
-#ifndef numgeom_framework_application_h
-#define numgeom_framework_application_h
+#ifndef NUMGEOM_FRAMEWORK_APPLICATION_H
+#define NUMGEOM_FRAMEWORK_APPLICATION_H
 
 #include <functional>
+#include <string>
 
 #include "numgeom/framework_export.h"
 #include "numgeom/orthobasis.h"
@@ -28,6 +29,15 @@ class FRAMEWORK_EXPORT Application {
   Application(int argc, char* argv[]);
 
   ~Application();
+
+  /** \brief Установка логотипа приложения.
+  \param image_filename Имя файла с изображением логотипа.
+  \param screen_position Позиция левого верхнего угла логотипа на экране.
+  */
+  void SetLogo(const std::string& image_filename,
+               const glm::ivec2& screen_position);
+  void SetLogo(const unsigned char* image_data, size_t image_data_size,
+               const glm::ivec2& screen_position);
 
   //!@{
   //! Манипуляции камерой и запрос ее состояния.
@@ -72,12 +82,16 @@ class FRAMEWORK_EXPORT Application {
 
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
+  class Inner;
+  Inner* GetInnerInterface();
+  const Inner* GetInnerInterface() const;
+
  private:
   Application(const Application&) = delete;
   Application& operator=(const Application&) = delete;
 
  private:
-  struct Impl;
-  Impl* m_pimpl;
+  class State;
+  State* m_pimpl;
 };
-#endif  // !numgeom_framework_application_h
+#endif // !NUMGEOM_FRAMEWORK_APPLICATION_H

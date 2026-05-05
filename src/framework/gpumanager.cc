@@ -30,6 +30,8 @@
 #include "numgeom/sceneobject.h"
 #include "numgeom/trimeshconnectivity.h"
 
+#include "applicationinner.h"
+#include "logo.h"
 #include "sceneiterators.h"
 #include "vkutilities.h"
 
@@ -137,6 +139,7 @@ struct VulkanState {
   VkRenderPass renderpass = VK_NULL_HANDLE;
 
   VkPipeline pipeline = VK_NULL_HANDLE;
+  VkPipeline logo_pipeline = VK_NULL_HANDLE;
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
@@ -177,14 +180,28 @@ struct VulkanState {
 
   VkBuffer buffer_frame = VK_NULL_HANDLE;
   VmaAllocation alloc_frame = VK_NULL_HANDLE;
+
+  VkBuffer buffer_logo_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_logo_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_index = VK_NULL_HANDLE;
   //! \}
 
   //! Количество примитивов для отрисовки.
   uint32_t index_count = 0;
+  uint32_t logo_index_count = 0;
 
   //! Память устройства, в котором содержатся изображения в
   //! `ImageResources::msaaImage`.
   VkDeviceMemory msaaImageMem = VK_NULL_HANDLE;
+
+  //! Ресурсы для отображения логотипа
+  //! \{
+  VkImage logo_image = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_image = VK_NULL_HANDLE;
+  VkImageView logo_image_view = VK_NULL_HANDLE;
+  VkSampler logo_sampler = VK_NULL_HANDLE;
+  //! \}
 
   size_t currentFrameIndex = 0;
 };
@@ -355,6 +372,12 @@ bool createGraphicsPipeline(VulkanState* state) {
       VkDescriptorSetLayoutBinding{
           .binding = 1,
           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      },
+      VkDescriptorSetLayoutBinding{
+          .binding = 2,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
           .descriptorCount = 1,
           .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
       },
@@ -567,6 +590,194 @@ bool createGraphicsPipeline(VulkanState* state) {
 
   vkDestroyShaderModule(state->device, vsModule, nullptr);
   vkDestroyShaderModule(state->device, fsModule, nullptr);
+
+  return true;
+}
+
+bool CreateLogoPipeline(VulkanState* state) {
+  VkResult r;
+
+  // Подготавливаем шейдерные модули для логотипа.
+  static uint32_t vs_spirv_source[] = {
+#include "logo.vert.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_vs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(vs_spirv_source),
+      .pCode = (uint32_t*)vs_spirv_source,
+  };
+  VkShaderModule vs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Logo vertex shader creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  static uint32_t fs_spirv_source[] = {
+#include "logo.frag.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_fs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(fs_spirv_source),
+      .pCode = (uint32_t*)fs_spirv_source,
+  };
+  VkShaderModule fs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Logo fragment shader creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    return false;
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT,
+          .module = vs_module,
+          .pName = "main",
+      },
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .module = fs_module,
+          .pName = "main",
+      },
+  };
+
+  // Vertex input for logo quad: position (vec2) and uv (vec2)
+  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
+      VkVertexInputBindingDescription{
+        .binding = 0,
+        .stride = 4 * sizeof(float), // position + uv
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+  };
+  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+      VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = 2 * sizeof(float)
+      },
+  };
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
+      .pVertexBindingDescriptions = vertex_binding_descs.data(),
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
+      .pVertexAttributeDescriptions = vertex_attr_descs.data()
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = false,
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_NONE, // no culling for 2D quad
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = state->sampleCount,
+  };
+
+  // Disable depth test for overlay
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE,
+      .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+  };
+
+  // Alpha blending
+  VkPipelineColorBlendAttachmentState attachment_state = {
+      .blendEnable = VK_TRUE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      .colorBlendOp = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .alphaBlendOp = VK_BLEND_OP_ADD,
+      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+  };
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = 1,
+      .pAttachments = &attachment_state,
+  };
+
+  VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(ci_stages.size()),
+      .pStages = ci_stages.data(),
+      .pVertexInputState = &ci_vertex_input_state,
+      .pInputAssemblyState = &ci_input_assembly_state,
+      .pViewportState = &ci_viewport_state,
+      .pRasterizationState = &ci_rasterization_state,
+      .pMultisampleState = &ci_multisample_state,
+      .pDepthStencilState = &ci_depth_stencil_state,
+      .pColorBlendState = &ci_color_blend_state,
+      .pDynamicState = &ci_pipeline_dynamic_state,
+      .layout = state->pipelineLayout,
+      .renderPass = state->renderpass,
+      .subpass = 0,
+  }};
+  VkPipeline pipelines[] = {VK_NULL_HANDLE};
+  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                nullptr, pipelines);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Logo graphics pipeline creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  state->logo_pipeline = pipelines[0];
+
+  if (state->logo_pipeline == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Logo graphics pipeline creation error.";
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format("Logo graphics pipeline {} is created.",
+                                          static_cast<void*>(&state->logo_pipeline));
+
+  vkDestroyShaderModule(state->device, vs_module, nullptr);
+  vkDestroyShaderModule(state->device, fs_module, nullptr);
 
   return true;
 }
@@ -1057,6 +1268,25 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
     vkCmdDrawIndexed(frame.cmdBuf, state->index_count, 1, 0, 0, 0);
   }
 
+  // Draw logo overlay if available
+  if (state->logo_pipeline != VK_NULL_HANDLE &&
+      state->buffer_logo_vertex != VK_NULL_HANDLE &&
+      state->buffer_logo_index != VK_NULL_HANDLE &&
+      state->logo_index_count > 0) {
+    vkCmdBindPipeline(frame.cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->logo_pipeline);
+    // Descriptor set already bound (same as scene)
+    // Bind logo vertex buffer (binding 0)
+    VkBuffer logoVertexBuffer = state->buffer_logo_vertex;
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(frame.cmdBuf, 0, 1, &logoVertexBuffer, offsets);
+    // Bind logo index buffer
+    vkCmdBindIndexBuffer(frame.cmdBuf, state->buffer_logo_index, 0,
+                         VK_INDEX_TYPE_UINT16);
+    // Viewport and scissor already set (same as scene)
+    vkCmdDrawIndexed(frame.cmdBuf, state->logo_index_count, 1, 0, 0, 0);
+  }
+
   vkCmdEndRenderPass(frame.cmdBuf);
 
   vkEndCommandBuffer(frame.cmdBuf);
@@ -1540,6 +1770,370 @@ bool chooseSwapchainSettings(VulkanState* state) {
 #define CHECK_STATE(var, state) \
   if (var <= state) return true;
 
+bool CreateLogoResources(VulkanState* state, const Logo& logo) {
+  BOOST_LOG_TRIVIAL(trace) << "Creating logo resources...";
+
+  assert(!logo.IsEmpty());
+
+  VkResult r = VK_SUCCESS;
+
+  // Create staging buffer
+  VkBuffer staging_buffer = VK_NULL_HANDLE;
+  VmaAllocation staging_allocation = VK_NULL_HANDLE;
+  VkBufferCreateInfo bufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = static_cast<VkDeviceSize>(logo.pixels.size()),
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+  };
+  VmaAllocationCreateInfo alloc_ci = {
+      .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  r = vmaCreateBuffer(state->allocator, &bufferInfo, &alloc_ci,
+                      &staging_buffer, &staging_allocation, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create staging buffer for logo: "
+                             << VkResultToString(r);
+    return false;
+  }
+
+  // Copy pixel data
+  void* mapped_data = nullptr;
+  vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
+  memcpy(mapped_data, logo.pixels.data(), logo.pixels.size());
+  vmaUnmapMemory(state->allocator, staging_allocation);
+
+  // Create image
+  VkImageCreateInfo image_ci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .extent = {static_cast<uint32_t>(logo.width),
+                 static_cast<uint32_t>(logo.height), 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+  VmaAllocationCreateInfo image_alloc_ci = {
+      .flags = 0,
+      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+  };
+  r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
+                     &state->logo_image, &state->alloc_logo_image, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create logo image: "
+                             << VkResultToString(r);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Create temporary command pool and buffer
+  VkCommandPool cmd_pool = VK_NULL_HANDLE;
+  VkCommandPoolCreateInfo pool_ci = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex = state->graphicsFamilyIndex.value(),
+  };
+  r = vkCreateCommandPool(state->device, &pool_ci, nullptr, &cmd_pool);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for logo: "
+                             << VkResultToString(r);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
+  VkCommandBufferAllocateInfo alloc_buf_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = cmd_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+  r = vkAllocateCommandBuffers(state->device, &alloc_buf_info, &cmd_buf);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for logo: "
+                             << VkResultToString(r);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Begin command buffer
+  VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(cmd_buf, &begin_info);
+
+  // Transition image layout to transfer destination
+  VkImageMemoryBarrier barrier = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = state->logo_image,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+  vkCmdPipelineBarrier(cmd_buf,
+                       VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       0,
+                       0, nullptr,
+                       0, nullptr,
+                       1, &barrier);
+
+  // Copy buffer to image
+  VkBufferImageCopy region = {
+      .bufferOffset = 0,
+      .bufferRowLength = 0,
+      .bufferImageHeight = 0,
+      .imageSubresource = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .mipLevel = 0,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {static_cast<uint32_t>(logo.width),
+                      static_cast<uint32_t>(logo.height), 1},
+  };
+  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, state->logo_image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  // Transition image layout to shader read-only optimal
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  vkCmdPipelineBarrier(cmd_buf,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                       0,
+                       0, nullptr,
+                       0, nullptr,
+                       1, &barrier);
+
+  vkEndCommandBuffer(cmd_buf);
+
+  // Submit command buffer
+  VkSubmitInfo submit_info = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &cmd_buf,
+  };
+  r = vkQueueSubmit(state->queue, 1, &submit_info, VK_NULL_HANDLE);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to submit logo copy commands: "
+                             << VkResultToString(r);
+    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Wait for queue to finish
+  r = vkQueueWaitIdle(state->queue);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to wait for logo copy: "
+                             << VkResultToString(r);
+    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Cleanup temporary command pool and staging buffer
+  vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+  vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+  vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+
+  // Create image view
+  VkImageViewCreateInfo view_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = state->logo_image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8G8B8A8_UNORM,
+      .components = {
+          .r = VK_COMPONENT_SWIZZLE_R,
+          .g = VK_COMPONENT_SWIZZLE_G,
+          .b = VK_COMPONENT_SWIZZLE_B,
+          .a = VK_COMPONENT_SWIZZLE_A,
+      },
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+  r = vkCreateImageView(state->device, &view_info, nullptr, &state->logo_image_view);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create logo image view: "
+                             << VkResultToString(r);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    return false;
+  }
+
+  // Create sampler
+  VkSamplerCreateInfo sampler_ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .mipLodBias = 0.0f,
+      .anisotropyEnable = VK_FALSE,
+      .maxAnisotropy = 1.0f,
+      .compareEnable = VK_FALSE,
+      .compareOp = VK_COMPARE_OP_ALWAYS,
+      .minLod = 0.0f,
+      .maxLod = 0.0f,
+      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+      .unnormalizedCoordinates = VK_FALSE,
+  };
+  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &state->logo_sampler);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create logo sampler: "
+                             << VkResultToString(r);
+    vkDestroyImageView(state->device, state->logo_image_view, nullptr);
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    return false;
+  }
+
+  BOOST_LOG_TRIVIAL(trace) << "Logo resources created successfully";
+  return true;
+}
+
+bool CreateLogoQuadBuffers(VulkanState* state, const Logo& logo) {
+  BOOST_LOG_TRIVIAL(trace) << "Creating logo quad buffers...";
+
+  if (state->imageExtent.width == 0 || state->imageExtent.height == 0) {
+    BOOST_LOG_TRIVIAL(warning) << "Invalid image extent, skipping quad buffer creation";
+    return false;
+  }
+
+  // Convert screen coordinates to NDC
+  float x = static_cast<float>(logo.position.x);
+  float y = static_cast<float>(logo.position.y);
+  float w = static_cast<float>(logo.width);
+  float h = static_cast<float>(logo.height);
+  float screen_width = static_cast<float>(state->imageExtent.width);
+  float screen_height = static_cast<float>(state->imageExtent.height);
+
+  // NDC coordinates: `x=[-1,+1]` (from left to right),
+  //                  `y=[-1,+1]` (from top to bottom).
+  // Assuming logo position is top-left corner, Y down.
+  float left = (x * 2.0f / screen_width) - 1.0f;
+  float right = ((x + w) * 2.0f / screen_width) - 1.0f;
+  float top = (y * 2.0f / screen_height) - 1.0f;
+  float bottom = ((y + h) * 2.0f / screen_height) - 1.0f;
+
+  // Vertex data: position (x,y) and UV (u,v)
+  struct Vertex {
+    float x, y;
+    float u, v;
+  };
+  std::array<Vertex, 4> vertices = {{
+    {left,  top,    0.0f, 0.0f},
+    {right, top,    1.0f, 0.0f},
+    {right, bottom, 1.0f, 1.0f},
+    {left,  bottom, 0.0f, 1.0f},
+  }};
+
+  // Index data for two triangles
+  std::array<uint16_t, 6> indices = {0, 1, 2, 0, 2, 3};
+
+  // Destroy existing buffers if any
+  if (state->buffer_logo_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_logo_vertex, state->alloc_logo_vertex);
+    state->buffer_logo_vertex = VK_NULL_HANDLE;
+  }
+  if (state->buffer_logo_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_logo_index, state->alloc_logo_index);
+    state->buffer_logo_index = VK_NULL_HANDLE;
+  }
+
+  // Create vertex buffer
+  VkBufferCreateInfo vertexBufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = sizeof(vertices),
+      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+  };
+  VmaAllocationCreateInfo vertexAllocInfo = {
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo, &vertexAllocInfo,
+                               &state->buffer_logo_vertex, &state->alloc_logo_vertex, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create logo vertex buffer: "
+                             << VkResultToString(r);
+    return false;
+  }
+
+  // Copy vertex data
+  void* mapped_data = nullptr;
+  vmaMapMemory(state->allocator, state->alloc_logo_vertex, &mapped_data);
+  memcpy(mapped_data, vertices.data(), sizeof(vertices));
+  vmaUnmapMemory(state->allocator, state->alloc_logo_vertex);
+
+  // Create index buffer
+  VkBufferCreateInfo indexBufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = sizeof(indices),
+      .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+  };
+  VmaAllocationCreateInfo indexAllocInfo = {
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
+                      &state->buffer_logo_index, &state->alloc_logo_index, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create logo index buffer: "
+                             << VkResultToString(r);
+    vmaDestroyBuffer(state->allocator, state->buffer_logo_vertex, state->alloc_logo_vertex);
+    state->buffer_logo_vertex = VK_NULL_HANDLE;
+    return false;
+  }
+
+  // Copy index data
+  vmaMapMemory(state->allocator, state->alloc_logo_index, &mapped_data);
+  memcpy(mapped_data, indices.data(), sizeof(indices));
+  vmaUnmapMemory(state->allocator, state->alloc_logo_index);
+
+  state->logo_index_count = static_cast<uint32_t>(indices.size());
+  BOOST_LOG_TRIVIAL(trace) << "Logo quad buffers created, index count = " << state->logo_index_count;
+  return true;
+}
+
+bool UpdateLogoBuffers(Application* app, VulkanState* state) {
+  auto app_inner_if = app->GetInnerInterface();
+  if (!app_inner_if->HasLogo()) {
+    return true; // No logo, nothing to update
+  }
+  const Logo& logo = app_inner_if->GetLogo();
+  return CreateLogoQuadBuffers(state, logo);
+}
+
 bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   BOOST_LOG_TRIVIAL(trace) << "Start gpumanager initialization ...";
 
@@ -1592,6 +2186,24 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   if (!createGraphicsPipeline(state)) return false;
   CHECK_STATE(s, VulkanInitState::Pipeline);
 
+  // Create logo resources
+  auto app_inner_if = gpm->app->GetInnerInterface();
+  if (app_inner_if->HasLogo()) {
+    const Logo& logo = app_inner_if->GetLogo();
+    if (!CreateLogoResources(state,logo)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to create logo resources, continuing without logo";
+    } else {
+      // Create quad buffers for logo rendering
+      if (!CreateLogoQuadBuffers(state, logo)) {
+        BOOST_LOG_TRIVIAL(warning) << "Failed to create logo quad buffers, logo will not be rendered";
+        // Cleanup logo resources? We'll keep them but skip rendering.
+      }
+    }
+    if (!CreateLogoPipeline(state)) {
+      BOOST_LOG_TRIVIAL(fatal) << "Failed to create logo pipeline";
+    }
+  }
+
   VkCommandPoolCreateInfo ci_commandpool{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -1600,10 +2212,13 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmdPool);
 
   // Создаем объект пула дескрипторов.
-  std::array<VkDescriptorPoolSize, 1> descPoolSizes = {
+  std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
       VkDescriptorPoolSize{
         .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .descriptorCount = state->frameCount * 2},
+      VkDescriptorPoolSize{
+        .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = state->frameCount},
   };
   VkDescriptorPoolCreateInfo ci_descpool{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -1851,6 +2466,22 @@ void updateDescriptorSets(Application* app, VulkanState* state) {
         .pBufferInfo = &bufferInfo[1],
       },
   };
+  // Add combined image sampler for logo if available
+  if (state->logo_image_view != VK_NULL_HANDLE && state->logo_sampler != VK_NULL_HANDLE) {
+    VkDescriptorImageInfo imageInfo{
+        .sampler = state->logo_sampler,
+        .imageView = state->logo_image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    descWrites.push_back(VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .dstBinding = 2,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo,
+    });
+  }
   vkUpdateDescriptorSets(state->device,
                          static_cast<uint32_t>(descWrites.size()),
                          descWrites.data(), 0, nullptr);
@@ -1888,6 +2519,10 @@ bool GpuManager::update() {
   if (state->imageExtent.width != currentExtent.width ||
       state->imageExtent.height != currentExtent.height) {
     if (!recreateSwapchain(state, currentExtent)) return false;
+    // Update logo buffers for new window size
+    if (!UpdateLogoBuffers(m_pimpl->app, state)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
+    }
   }
 
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
@@ -1911,6 +2546,10 @@ bool GpuManager::update() {
       VkExtent2D extent;
       std::tie(extent.width, extent.height) = m_pimpl->getImageExtent();
       recreateSwapchain(state, extent);
+      // Update logo buffers for new window size
+      if (!UpdateLogoBuffers(m_pimpl->app, state)) {
+        BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
+      }
       continue;
     }
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
@@ -1952,6 +2591,10 @@ void GpuManager::finalize() {
 
   vkDestroyPipeline(state->device, state->pipeline, nullptr);
   state->pipeline = VK_NULL_HANDLE;
+  if (state->logo_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->logo_pipeline, nullptr);
+    state->logo_pipeline = VK_NULL_HANDLE;
+  }
 
   vkDestroyPipelineLayout(state->device, state->pipelineLayout, nullptr);
   vkDestroyDescriptorSetLayout(state->device, state->descLayout, nullptr);
@@ -1968,6 +2611,31 @@ void GpuManager::finalize() {
   vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_color);
   vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
   vmaDestroyBuffer(state->allocator, state->buffer_frame, state->alloc_frame);
+
+  // Cleanup logo quad buffers
+  if (state->buffer_logo_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_logo_vertex, state->alloc_logo_vertex);
+    state->buffer_logo_vertex = VK_NULL_HANDLE;
+  }
+  if (state->buffer_logo_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_logo_index, state->alloc_logo_index);
+    state->buffer_logo_index = VK_NULL_HANDLE;
+  }
+
+  // Cleanup logo resources
+  if (state->logo_sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(state->device, state->logo_sampler, nullptr);
+    state->logo_sampler = VK_NULL_HANDLE;
+  }
+  if (state->logo_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(state->device, state->logo_image_view, nullptr);
+    state->logo_image_view = VK_NULL_HANDLE;
+  }
+  if (state->logo_image != VK_NULL_HANDLE) {
+    vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
+    state->logo_image = VK_NULL_HANDLE;
+    state->alloc_logo_image = VK_NULL_HANDLE;
+  }
 
   if (!state->externalSurface)
     vkDestroySurfaceKHR(state->instance, state->surface, nullptr);

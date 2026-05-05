@@ -3,9 +3,6 @@
 #include <format>
 #include <iostream>
 
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
-
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/gpumanager.h"
 #include "numgeom/sceneobject_mesh.h"
@@ -117,32 +114,13 @@ void Application::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint
 
 void Application::SetLogo(const std::string& image_filename,
                           const glm::ivec2& screen_position) {
-  unsigned char* pixels = stbi_load(image_filename.c_str(),
-                                    &m_pimpl->logo.width, &m_pimpl->logo.height,
-                                    &m_pimpl->logo.channels, 4);
-  if (!pixels)
-    return;
-  int pixels_size = m_pimpl->logo.width * m_pimpl->logo.height * 4;
-  m_pimpl->logo.pixels.assign(pixels, pixels + pixels_size);
-  stbi_image_free(pixels);
+  m_pimpl->logo = Logo(image_filename, screen_position);
 }
 
 void Application::SetLogo(const unsigned char* image_data,
                           size_t image_data_size,
                           const glm::ivec2& screen_position) {
-  m_pimpl->logo.position = screen_position;
-  int width, height, channels;
-  unsigned char* pixels = stbi_load_from_memory(
-      image_data, static_cast<int>(image_data_size), &width, &height, &channels,
-      4);
-  if (!pixels)
-    return;
-  int pixels_size = width * height * 4;
-  m_pimpl->logo.pixels.assign(pixels, pixels + pixels_size);
-  m_pimpl->logo.width = width;
-  m_pimpl->logo.height = height;
-  m_pimpl->logo.channels = channels;
-  stbi_image_free(pixels);
+  m_pimpl->logo = Logo(image_data, image_data_size, screen_position);
 }
 
 Application::Inner* Application::GetInnerInterface() {

@@ -36,9 +36,19 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   QWidget* widget = QWidget::createWindowContainer(scene_window_, this);
   this->setCentralWidget(widget);
 
-  QResource resource(":/logo.jpg");
-  assert(resource.isValid());
-  app_->SetLogo(resource.data(), resource.size(), glm::ivec2(0,0));
+  // Load PNG logo from Qt resources
+  // Use QFile instead of QResource because Qt resources are compressed by default
+  // and QResource::data() returns compressed data, while QFile automatically decompresses
+  QFile resource_file(":/resources/logo.png");
+  if (!resource_file.open(QIODevice::ReadOnly)) {
+    // Log error but don't crash - application can work without logo
+    qWarning() << "WARNING: Could not open logo resource file";
+  } else {
+    QByteArray resource_data = resource_file.readAll();
+    resource_file.close();
+    app_->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
+                  resource_data.size(), glm::ivec2(5,5));
+  }
 }
 
 MainWindow::~MainWindow() {}

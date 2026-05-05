@@ -26,6 +26,7 @@ set(SOURCE_FILES
   drawable_cylinder.cc
   drawable_sphere.cc
   gpumanager.cc
+  logo.cc                   logo.h
   scene.cc
   sceneiterators.cc         sceneiterators.h
   sceneobject.cc
@@ -39,6 +40,8 @@ set(SOURCE_FILES
 set(SHADER_FILES
   app.vert
   app.frag
+  logo.vert
+  logo.frag
 )
 
 add_library(framework ${SOURCE_FILES} ${SHADER_FILES})

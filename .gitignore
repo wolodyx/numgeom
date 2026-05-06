@@ -2,6 +2,3 @@
 /vcpkg_installed/
 /CMakeUserPresets.json
 /.vscode/launch.json
-/.codeassistant
-/.claude
-/.roo

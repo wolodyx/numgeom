@@ -4,6 +4,7 @@
 #include "numgeom/application.h"
 
 class Logo;
+class ScreenText;
 
 /** \class Application::Inner
 \brief Дополнительный (скрытый) интерфейс класса `Application`, необходимый для
@@ -18,6 +19,10 @@ class Application::Inner {
   bool HasLogo() const;
 
   const Logo& GetLogo() const;
+
+  bool HasScreenText() const;
+
+  const ScreenText& GetScreenText() const;
 
  private:
   State* pimpl_;

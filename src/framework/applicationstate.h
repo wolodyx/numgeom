@@ -6,6 +6,7 @@
 
 #include "camera.h"
 #include "logo.h"
+#include "screentext.h"
 
 /** \class Application::Impl
 \brief Скрытое и разделяемое состояние класса `Application`.
@@ -13,6 +14,7 @@
 class Application::State {
  public:
   Logo logo;
+  ScreenText screen_text;
   Camera camera;
   Scene scene;
   GpuManager* gpuManager;

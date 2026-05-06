@@ -134,3 +134,10 @@ const Application::Inner* Application::GetInnerInterface() const {
     m_pimpl->inner_interface_ = new Inner(m_pimpl);
   return m_pimpl->inner_interface_;
 }
+
+void Application::SetText(const std::string& text, const glm::ivec2& screen_position,
+                         const glm::vec4& color, int font_size,
+                         const std::string& font_path) {
+  m_pimpl->screen_text = ScreenText(text, screen_position, color, font_path, font_size);
+  this->Update();
+}

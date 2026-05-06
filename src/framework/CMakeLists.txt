@@ -33,6 +33,7 @@ set(SOURCE_FILES
   sceneobject_mesh.cc
   scenewidget.cc
   scenewidget_axisindicator.cc
+  screentext.cc             screentext.h
   userinputcontroller.cc
   vkutilities.cc            vkutilities.h
 )
@@ -42,6 +43,8 @@ set(SHADER_FILES
   app.frag
   logo.vert
   logo.frag
+  text.vert
+  text.frag
 )
 
 add_library(framework ${SOURCE_FILES} ${SHADER_FILES})
@@ -55,6 +58,7 @@ target_link_libraries(framework
   PRIVATE
     VulkanMemoryAllocator
     stb_image
+    stb_truetype
 )
 
 # Use VK_NO_PROTOTYPES to disable the use of prototypes in the Vulkan header.

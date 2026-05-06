@@ -39,6 +39,10 @@ class FRAMEWORK_EXPORT Application {
   void SetLogo(const unsigned char* image_data, size_t image_data_size,
                const glm::ivec2& screen_position);
 
+  void SetText(const std::string& text, const glm::ivec2& screen_position,
+               const glm::vec4& color = glm::vec4(1.0f), int font_size = 32,
+               const std::string& font_path = "");
+
   //!@{
   //! Манипуляции камерой и запрос ее состояния.
 

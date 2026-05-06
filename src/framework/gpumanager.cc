@@ -32,6 +32,7 @@
 
 #include "applicationinner.h"
 #include "logo.h"
+#include "screentext.h"
 #include "sceneiterators.h"
 #include "vkutilities.h"
 
@@ -140,6 +141,7 @@ struct VulkanState {
 
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipeline logo_pipeline = VK_NULL_HANDLE;
+  VkPipeline text_pipeline = VK_NULL_HANDLE;
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
@@ -185,11 +187,17 @@ struct VulkanState {
   VmaAllocation alloc_logo_vertex = VK_NULL_HANDLE;
   VkBuffer buffer_logo_index = VK_NULL_HANDLE;
   VmaAllocation alloc_logo_index = VK_NULL_HANDLE;
+
+  VkBuffer buffer_text_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_text_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_index = VK_NULL_HANDLE;
   //! \}
 
   //! Количество примитивов для отрисовки.
   uint32_t index_count = 0;
   uint32_t logo_index_count = 0;
+  uint32_t text_index_count = 0;
 
   //! Память устройства, в котором содержатся изображения в
   //! `ImageResources::msaaImage`.
@@ -201,6 +209,16 @@ struct VulkanState {
   VmaAllocation alloc_logo_image = VK_NULL_HANDLE;
   VkImageView logo_image_view = VK_NULL_HANDLE;
   VkSampler logo_sampler = VK_NULL_HANDLE;
+  //! \}
+
+  //! Ресурсы для отображения текста
+  //! \{
+  VkImage text_image = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_image = VK_NULL_HANDLE;
+  VkImageView text_image_view = VK_NULL_HANDLE;
+  VkSampler text_sampler = VK_NULL_HANDLE;
+  VkBuffer buffer_text_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_color = VK_NULL_HANDLE;
   //! \}
 
   size_t currentFrameIndex = 0;
@@ -378,6 +396,20 @@ bool createGraphicsPipeline(VulkanState* state) {
       VkDescriptorSetLayoutBinding{
           .binding = 2,
           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      },
+      // Text texture sampler (binding 3)
+      VkDescriptorSetLayoutBinding{
+          .binding = 3,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      },
+      // Text color uniform buffer (binding 4)
+      VkDescriptorSetLayoutBinding{
+          .binding = 4,
+          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
           .descriptorCount = 1,
           .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
       },
@@ -775,6 +807,194 @@ bool CreateLogoPipeline(VulkanState* state) {
   }
   BOOST_LOG_TRIVIAL(trace) << std::format("Logo graphics pipeline {} is created.",
                                           static_cast<void*>(&state->logo_pipeline));
+
+  vkDestroyShaderModule(state->device, vs_module, nullptr);
+  vkDestroyShaderModule(state->device, fs_module, nullptr);
+
+  return true;
+}
+
+bool CreateTextPipeline(VulkanState* state) {
+  VkResult r;
+
+  // Подготавливаем шейдерные модули для текста.
+  static uint32_t vs_spirv_source[] = {
+#include "text.vert.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_vs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(vs_spirv_source),
+      .pCode = (uint32_t*)vs_spirv_source,
+  };
+  VkShaderModule vs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Text vertex shader creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  static uint32_t fs_spirv_source[] = {
+#include "text.frag.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_fs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(fs_spirv_source),
+      .pCode = (uint32_t*)fs_spirv_source,
+  };
+  VkShaderModule fs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Text fragment shader creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    return false;
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT,
+          .module = vs_module,
+          .pName = "main",
+      },
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .module = fs_module,
+          .pName = "main",
+      },
+  };
+
+  // Vertex input for text quad: position (vec2) and uv (vec2) - same as logo
+  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
+      VkVertexInputBindingDescription{
+        .binding = 0,
+        .stride = 4 * sizeof(float), // position + uv
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+  };
+  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+      VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32_SFLOAT,
+        .offset = 2 * sizeof(float)
+      },
+  };
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
+      .pVertexBindingDescriptions = vertex_binding_descs.data(),
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
+      .pVertexAttributeDescriptions = vertex_attr_descs.data()
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = false,
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_NONE, // no culling for 2D text
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = state->sampleCount,
+  };
+
+  // Disable depth test for overlay
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE,
+      .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+  };
+
+  // Alpha blending for text (same as logo)
+  VkPipelineColorBlendAttachmentState attachment_state = {
+      .blendEnable = VK_TRUE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      .colorBlendOp = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .alphaBlendOp = VK_BLEND_OP_ADD,
+      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+  };
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = 1,
+      .pAttachments = &attachment_state,
+  };
+
+  VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(ci_stages.size()),
+      .pStages = ci_stages.data(),
+      .pVertexInputState = &ci_vertex_input_state,
+      .pInputAssemblyState = &ci_input_assembly_state,
+      .pViewportState = &ci_viewport_state,
+      .pRasterizationState = &ci_rasterization_state,
+      .pMultisampleState = &ci_multisample_state,
+      .pDepthStencilState = &ci_depth_stencil_state,
+      .pColorBlendState = &ci_color_blend_state,
+      .pDynamicState = &ci_pipeline_dynamic_state,
+      .layout = state->pipelineLayout,
+      .renderPass = state->renderpass,
+      .subpass = 0,
+  }};
+  VkPipeline pipelines[] = {VK_NULL_HANDLE};
+  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                nullptr, pipelines);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Text graphics pipeline creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  state->text_pipeline = pipelines[0];
+
+  if (state->text_pipeline == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Text graphics pipeline creation error.";
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format("Text graphics pipeline {} is created.",
+                                          static_cast<void*>(&state->text_pipeline));
 
   vkDestroyShaderModule(state->device, vs_module, nullptr);
   vkDestroyShaderModule(state->device, fs_module, nullptr);
@@ -1285,6 +1505,25 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
                          VK_INDEX_TYPE_UINT16);
     // Viewport and scissor already set (same as scene)
     vkCmdDrawIndexed(frame.cmdBuf, state->logo_index_count, 1, 0, 0, 0);
+  }
+
+  // Draw text overlay if available
+  if (state->text_pipeline != VK_NULL_HANDLE &&
+      state->buffer_text_vertex != VK_NULL_HANDLE &&
+      state->buffer_text_index != VK_NULL_HANDLE &&
+      state->text_index_count > 0) {
+    vkCmdBindPipeline(frame.cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->text_pipeline);
+    // Descriptor set already bound (same as scene, includes text texture and color)
+    // Bind text vertex buffer (binding 0)
+    VkBuffer textVertexBuffer = state->buffer_text_vertex;
+    VkDeviceSize offsets[] = {0};
+    vkCmdBindVertexBuffers(frame.cmdBuf, 0, 1, &textVertexBuffer, offsets);
+    // Bind text index buffer
+    vkCmdBindIndexBuffer(frame.cmdBuf, state->buffer_text_index, 0,
+                         VK_INDEX_TYPE_UINT16);
+    // Viewport and scissor already set (same as scene)
+    vkCmdDrawIndexed(frame.cmdBuf, state->text_index_count, 1, 0, 0, 0);
   }
 
   vkCmdEndRenderPass(frame.cmdBuf);
@@ -2024,6 +2263,280 @@ bool CreateLogoResources(VulkanState* state, const Logo& logo) {
   return true;
 }
 
+bool CreateTextResources(VulkanState* state, const ScreenText& text) {
+  BOOST_LOG_TRIVIAL(trace) << "Creating text resources...";
+
+  assert(!text.IsEmpty());
+
+  VkResult r = VK_SUCCESS;
+
+  // Create staging buffer
+  VkBuffer staging_buffer = VK_NULL_HANDLE;
+  VmaAllocation staging_allocation = VK_NULL_HANDLE;
+  VkBufferCreateInfo bufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = static_cast<VkDeviceSize>(text.GetAtlasPixels().size()),
+      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+  };
+  VmaAllocationCreateInfo alloc_ci = {
+      .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  r = vmaCreateBuffer(state->allocator, &bufferInfo, &alloc_ci,
+                      &staging_buffer, &staging_allocation, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create staging buffer for text: "
+                             << VkResultToString(r);
+    return false;
+  }
+
+  // Copy pixel data
+  void* mapped_data = nullptr;
+  vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
+  memcpy(mapped_data, text.GetAtlasPixels().data(), text.GetAtlasPixels().size());
+  vmaUnmapMemory(state->allocator, staging_allocation);
+
+  // Create image - text atlas is single-channel (R8)
+  VkImageCreateInfo image_ci = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = VK_FORMAT_R8_UNORM,
+      .extent = {static_cast<uint32_t>(text.GetAtlasWidth()),
+                 static_cast<uint32_t>(text.GetAtlasHeight()), 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+  };
+  VmaAllocationCreateInfo image_alloc_ci = {
+      .flags = 0,
+      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
+  };
+  r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
+                     &state->text_image, &state->alloc_text_image, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text image: "
+                             << VkResultToString(r);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Create temporary command pool and buffer
+  VkCommandPool cmd_pool = VK_NULL_HANDLE;
+  VkCommandPoolCreateInfo pool_ci = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
+      .queueFamilyIndex = state->graphicsFamilyIndex.value(),
+  };
+  r = vkCreateCommandPool(state->device, &pool_ci, nullptr, &cmd_pool);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for text: "
+                             << VkResultToString(r);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
+  VkCommandBufferAllocateInfo alloc_buf_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+      .commandPool = cmd_pool,
+      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+      .commandBufferCount = 1,
+  };
+  r = vkAllocateCommandBuffers(state->device, &alloc_buf_info, &cmd_buf);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for text: "
+                             << VkResultToString(r);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Begin command buffer
+  VkCommandBufferBeginInfo begin_info = {
+      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
+  };
+  vkBeginCommandBuffer(cmd_buf, &begin_info);
+
+  // Transition image layout for copy
+  VkImageMemoryBarrier barrier = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+      .srcAccessMask = 0,
+      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
+      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+      .image = state->text_image,
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+  vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                       nullptr, 1, &barrier);
+
+  // Copy buffer to image
+  VkBufferImageCopy region = {
+      .bufferOffset = 0,
+      .bufferRowLength = 0,
+      .bufferImageHeight = 0,
+      .imageSubresource = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .mipLevel = 0,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+      .imageOffset = {0, 0, 0},
+      .imageExtent = {static_cast<uint32_t>(text.GetAtlasWidth()),
+                      static_cast<uint32_t>(text.GetAtlasHeight()), 1},
+  };
+  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, state->text_image,
+                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+  // Transition image layout for shader reading
+  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+  barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+  vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                       0, nullptr, 1, &barrier);
+
+  vkEndCommandBuffer(cmd_buf);
+
+  // Submit command buffer
+  VkSubmitInfo submit_info = {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &cmd_buf,
+  };
+  r = vkQueueSubmit(state->queue, 1, &submit_info, VK_NULL_HANDLE);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to submit text copy commands: "
+                             << VkResultToString(r);
+    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Wait for queue to finish
+  r = vkQueueWaitIdle(state->queue);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to wait for text copy: "
+                             << VkResultToString(r);
+    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+    return false;
+  }
+
+  // Cleanup temporary command pool and staging buffer
+  vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
+  vkDestroyCommandPool(state->device, cmd_pool, nullptr);
+  vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
+
+  // Create image view
+  VkImageViewCreateInfo view_info = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = state->text_image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = VK_FORMAT_R8_UNORM,
+      .components = {
+          .r = VK_COMPONENT_SWIZZLE_R,
+          .g = VK_COMPONENT_SWIZZLE_R,
+          .b = VK_COMPONENT_SWIZZLE_R,
+          .a = VK_COMPONENT_SWIZZLE_ONE,
+      },
+      .subresourceRange = {
+          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+          .baseMipLevel = 0,
+          .levelCount = 1,
+          .baseArrayLayer = 0,
+          .layerCount = 1,
+      },
+  };
+  r = vkCreateImageView(state->device, &view_info, nullptr, &state->text_image_view);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text image view: "
+                             << VkResultToString(r);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    return false;
+  }
+
+  // Create sampler
+  VkSamplerCreateInfo sampler_ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .mipLodBias = 0.0f,
+      .anisotropyEnable = VK_FALSE,
+      .maxAnisotropy = 1.0f,
+      .compareEnable = VK_FALSE,
+      .compareOp = VK_COMPARE_OP_ALWAYS,
+      .minLod = 0.0f,
+      .maxLod = 0.0f,
+      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+      .unnormalizedCoordinates = VK_FALSE,
+  };
+  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &state->text_sampler);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text sampler: "
+                             << VkResultToString(r);
+    vkDestroyImageView(state->device, state->text_image_view, nullptr);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    return false;
+  }
+
+  // Create color uniform buffer
+  VkBufferCreateInfo color_buffer_ci = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = sizeof(glm::vec4),
+      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+  };
+  VmaAllocationCreateInfo color_alloc_ci = {
+      .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  r = vmaCreateBuffer(state->allocator, &color_buffer_ci, &color_alloc_ci,
+                      &state->buffer_text_color, &state->alloc_text_color, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text color uniform buffer: "
+                             << VkResultToString(r);
+    vkDestroySampler(state->device, state->text_sampler, nullptr);
+    vkDestroyImageView(state->device, state->text_image_view, nullptr);
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    return false;
+  }
+
+  // Update color buffer with initial color
+  void* color_mapped = nullptr;
+  vmaMapMemory(state->allocator, state->alloc_text_color, &color_mapped);
+  glm::vec4 color = text.GetColor();
+  memcpy(color_mapped, &color, sizeof(glm::vec4));
+  vmaUnmapMemory(state->allocator, state->alloc_text_color);
+
+  BOOST_LOG_TRIVIAL(trace) << "Text resources created successfully";
+  return true;
+}
+
 bool CreateLogoQuadBuffers(VulkanState* state, const Logo& logo) {
   BOOST_LOG_TRIVIAL(trace) << "Creating logo quad buffers...";
 
@@ -2125,6 +2638,157 @@ bool CreateLogoQuadBuffers(VulkanState* state, const Logo& logo) {
   return true;
 }
 
+bool CreateTextQuadBuffers(VulkanState* state, const ScreenText& text) {
+  BOOST_LOG_TRIVIAL(trace) << "Creating text quad buffers...";
+
+  if (state->imageExtent.width == 0 || state->imageExtent.height == 0) {
+    BOOST_LOG_TRIVIAL(warning) << "Invalid image extent, skipping text quad buffer creation";
+    return false;
+  }
+
+  if (text.IsEmpty()) {
+    BOOST_LOG_TRIVIAL(warning) << "Text is empty, skipping quad buffer creation";
+    return false;
+  }
+
+  // Convert screen coordinates to NDC
+  float screen_width = static_cast<float>(state->imageExtent.width);
+  float screen_height = static_cast<float>(state->imageExtent.height);
+
+  // Vertex data: position (x,y) and UV (u,v)
+  struct Vertex {
+    float x, y;
+    float u, v;
+  };
+
+  // Index data for two triangles per character
+  std::vector<Vertex> vertices;
+  std::vector<uint16_t> indices;
+
+  // Starting position in screen coordinates
+  glm::ivec2 position = text.GetPosition();
+  float cursor_x = static_cast<float>(position.x);
+  float cursor_y = static_cast<float>(position.y);
+
+  const std::string& text_str = text.GetText();
+  uint32_t vertex_offset = 0;
+
+  for (size_t i = 0; i < text_str.size(); ++i) {
+    char c = text_str[i];
+    uint32_t codepoint = static_cast<uint32_t>(c);
+    
+    const ScreenText::GlyphInfo* glyph = text.GetGlyphInfo(codepoint);
+    if (!glyph) {
+      // Skip unknown characters
+      continue;
+    }
+
+    // Calculate quad position in screen coordinates
+    float x_pos = cursor_x + glyph->bearing.x;
+    float y_pos = cursor_y - glyph->bearing.y;  // Y is down in screen coordinates
+    
+    float w = static_cast<float>(glyph->size.x);
+    float h = static_cast<float>(glyph->size.y);
+
+    // Convert to NDC
+    float left = (x_pos * 2.0f / screen_width) - 1.0f;
+    float right = ((x_pos + w) * 2.0f / screen_width) - 1.0f;
+    float top = (y_pos * 2.0f / screen_height) - 1.0f;
+    float bottom = ((y_pos + h) * 2.0f / screen_height) - 1.0f;
+
+    // UV coordinates from atlas
+    float u_min = glyph->uv_min.x;
+    float u_max = glyph->uv_max.x;
+    float v_min = glyph->uv_min.y;
+    float v_max = glyph->uv_max.y;
+
+    // Add vertices for this quad
+    vertices.push_back({left,  top,    u_min, v_min});
+    vertices.push_back({right, top,    u_max, v_min});
+    vertices.push_back({right, bottom, u_max, v_max});
+    vertices.push_back({left,  bottom, u_min, v_max});
+
+    // Add indices for two triangles
+    indices.push_back(vertex_offset + 0);
+    indices.push_back(vertex_offset + 1);
+    indices.push_back(vertex_offset + 2);
+    indices.push_back(vertex_offset + 0);
+    indices.push_back(vertex_offset + 2);
+    indices.push_back(vertex_offset + 3);
+
+    vertex_offset += 4;
+
+    // Advance cursor
+    cursor_x += glyph->advance / 64.0f;  // advance is in 1/64 pixels
+  }
+
+  if (vertices.empty()) {
+    BOOST_LOG_TRIVIAL(warning) << "No vertices generated for text";
+    return false;
+  }
+
+  // Destroy existing buffers if any
+  if (state->buffer_text_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_text_vertex, state->alloc_text_vertex);
+    state->buffer_text_vertex = VK_NULL_HANDLE;
+  }
+  if (state->buffer_text_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_text_index, state->alloc_text_index);
+    state->buffer_text_index = VK_NULL_HANDLE;
+  }
+
+  // Create vertex buffer
+  VkBufferCreateInfo vertexBufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = vertices.size() * sizeof(Vertex),
+      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+  };
+  VmaAllocationCreateInfo vertexAllocInfo = {
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo, &vertexAllocInfo,
+                               &state->buffer_text_vertex, &state->alloc_text_vertex, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text vertex buffer: "
+                             << VkResultToString(r);
+    return false;
+  }
+
+  // Copy vertex data
+  void* mapped_data = nullptr;
+  vmaMapMemory(state->allocator, state->alloc_text_vertex, &mapped_data);
+  memcpy(mapped_data, vertices.data(), vertices.size() * sizeof(Vertex));
+  vmaUnmapMemory(state->allocator, state->alloc_text_vertex);
+
+  // Create index buffer
+  VkBufferCreateInfo indexBufferInfo = {
+      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+      .size = indices.size() * sizeof(uint16_t),
+      .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+  };
+  VmaAllocationCreateInfo indexAllocInfo = {
+      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
+  };
+  r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
+                      &state->buffer_text_index, &state->alloc_text_index, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << "Failed to create text index buffer: "
+                             << VkResultToString(r);
+    vmaDestroyBuffer(state->allocator, state->buffer_text_vertex, state->alloc_text_vertex);
+    state->buffer_text_vertex = VK_NULL_HANDLE;
+    return false;
+  }
+
+  // Copy index data
+  vmaMapMemory(state->allocator, state->alloc_text_index, &mapped_data);
+  memcpy(mapped_data, indices.data(), indices.size() * sizeof(uint16_t));
+  vmaUnmapMemory(state->allocator, state->alloc_text_index);
+
+  state->text_index_count = static_cast<uint32_t>(indices.size());
+  BOOST_LOG_TRIVIAL(trace) << "Text quad buffers created, index count = " << state->text_index_count;
+  return true;
+}
+
 bool UpdateLogoBuffers(Application* app, VulkanState* state) {
   auto app_inner_if = app->GetInnerInterface();
   if (!app_inner_if->HasLogo()) {
@@ -2132,6 +2796,15 @@ bool UpdateLogoBuffers(Application* app, VulkanState* state) {
   }
   const Logo& logo = app_inner_if->GetLogo();
   return CreateLogoQuadBuffers(state, logo);
+}
+
+bool UpdateTextBuffers(Application* app, VulkanState* state) {
+  auto app_inner_if = app->GetInnerInterface();
+  if (!app_inner_if->HasScreenText()) {
+    return true; // No text, nothing to update
+  }
+  const ScreenText& text = app_inner_if->GetScreenText();
+  return CreateTextQuadBuffers(state, text);
 }
 
 bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
@@ -2181,6 +2854,13 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   uint32_t width, height;
   std::tie(width, height) = gpm->getImageExtent();
   if (!recreateSwapchain(state, VkExtent2D{width, height})) return false;
+  if (!UpdateLogoBuffers(gpm->app, state)) {
+    BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
+  }
+  // Update text buffers for new window size
+  if (!UpdateTextBuffers(gpm->app, state)) {
+    BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
+  }
   CHECK_STATE(s, VulkanInitState::Swapchain);
 
   if (!createGraphicsPipeline(state)) return false;
@@ -2204,6 +2884,23 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
     }
   }
 
+  // Create text resources
+  if (app_inner_if->HasScreenText()) {
+    const ScreenText& text = app_inner_if->GetScreenText();
+    if (!CreateTextResources(state, text)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to create text resources, continuing without text";
+    } else {
+      // Create quad buffers for text rendering
+      if (!CreateTextQuadBuffers(state, text)) {
+        BOOST_LOG_TRIVIAL(warning) << "Failed to create text quad buffers, text will not be rendered";
+        // Cleanup text resources? We'll keep them but skip rendering.
+      }
+    }
+    if (!CreateTextPipeline(state)) {
+      BOOST_LOG_TRIVIAL(fatal) << "Failed to create text pipeline";
+    }
+  }
+
   VkCommandPoolCreateInfo ci_commandpool{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
       .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
@@ -2212,13 +2909,16 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmdPool);
 
   // Создаем объект пула дескрипторов.
+  // Need descriptors for:
+  // - Uniform buffers: binding 0 (vertex), binding 1 (fragment), binding 4 (text color)
+  // - Combined image samplers: binding 2 (logo), binding 3 (text)
   std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
       VkDescriptorPoolSize{
         .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = state->frameCount * 2},
+        .descriptorCount = state->frameCount * 3},  // 3 uniform buffers per frame
       VkDescriptorPoolSize{
         .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = state->frameCount},
+        .descriptorCount = state->frameCount * 2},  // 2 image samplers per frame
   };
   VkDescriptorPoolCreateInfo ci_descpool{
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
@@ -2482,6 +3182,41 @@ void updateDescriptorSets(Application* app, VulkanState* state) {
         .pImageInfo = &imageInfo,
     });
   }
+
+  // Add combined image sampler for text if available
+  if (state->text_image_view != VK_NULL_HANDLE && state->text_sampler != VK_NULL_HANDLE) {
+    VkDescriptorImageInfo imageInfo{
+        .sampler = state->text_sampler,
+        .imageView = state->text_image_view,
+        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+    };
+    descWrites.push_back(VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .dstBinding = 3,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .pImageInfo = &imageInfo,
+    });
+  }
+
+  // Add uniform buffer for text color if available
+  if (state->buffer_text_color != VK_NULL_HANDLE) {
+    VkDescriptorBufferInfo bufferInfo{
+        .buffer = state->buffer_text_color,
+        .offset = 0,
+        .range = sizeof(glm::vec4),
+    };
+    descWrites.push_back(VkWriteDescriptorSet{
+        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+        .dstSet = frame.descSet,
+        .dstBinding = 4,
+        .descriptorCount = 1,
+        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .pBufferInfo = &bufferInfo,
+    });
+  }
+
   vkUpdateDescriptorSets(state->device,
                          static_cast<uint32_t>(descWrites.size()),
                          descWrites.data(), 0, nullptr);
@@ -2523,6 +3258,10 @@ bool GpuManager::update() {
     if (!UpdateLogoBuffers(m_pimpl->app, state)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
     }
+    // Update text buffers for new window size
+    if (!UpdateTextBuffers(m_pimpl->app, state)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
+    }
   }
 
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
@@ -2549,6 +3288,10 @@ bool GpuManager::update() {
       // Update logo buffers for new window size
       if (!UpdateLogoBuffers(m_pimpl->app, state)) {
         BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
+      }
+      // Update text buffers for new window size
+      if (!UpdateTextBuffers(m_pimpl->app, state)) {
+        BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
       }
       continue;
     }
@@ -2635,6 +3378,41 @@ void GpuManager::finalize() {
     vmaDestroyImage(state->allocator, state->logo_image, state->alloc_logo_image);
     state->logo_image = VK_NULL_HANDLE;
     state->alloc_logo_image = VK_NULL_HANDLE;
+  }
+
+  // Cleanup text quad buffers
+  if (state->buffer_text_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_text_vertex, state->alloc_text_vertex);
+    state->buffer_text_vertex = VK_NULL_HANDLE;
+  }
+  if (state->buffer_text_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_text_index, state->alloc_text_index);
+    state->buffer_text_index = VK_NULL_HANDLE;
+  }
+
+  // Cleanup text resources
+  if (state->text_sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(state->device, state->text_sampler, nullptr);
+    state->text_sampler = VK_NULL_HANDLE;
+  }
+  if (state->text_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(state->device, state->text_image_view, nullptr);
+    state->text_image_view = VK_NULL_HANDLE;
+  }
+  if (state->text_image != VK_NULL_HANDLE) {
+    vmaDestroyImage(state->allocator, state->text_image, state->alloc_text_image);
+    state->text_image = VK_NULL_HANDLE;
+    state->alloc_text_image = VK_NULL_HANDLE;
+  }
+  if (state->buffer_text_color != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_text_color, state->alloc_text_color);
+    state->buffer_text_color = VK_NULL_HANDLE;
+  }
+
+  // Destroy text pipeline
+  if (state->text_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->text_pipeline, nullptr);
+    state->text_pipeline = VK_NULL_HANDLE;
   }
 
   if (!state->externalSurface)

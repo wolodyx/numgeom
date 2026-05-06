@@ -49,6 +49,9 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
     app_->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
                   resource_data.size(), glm::ivec2(5,5));
   }
+
+  app_->SetText("Text rendering test", glm::ivec2(5,100), glm::vec4(0.0f,0.0f,0.0f,1.0f),
+      48, "c:/Users/qwe/AppData/Local/Microsoft/Windows/Fonts/UbuntuMono[wght].ttf");
 }
 
 MainWindow::~MainWindow() {}

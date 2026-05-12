@@ -4,7 +4,6 @@ set(PUBLIC_HEADERS
   include/numgeom/drawable_polytriangulation.h
   include/numgeom/enums.h
   include/numgeom/ijk.h
-  include/numgeom/iterator.h
   include/numgeom/loadusingocc.h
   include/numgeom/octree.h
   include/numgeom/quadtree.h

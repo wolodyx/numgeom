@@ -3,6 +3,7 @@
 #include <array>
 #include <cassert>
 #include <map>
+#include <set>
 #include <queue>
 #include <stack>
 #include <vector>

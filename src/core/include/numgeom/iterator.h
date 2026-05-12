@@ -17,6 +17,47 @@ class IteratorImpl {
   virtual bool equals(const IteratorImpl<T>&) const = 0;
 };
 
+/** \class IteratorImpl_Convert
+\brief Converts `IteratorImpl<From>` to `IteratorImpl<To>` where `From` is
+convertible to `To`. This enables const-correctness: `Iterator<const T*>` can
+wrap `IteratorImpl<T*>`.
+*/
+template<typename From, typename To>
+class IteratorImpl_Convert : public IteratorImpl<To> {
+ public:
+  typedef From from_value_type;
+  typedef To to_value_type;
+
+  explicit IteratorImpl_Convert(IteratorImpl<From>* impl) : impl_(impl) {}
+
+  virtual ~IteratorImpl_Convert() { delete impl_; }
+
+  void advance() override { impl_->advance(); }
+
+  to_value_type current() const override {
+    return static_cast<to_value_type>(impl_->current());
+  }
+
+  IteratorImpl<to_value_type>* clone() const override {
+    return new IteratorImpl_Convert<From, To>(impl_->clone());
+  }
+
+  IteratorImpl<to_value_type>* last() const override {
+    return new IteratorImpl_Convert<From, To>(impl_->last());
+  }
+
+  bool end() const override { return impl_->end(); }
+
+  bool equals(const IteratorImpl<to_value_type>& other) const override {
+    auto ptr = dynamic_cast<const IteratorImpl_Convert<From, To>*>(&other);
+    if (!ptr) return false;
+    return impl_->equals(*ptr->impl_);
+  }
+
+ private:
+  IteratorImpl<From>* impl_;
+};
+
 template <typename T>
 class Iterator {
  public:
@@ -27,61 +68,68 @@ class Iterator {
   using reference = T;
 
  public:
-  Iterator() : m_impl(nullptr) {}
+  Iterator() : impl_(nullptr) {}
 
-  Iterator(IteratorImpl<T>* impl) : m_impl(impl) {}
+  Iterator(IteratorImpl<T>* impl) : impl_(impl) {}
 
-  ~Iterator() { delete m_impl; }
+  // Converting constructor: allows `Iterator<To>` to be constructed
+  // from `IteratorImpl<From>*` where `From` is convertible to `To`.
+  template<typename U>
+  Iterator(IteratorImpl<U>* impl,
+           typename std::enable_if<std::is_convertible<U,T>::value>::type* = nullptr)
+      : impl_(new IteratorImpl_Convert<U, T>(impl)) {}
+
+  ~Iterator() { delete impl_; }
 
   Iterator(const Iterator& other) {
-    m_impl = nullptr;
-    if (other.m_impl) m_impl = other.m_impl->clone();
+    impl_ = nullptr;
+    if (other.impl_) impl_ = other.impl_->clone();
   }
 
   Iterator& operator++() {
-    m_impl->advance();
+    impl_->advance();
     return *this;
   }
 
   Iterator operator++(int) {
-    auto clone = m_impl->clone();
-    m_impl->advance();
+    auto clone = impl_->clone();
+    impl_->advance();
     return Iterator<T>(clone);
   }
 
   bool operator==(const Iterator& other) const {
-    if (m_impl == other.m_impl)
+    if (impl_ == other.impl_)
       return true;
-    if(!m_impl || !other.m_impl)
+    if(!impl_ || !other.impl_)
       return false;
-    return m_impl->equals(*other.m_impl);
+    return impl_->equals(*other.impl_);
   }
 
   bool operator!=(const Iterator& other) const { return !(*this == other); }
 
-  reference operator*() const { return m_impl->current(); }
+  reference operator*() const { return impl_->current(); }
 
   Iterator& operator=(const Iterator& other) {
     if (this != &other) {
-      delete m_impl;
-      if(other.m_impl != nullptr)
-        m_impl = other.m_impl->clone();
+      delete impl_;
+      if(other.impl_ != nullptr)
+        impl_ = other.impl_->clone();
     }
     return *this;
   }
 
-  bool isEnd() const { return !m_impl || m_impl->end(); }
+  bool isEnd() const { return !impl_ || impl_->end(); }
 
-  bool isEmpty() const { return !m_impl; }
+  bool isEmpty() const { return !impl_; }
 
   Iterator begin() const { return *this; }
 
   Iterator end() const {
-    if (!m_impl) return Iterator();
-    return Iterator(m_impl->last());
+    if (!impl_) return Iterator();
+    return Iterator(impl_->last());
   }
 
  private:
-  IteratorImpl<T>* m_impl;
+  IteratorImpl<T>* impl_;
 };
 #endif // !NUMGEOM_CORE_ITERATOR_H

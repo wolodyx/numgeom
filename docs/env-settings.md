@@ -9,8 +9,8 @@
 
 Из корня проекта запустите команды:
 ```
-./build/setup-linux.sh
-./build/build-linux.sh
+./devops/setup-linux.sh
+./devops/build-linux.sh
 ```
 
 Если при сборке проекта будет закрываться окно терминала, то увеличьте объем RAM.
@@ -28,4 +28,4 @@
 * установите `Visual Studio Community`;
 * установите переменную окружения `VCPKG_ROOT=%USERPROFILE%/vcpkg`;
 * добавьте к `PATH` значение `%USERPROFILE%/vcpkg`;
-* Из корня проекта запустите команду `./build/setup-windows.sh && ./build/build-windows.sh`.
+* Из корня проекта запустите команду `./devops/setup-windows.sh && ./devops/build-windows.sh`.

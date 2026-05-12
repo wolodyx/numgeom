@@ -4,10 +4,10 @@
     {
       "name": "linux-vcpkg-release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_BUILD_TYPE": "Release",
         "USE_SYSTEM_QT": "OFF"
@@ -24,10 +24,10 @@
     {
       "name": "linux-vcpkg-debug",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
         "CMAKE_BUILD_TYPE": "Debug",
         "USE_SYSTEM_QT": "OFF"
@@ -44,9 +44,9 @@
     {
       "name": "linux-system-release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "CMAKE_BUILD_TYPE": "Release"
       },
       "environment": {
@@ -61,9 +61,9 @@
     {
       "name": "linux-system-debug",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "CMAKE_BUILD_TYPE": "Debug"
       },
       "environment": {
@@ -78,10 +78,10 @@
     {
       "name": "windows-vcpkg",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       },
       "condition": {
@@ -93,9 +93,9 @@
     {
       "name": "windows-system",
       "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install"
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install"
       },
       "condition": {
         "type": "equals",
@@ -106,10 +106,10 @@
     {
       "name": "mac-vcpkg-release",
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/bld/${presetName}",
+      "binaryDir": "${sourceDir}/build/${presetName}",
       "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
       "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/bld/${presetName}/install",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-mac",
         "CMAKE_BUILD_TYPE": "Release",
         "USE_SYSTEM_QT": "OFF"

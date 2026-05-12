@@ -12,13 +12,13 @@ git submodule update --init --recursive
 
 Из корня проекта в зависимости от типа ОС запустите одну из команд:
 ```
-./build/build-linux.sh
-./build/build-windows.sh
+./devops/build-linux.sh
+./devops/build-windows.sh
 ```
 
 Сборка проекта на рабочей машине состоит из следующих шагов:
-* *одноразовая* настройка рабочего окружения командой `./build/setup-linux.sh` *с успешным завершением*;
-* сборка проекта командой `./build/build-linux`.
+* *одноразовая* настройка рабочего окружения командой `./devops/setup-linux.sh` *с успешным завершением*;
+* сборка проекта командой `./devops/build-linux`.
 
 Сборка проекта в контейнере docker состоит из следующих шагов:
 * формирование образа docker;
@@ -28,4 +28,3 @@ git submodule update --init --recursive
 docker build --no-cache -t numgeom-app:latest .
 docker run -it --rm numgeom-app:latest /bin/bash
 ```
-

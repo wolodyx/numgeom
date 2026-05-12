@@ -29,7 +29,7 @@
   ],
   "vcpkg-configuration": {
     "overlay-ports": [
-      "build/vcpkg/ports"
+      "devops/vcpkg/ports"
     ]
   }
 }

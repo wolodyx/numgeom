@@ -1,4 +1,4 @@
-/bld/
+/build/
 /vcpkg_installed/
 /CMakeUserPresets.json
 /.vscode/launch.json

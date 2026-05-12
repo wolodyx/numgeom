@@ -30,17 +30,35 @@ def binary_to_hex_array(filename, chunk_size=4):
         return f"Ошибка при обработке файла: {str(e)}"
 
 def main():
-    if len(sys.argv) != 3:
-        print("usage: python binary_to_hex.py <binary_file_name> <output_file_name>")
-        sys.exit(1)
+    import argparse
 
-    binary_filename = sys.argv[1]
-    result = binary_to_hex_array(binary_filename, 4)
+    parser = argparse.ArgumentParser(
+        description='Reads a binary file and converts it into an array of hexadecimal numbers'
+    )
+    parser.add_argument(
+        'binary_filename',
+        help='the path to the binary file'
+    )
+    parser.add_argument(
+        '--output',
+        dest='out_filename',
+        required=True,
+        help='the path to the output file'
+    )
+    parser.add_argument(
+        '--chunk-size',
+        dest='chunk_size',
+        type=int,
+        default=4,
+        help='block size in bytes (default is 4)'
+    )
 
-    out_filename = sys.argv[2]
-    with open(out_filename, "w") as file:
+    args = parser.parse_args()
+
+    result = binary_to_hex_array(args.binary_filename, args.chunk_size)
+
+    with open(args.out_filename, "w") as file:
         file.write(result)
 
 if __name__ == "__main__":
     main()
-

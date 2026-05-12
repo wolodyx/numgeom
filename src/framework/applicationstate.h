@@ -1,12 +1,14 @@
 #ifndef NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H
 #define NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H
 
+#include <list>
+
 #include "numgeom/application.h"
 #include "numgeom/scene.h"
+#include "numgeom/screentext.h"
 
 #include "camera.h"
 #include "logo.h"
-#include "screentext.h"
 
 /** \class Application::Impl
 \brief Скрытое и разделяемое состояние класса `Application`.
@@ -14,7 +16,7 @@
 class Application::State {
  public:
   Logo logo;
-  ScreenText screen_text;
+  std::list<ScreenText*> screen_text_objects_;
   Camera camera;
   Scene scene;
   GpuManager* gpuManager;

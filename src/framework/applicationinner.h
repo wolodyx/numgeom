@@ -2,6 +2,7 @@
 #define NUMGEOM_FRAMEWORK_APPLICATIONINNER_H
 
 #include "numgeom/application.h"
+#include "numgeom/iterator.h"
 
 class Logo;
 class ScreenText;
@@ -20,11 +21,11 @@ class Application::Inner {
 
   const Logo& GetLogo() const;
 
-  bool HasScreenText() const;
+  bool HasScreenTexts() const;
 
-  const ScreenText& GetScreenText() const;
+  Iterator<const ScreenText*> GetScreenTextObjects() const;
 
  private:
-  State* pimpl_;
+  State* impl_;
 };
 #endif  // !NUMGEOM_FRAMEWORK_APPLICATIONINNER_H

@@ -40,7 +40,7 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 }  // namespace
 
 Application::Application(int argc, char* argv[]) {
-  m_pimpl = new State();
+  m_pimpl = new Application::State();
   m_pimpl->gpuManager = new GpuManager(this);
   m_pimpl->camera.SetBoundBoxFunction(
     [this](){ return this->m_pimpl->scene.GetBoundBox(); });
@@ -135,9 +135,9 @@ const Application::Inner* Application::GetInnerInterface() const {
   return m_pimpl->inner_interface_;
 }
 
-void Application::SetText(const std::string& text, const glm::ivec2& screen_position,
-                         const glm::vec4& color, int font_size,
-                         const std::string& font_path) {
-  m_pimpl->screen_text = ScreenText(text, screen_position, color, font_path, font_size);
+ScreenText* Application::SetText(const std::string& text) {
+  auto o = new ScreenText(text, glm::ivec2(0,0));
+  m_pimpl->screen_text_objects_.push_back(o);
   this->Update();
+  return o;
 }

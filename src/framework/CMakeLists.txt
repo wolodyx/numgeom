@@ -11,6 +11,7 @@ set(PUBLIC_HEADERS
   include/numgeom/sceneobject_mesh.h
   include/numgeom/scenewidget.h
   include/numgeom/scenewidget_axisindicator.h
+  include/numgeom/screentext.h
   include/numgeom/userinputcontroller.h
 )
 
@@ -33,7 +34,10 @@ set(SOURCE_FILES
   sceneobject_mesh.cc
   scenewidget.cc
   scenewidget_axisindicator.cc
-  screentext.cc             screentext.h
+  screentext.cc
+  screentextds.h
+  screentextinner.cc        screentextinner.h
+  screentextstate.cc        screentextstate.h
   userinputcontroller.cc
   vkutilities.cc            vkutilities.h
 )
@@ -45,6 +49,10 @@ set(SHADER_FILES
   logo.frag
   text.vert
   text.frag
+)
+
+set(FONT_FILES
+  "UbuntuSans[wdth,wght].ttf"
 )
 
 add_library(framework ${SOURCE_FILES} ${SHADER_FILES})
@@ -95,8 +103,9 @@ if(DEFINED SHADER_FILES)
         ${Python3_EXECUTABLE}
       ARGS
         "${CMAKE_CURRENT_SOURCE_DIR}/binary_to_hex_array.py"
+        --chunk-size=4
+        --output "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv.h"
         "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv"
-        "${CMAKE_CURRENT_BINARY_DIR}/${file}.spv.h"
       DEPENDS ${file}
     )
     target_sources(framework PRIVATE ${file}.spv.h)
@@ -104,6 +113,23 @@ if(DEFINED SHADER_FILES)
 
   target_include_directories(framework PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 endif()
+
+# Добавляем файлы шрифтов в проект.
+foreach(file IN LISTS FONT_FILES)
+  add_custom_command(
+    OUTPUT ${file}.h
+    COMMAND
+      ${Python3_EXECUTABLE}
+    ARGS
+      "${CMAKE_CURRENT_SOURCE_DIR}/binary_to_hex_array.py"
+      --chunk-size=1
+      --output "${CMAKE_CURRENT_BINARY_DIR}/${file}.h"
+      "${CMAKE_CURRENT_SOURCE_DIR}/resources/${file}"
+    DEPENDS ${file}
+  )
+  target_sources(framework PRIVATE ${file}.h)
+endforeach()
+
 
 if(ENABLE_XCB)
   target_link_libraries(framework PRIVATE xcb::xcb)

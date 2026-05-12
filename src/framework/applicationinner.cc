@@ -1,19 +1,26 @@
 #include "applicationinner.h"
 
+#include "numgeom/iteratorimpl.hpp"
+
 #include "applicationstate.h"
 
-Application::Inner::Inner(State* pimpl) {
-  pimpl_ = pimpl;
+Application::Inner::Inner(State* impl) {
+  impl_ = impl;
 }
 
 Application::Inner::~Inner() {}
 
-bool Application::Inner::HasLogo() const { return !!pimpl_->logo; }
+bool Application::Inner::HasLogo() const { return !!impl_->logo; }
 
-const Logo& Application::Inner::GetLogo() const { return pimpl_->logo; }
+const Logo& Application::Inner::GetLogo() const { return impl_->logo; }
 
-bool Application::Inner::HasScreenText() const { return !!pimpl_->screen_text; }
+bool Application::Inner::HasScreenTexts() const {
+  return !impl_->screen_text_objects_.empty();
+}
 
-const ScreenText& Application::Inner::GetScreenText() const {
-  return pimpl_->screen_text;
+Iterator<const ScreenText*> Application::Inner::GetScreenTextObjects() const {
+  auto it = new IteratorImpl_StdIterator<std::list<ScreenText*>::const_iterator>(
+      impl_->screen_text_objects_.begin(),
+      impl_->screen_text_objects_.end());
+  return Iterator<const ScreenText*>(it);
 }

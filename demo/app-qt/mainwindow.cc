@@ -18,6 +18,7 @@
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
+#include "numgeom/screentext.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
 #  include "numgeom/loadusingocc.h"
 #  include "numgeom/sceneobject_polytriangulation.h"
@@ -50,8 +51,8 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
                   resource_data.size(), glm::ivec2(5,5));
   }
 
-  app_->SetText("Text rendering test", glm::ivec2(5,100), glm::vec4(0.0f,0.0f,0.0f,1.0f),
-      48, "c:/Users/qwe/AppData/Local/Microsoft/Windows/Fonts/UbuntuMono[wght].ttf");
+  auto sco = app_->SetText("Text rendering test");
+  sco->SetPosition(glm::ivec2(5,100));
 }
 
 MainWindow::~MainWindow() {}

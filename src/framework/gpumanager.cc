@@ -28,12 +28,13 @@
 #include "numgeom/drawable.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject.h"
-#include "numgeom/trimeshconnectivity.h"
+#include "numgeom/screentext.h"
 
 #include "applicationinner.h"
 #include "logo.h"
-#include "screentext.h"
 #include "sceneiterators.h"
+#include "screentextds.h"
+#include "screentextinner.h"
 #include "vkutilities.h"
 
 // Количество изображений в обращении.
@@ -2263,10 +2264,11 @@ bool CreateLogoResources(VulkanState* state, const Logo& logo) {
   return true;
 }
 
-bool CreateTextResources(VulkanState* state, const ScreenText& text) {
+bool CreateTextResources(VulkanState* state, const ScreenText* text) {
   BOOST_LOG_TRIVIAL(trace) << "Creating text resources...";
 
-  assert(!text.IsEmpty());
+  assert(text != nullptr);
+  auto text_internal_if = text->GetInnerInterface();
 
   VkResult r = VK_SUCCESS;
 
@@ -2275,7 +2277,7 @@ bool CreateTextResources(VulkanState* state, const ScreenText& text) {
   VmaAllocation staging_allocation = VK_NULL_HANDLE;
   VkBufferCreateInfo bufferInfo = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = static_cast<VkDeviceSize>(text.GetAtlasPixels().size()),
+      .size = static_cast<VkDeviceSize>(text_internal_if->GetAtlasPixels().size()),
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
   };
   VmaAllocationCreateInfo alloc_ci = {
@@ -2293,16 +2295,18 @@ bool CreateTextResources(VulkanState* state, const ScreenText& text) {
   // Copy pixel data
   void* mapped_data = nullptr;
   vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
-  memcpy(mapped_data, text.GetAtlasPixels().data(), text.GetAtlasPixels().size());
+  memcpy(mapped_data, text_internal_if->GetAtlasPixels().data(),
+         text_internal_if->GetAtlasPixels().size());
   vmaUnmapMemory(state->allocator, staging_allocation);
 
   // Create image - text atlas is single-channel (R8)
+  auto atlas_size = text_internal_if->GetAtlasSize();
   VkImageCreateInfo image_ci = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = VK_FORMAT_R8_UNORM,
-      .extent = {static_cast<uint32_t>(text.GetAtlasWidth()),
-                 static_cast<uint32_t>(text.GetAtlasHeight()), 1},
+      .extent = {static_cast<uint32_t>(atlas_size.x),
+                 static_cast<uint32_t>(atlas_size.y), 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -2398,8 +2402,8 @@ bool CreateTextResources(VulkanState* state, const ScreenText& text) {
           .layerCount = 1,
       },
       .imageOffset = {0, 0, 0},
-      .imageExtent = {static_cast<uint32_t>(text.GetAtlasWidth()),
-                      static_cast<uint32_t>(text.GetAtlasHeight()), 1},
+      .imageExtent = {static_cast<uint32_t>(atlas_size.x),
+                      static_cast<uint32_t>(atlas_size.y), 1},
   };
   vkCmdCopyBufferToImage(cmd_buf, staging_buffer, state->text_image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
@@ -2529,7 +2533,7 @@ bool CreateTextResources(VulkanState* state, const ScreenText& text) {
   // Update color buffer with initial color
   void* color_mapped = nullptr;
   vmaMapMemory(state->allocator, state->alloc_text_color, &color_mapped);
-  glm::vec4 color = text.GetColor();
+  glm::vec4 color = text_internal_if->GetColor();
   memcpy(color_mapped, &color, sizeof(glm::vec4));
   vmaUnmapMemory(state->allocator, state->alloc_text_color);
 
@@ -2638,7 +2642,7 @@ bool CreateLogoQuadBuffers(VulkanState* state, const Logo& logo) {
   return true;
 }
 
-bool CreateTextQuadBuffers(VulkanState* state, const ScreenText& text) {
+bool CreateTextQuadBuffers(VulkanState* state, const ScreenText* text) {
   BOOST_LOG_TRIVIAL(trace) << "Creating text quad buffers...";
 
   if (state->imageExtent.width == 0 || state->imageExtent.height == 0) {
@@ -2646,10 +2650,11 @@ bool CreateTextQuadBuffers(VulkanState* state, const ScreenText& text) {
     return false;
   }
 
-  if (text.IsEmpty()) {
+  if (!text) {
     BOOST_LOG_TRIVIAL(warning) << "Text is empty, skipping quad buffer creation";
     return false;
   }
+  auto text_inner_if = text->GetInnerInterface();
 
   // Convert screen coordinates to NDC
   float screen_width = static_cast<float>(state->imageExtent.width);
@@ -2666,27 +2671,25 @@ bool CreateTextQuadBuffers(VulkanState* state, const ScreenText& text) {
   std::vector<uint16_t> indices;
 
   // Starting position in screen coordinates
-  glm::ivec2 position = text.GetPosition();
+  glm::ivec2 position = text_inner_if->GetPosition();
   float cursor_x = static_cast<float>(position.x);
   float cursor_y = static_cast<float>(position.y);
 
-  const std::string& text_str = text.GetText();
+  const std::string& text_str = text_inner_if->GetText();
   uint32_t vertex_offset = 0;
 
   for (size_t i = 0; i < text_str.size(); ++i) {
     char c = text_str[i];
     uint32_t codepoint = static_cast<uint32_t>(c);
-    
-    const ScreenText::GlyphInfo* glyph = text.GetGlyphInfo(codepoint);
-    if (!glyph) {
-      // Skip unknown characters
-      continue;
-    }
+
+    const GlyphInfo* glyph = text_inner_if->GetGlyphInfo(codepoint);
+    if (!glyph)
+      continue; //< Skip unknown characters
 
     // Calculate quad position in screen coordinates
     float x_pos = cursor_x + glyph->bearing.x;
     float y_pos = cursor_y - glyph->bearing.y;  // Y is down in screen coordinates
-    
+
     float w = static_cast<float>(glyph->size.x);
     float h = static_cast<float>(glyph->size.y);
 
@@ -2800,10 +2803,10 @@ bool UpdateLogoBuffers(Application* app, VulkanState* state) {
 
 bool UpdateTextBuffers(Application* app, VulkanState* state) {
   auto app_inner_if = app->GetInnerInterface();
-  if (!app_inner_if->HasScreenText()) {
+  if (!app_inner_if->HasScreenTexts()) {
     return true; // No text, nothing to update
   }
-  const ScreenText& text = app_inner_if->GetScreenText();
+  const ScreenText* text = *app_inner_if->GetScreenTextObjects();
   return CreateTextQuadBuffers(state, text);
 }
 
@@ -2854,13 +2857,6 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   uint32_t width, height;
   std::tie(width, height) = gpm->getImageExtent();
   if (!recreateSwapchain(state, VkExtent2D{width, height})) return false;
-  if (!UpdateLogoBuffers(gpm->app, state)) {
-    BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
-  }
-  // Update text buffers for new window size
-  if (!UpdateTextBuffers(gpm->app, state)) {
-    BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
-  }
   CHECK_STATE(s, VulkanInitState::Swapchain);
 
   if (!createGraphicsPipeline(state)) return false;
@@ -2885,8 +2881,8 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
   }
 
   // Create text resources
-  if (app_inner_if->HasScreenText()) {
-    const ScreenText& text = app_inner_if->GetScreenText();
+  if (app_inner_if->HasScreenTexts()) {
+    const ScreenText* text = *app_inner_if->GetScreenTextObjects();
     if (!CreateTextResources(state, text)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to create text resources, continuing without text";
     } else {

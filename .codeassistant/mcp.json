@@ -4,6 +4,10 @@
       "type": "streamable-http",
       "url": "http://localhost:3001/mcp",
       "description": "DebugMCP - Debugging tools for AI assistants"
+    },
+    "socraticode": {
+      "command": "npx",
+      "args": ["-y", "socraticode"]
     }
   }
 }

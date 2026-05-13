@@ -92,6 +92,6 @@ class FRAMEWORK_EXPORT Application {
 
  private:
   class State;
-  State* m_pimpl;
+  State* impl_;
 };
 #endif // !NUMGEOM_FRAMEWORK_APPLICATION_H

@@ -40,95 +40,95 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 }  // namespace
 
 Application::Application(int argc, char* argv[]) {
-  m_pimpl = new Application::State();
-  m_pimpl->renderer = new VkSceneRenderer(this);
-  m_pimpl->camera.SetBoundBoxFunction(
-    [this](){ return this->m_pimpl->scene.GetBoundBox(); });
+  impl_ = new Application::State();
+  impl_->renderer = new VkSceneRenderer(this);
+  impl_->camera.SetBoundBoxFunction(
+    [this](){ return this->impl_->scene.GetBoundBox(); });
 }
 
-Application::~Application() { delete m_pimpl; }
+Application::~Application() { delete impl_; }
 
 void Application::FitScene() {
-  AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
+  AlignedBoundBox box = impl_->scene.GetBoundBox();
   box.Scale(1.3);
-  m_pimpl->camera.FitBox(box);
+  impl_->camera.FitBox(box);
   this->Update();
 }
 
 void Application::ZoomCamera(float k) {
-  m_pimpl->camera.Zoom(k);
+  impl_->camera.Zoom(k);
   this->Update();
 }
 
 glm::vec3 Application::CameraPosition() const {
-  return m_pimpl->camera.GetPosition();
+  return impl_->camera.GetPosition();
 }
 
 void Application::TranslateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
-  m_pimpl->camera.Translate(glm::ivec2{dx,dy});
+  impl_->camera.Translate(glm::ivec2{dx,dy});
   this->Update();
 }
 
 void Application::RotateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
-  AlignedBoundBox box = m_pimpl->scene.GetBoundBox();
+  AlignedBoundBox box = impl_->scene.GetBoundBox();
   if (box.IsEmpty())
     return;
-  m_pimpl->camera.SetPivotPoint(box.GetCenter());
+  impl_->camera.SetPivotPoint(box.GetCenter());
   glm::vec2 screen_offset(static_cast<float>(dx), static_cast<float>(dy));
-  m_pimpl->camera.RotateAroundPivot(screen_offset);
+  impl_->camera.RotateAroundPivot(screen_offset);
   this->Update();
 }
 
 void Application::OrientCamera(const OrthoBasis<float>& ortho_basis) {
-  m_pimpl->camera.Orient(ortho_basis);
+  impl_->camera.Orient(ortho_basis);
   this->FitScene();
 }
 
-void Application::Update() { m_pimpl->renderer->update(); }
+void Application::Update() { impl_->renderer->update(); }
 
-VkSceneRenderer* Application::GetRenderer() { return m_pimpl->renderer; }
+VkSceneRenderer* Application::GetRenderer() { return impl_->renderer; }
 
-const Scene& Application::GetScene() const { return m_pimpl->scene; }
+const Scene& Application::GetScene() const { return impl_->scene; }
 
-Scene& Application::GetScene() { return m_pimpl->scene; }
+Scene& Application::GetScene() { return impl_->scene; }
 
 void Application::ClearScene() {
-  m_pimpl->scene.Clear();
+  impl_->scene.Clear();
   this->Update();
 }
 
 void Application::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
-  m_pimpl->camera.SetViewportSizeFunction(func);
+  impl_->camera.SetViewportSizeFunction(func);
 }
 
 void Application::SetLogo(const std::string& image_filename,
                           const glm::ivec2& screen_position) {
-  m_pimpl->logo = Logo(image_filename, screen_position);
+  impl_->logo = Logo(image_filename, screen_position);
 }
 
 void Application::SetLogo(const unsigned char* image_data,
                           size_t image_data_size,
                           const glm::ivec2& screen_position) {
-  m_pimpl->logo = Logo(image_data, image_data_size, screen_position);
+  impl_->logo = Logo(image_data, image_data_size, screen_position);
 }
 
 Application::Inner* Application::GetInnerInterface() {
-  if (m_pimpl->inner_interface_ == nullptr)
-    m_pimpl->inner_interface_ = new Inner(m_pimpl);
-  return m_pimpl->inner_interface_;
+  if (impl_->inner_interface_ == nullptr)
+    impl_->inner_interface_ = new Inner(impl_);
+  return impl_->inner_interface_;
 }
 
 const Application::Inner* Application::GetInnerInterface() const {
-  if (m_pimpl->inner_interface_ == nullptr)
-    m_pimpl->inner_interface_ = new Inner(m_pimpl);
-  return m_pimpl->inner_interface_;
+  if (impl_->inner_interface_ == nullptr)
+    impl_->inner_interface_ = new Inner(impl_);
+  return impl_->inner_interface_;
 }
 
 ScreenText* Application::SetText(const std::string& text) {
   auto o = new ScreenText(text, glm::ivec2(0,0));
-  m_pimpl->screen_text_objects_.push_back(o);
+  impl_->screen_text_objects_.push_back(o);
   this->Update();
   return o;
 }

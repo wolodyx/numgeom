@@ -61,10 +61,6 @@ class FRAMEWORK_EXPORT Application {
 
   void OrientCamera(const OrthoBasis<float>&);
 
-  glm::mat4 GetViewMatrix() const;
-
-  glm::mat4 GetProjectionMatrix() const;
-
   //!@}
 
   //!@{

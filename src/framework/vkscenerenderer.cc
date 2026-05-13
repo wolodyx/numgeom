@@ -3094,12 +3094,13 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
 }
 
 void updateDescriptorSets(Application* app, VulkanState* state) {
+  auto* app_inner_if = app->GetInnerInterface();
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
-  glm::mat4 model_view_matrix = app->GetViewMatrix();
+  glm::mat4 model_view_matrix = app_inner_if->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
   VertexBufferObject vbo{
-    .mvpMatrix = app->GetProjectionMatrix() * model_view_matrix,
+    .mvpMatrix = app_inner_if->GetProjectionMatrix() * model_view_matrix,
     .mvMatrix = model_view_matrix,
     .normalMatrixRow0 = glm::vec4(normal_matrix[0], 0.0f),
     .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),

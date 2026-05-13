@@ -24,3 +24,11 @@ Iterator<const ScreenText*> Application::Inner::GetScreenTextObjects() const {
       impl_->screen_text_objects_.end());
   return Iterator<const ScreenText*>(it);
 }
+
+glm::mat4 Application::Inner::GetViewMatrix() const {
+  return impl_->camera.GetViewMatrix();
+}
+
+glm::mat4 Application::Inner::GetProjectionMatrix() const {
+  return impl_->camera.GetProjectionMatrix(impl_->scene.GetBoundBox());
+}

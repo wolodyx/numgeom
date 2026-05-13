@@ -86,15 +86,6 @@ void Application::OrientCamera(const OrthoBasis<float>& ortho_basis) {
   this->FitScene();
 }
 
-glm::mat4 Application::GetViewMatrix() const {
-  auto x = m_pimpl->camera.GetViewMatrix();
-  return x;
-}
-
-glm::mat4 Application::GetProjectionMatrix() const {
-  return m_pimpl->camera.GetProjectionMatrix(m_pimpl->scene.GetBoundBox());
-}
-
 void Application::Update() { m_pimpl->renderer->update(); }
 
 VkSceneRenderer* Application::GetRenderer() { return m_pimpl->renderer; }

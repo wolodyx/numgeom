@@ -1,5 +1,7 @@
 #include "gtest/gtest.h"
 
+#include <list>
+
 #include "numgeom/iterator.h"
 #include "numgeom/iteratorimpl.hpp"
 

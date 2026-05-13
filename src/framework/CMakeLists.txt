@@ -125,7 +125,7 @@ foreach(file IN LISTS FONT_FILES)
       --chunk-size=1
       --output "${CMAKE_CURRENT_BINARY_DIR}/${file}.h"
       "${CMAKE_CURRENT_SOURCE_DIR}/resources/${file}"
-    DEPENDS ${file}
+    DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/resources/${file}"
   )
   target_sources(framework PRIVATE ${file}.h)
 endforeach()

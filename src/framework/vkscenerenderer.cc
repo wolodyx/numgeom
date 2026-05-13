@@ -1,4 +1,4 @@
-#include "numgeom/gpumanager.h"
+#include "numgeom/vkscenerenderer.h"
 
 #include <array>
 #include <cassert>
@@ -238,7 +238,7 @@ enum VulkanInitState {
   End
 };
 
-struct GpuManager::Impl {
+struct VkSceneRenderer::Impl {
   Application* app;
 #ifdef LINUX
   struct Xcb {
@@ -251,7 +251,7 @@ struct GpuManager::Impl {
   std::function<std::tuple<uint32_t, uint32_t>()> getImageExtent;
 };
 
-GpuManager::GpuManager(Application* app) {
+VkSceneRenderer::VkSceneRenderer(Application* app) {
   assert(app != nullptr);
 
   m_pimpl = new Impl{
@@ -259,9 +259,9 @@ GpuManager::GpuManager(Application* app) {
   };
 }
 
-GpuManager::~GpuManager() { delete m_pimpl; }
+VkSceneRenderer::~VkSceneRenderer() { delete m_pimpl; }
 
-void GpuManager::setImageExtentFunction(
+void VkSceneRenderer::setImageExtentFunction(
     std::function<std::tuple<uint32_t, uint32_t>()> func) {
   m_pimpl->getImageExtent = func;
 }
@@ -1879,7 +1879,7 @@ bool createLogicalDevice(VulkanState* state) {
 }
 
 #ifdef LINUX
-bool createSurface(VulkanState* state, GpuManager::Impl::Xcb* xcb) {
+bool createSurface(VulkanState* state, VkSceneRenderer::Impl::Xcb* xcb) {
   int screenNum = 0;
   xcb_connection_t* connection = xcb_connect(nullptr, &screenNum);
   if (xcb_connection_has_error(connection)) {
@@ -2810,8 +2810,8 @@ bool UpdateTextBuffers(Application* app, VulkanState* state) {
   return CreateTextQuadBuffers(state, text);
 }
 
-bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
-  BOOST_LOG_TRIVIAL(trace) << "Start gpumanager initialization ...";
+bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
+  BOOST_LOG_TRIVIAL(trace) << "Start vkscenerenderer initialization ...";
 
   VulkanState* state = &gpm->vulkanState;
   VkResult r = VK_SUCCESS;
@@ -2949,18 +2949,18 @@ bool initialize(GpuManager::Impl* gpm, VulkanInitState s) {
 
 }  // namespace
 
-VkInstance GpuManager::instance() const {
+VkInstance VkSceneRenderer::instance() const {
   ::initialize(m_pimpl, VulkanInitState::Instance);
   return m_pimpl->vulkanState.instance;
 }
 
-void GpuManager::setSurface(VkSurfaceKHR surface) {
+void VkSceneRenderer::setSurface(VkSurfaceKHR surface) {
   VulkanState* state = &m_pimpl->vulkanState;
   state->surface = surface;
   state->externalSurface = true;
 }
 
-bool GpuManager::initialize() {
+bool VkSceneRenderer::initialize() {
   return ::initialize(m_pimpl, VulkanInitState::End);
 }
 
@@ -3240,7 +3240,7 @@ void updateDataForFrame(Application* app, VulkanState* state) {
 }
 }  // namespace
 
-bool GpuManager::update() {
+bool VkSceneRenderer::update() {
   VulkanState* state = &m_pimpl->vulkanState;
   if (state->stopRendering) return false;
 
@@ -3316,7 +3316,7 @@ bool GpuManager::update() {
   return true;
 }
 
-void GpuManager::finalize() {
+void VkSceneRenderer::finalize() {
   VulkanState* state = &m_pimpl->vulkanState;
 
   vkDeviceWaitIdle(state->device);

@@ -5,7 +5,6 @@ set(PUBLIC_HEADERS
   include/numgeom/drawable_cone.h
   include/numgeom/drawable_cylinder.h
   include/numgeom/drawable_sphere.h
-  include/numgeom/gpumanager.h
   include/numgeom/scene.h
   include/numgeom/sceneobject.h
   include/numgeom/sceneobject_mesh.h
@@ -13,6 +12,7 @@ set(PUBLIC_HEADERS
   include/numgeom/scenewidget_axisindicator.h
   include/numgeom/screentext.h
   include/numgeom/userinputcontroller.h
+  include/numgeom/vkscenerenderer.h
 )
 
 set(SOURCE_FILES
@@ -26,7 +26,6 @@ set(SOURCE_FILES
   drawable_cone.cc
   drawable_cylinder.cc
   drawable_sphere.cc
-  gpumanager.cc
   logo.cc                   logo.h
   scene.cc
   sceneiterators.cc         sceneiterators.h
@@ -39,6 +38,7 @@ set(SOURCE_FILES
   screentextinner.cc        screentextinner.h
   screentextstate.cc        screentextstate.h
   userinputcontroller.cc
+  vkscenerenderer.cc
   vkutilities.cc            vkutilities.h
 )
 

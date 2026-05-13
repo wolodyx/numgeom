@@ -14,11 +14,11 @@
 #include "qscreen.h"
 
 #include "numgeom/application.h"
-#include "numgeom/gpumanager.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/screentext.h"
+#include "numgeom/vkscenerenderer.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
 #  include "numgeom/loadusingocc.h"
 #  include "numgeom/sceneobject_polytriangulation.h"
@@ -58,14 +58,14 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
 MainWindow::~MainWindow() {}
 
 void MainWindow::initVulkan() {
-  GpuManager* gpu_manager = app_->GetGpuManager();
-  vulkan_instance_.setVkInstance(gpu_manager->instance());
+  auto* renderer = app_->GetRenderer();
+  vulkan_instance_.setVkInstance(renderer->instance());
   if (!vulkan_instance_.create()) qFatal("Vulkan instance creating error");
   scene_window_->setVulkanInstance(&vulkan_instance_);
 
   VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(scene_window_);
   assert(surface != VK_NULL_HANDLE);
-  gpu_manager->setSurface(surface);
+  renderer->setSurface(surface);
 
   app_->SetViewportSizeFunction([this]() {
     QSize sz = scene_window_->size();
@@ -74,7 +74,7 @@ void MainWindow::initVulkan() {
     uint32_t height = static_cast<uint32_t>(sz.height() * r);
     return std::make_tuple(width, height);
   });
-  gpu_manager->setImageExtentFunction(
+  renderer->setImageExtentFunction(
       [this]() -> std::tuple<uint32_t, uint32_t> {
         QSize sz = scene_window_->size();
         qreal r = scene_window_->devicePixelRatio();
@@ -83,7 +83,7 @@ void MainWindow::initVulkan() {
         return std::make_tuple(width, height);
       });
 
-  gpu_manager->initialize();  //< Продолжить начатую выше инициализацию.
+  renderer->initialize();  //< Продолжить начатую выше инициализацию.
 
   app_->GetScene().AddObject<SceneWidget_AxisIndicator>();
   app_->FitScene();

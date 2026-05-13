@@ -19,7 +19,7 @@ class Application::State {
   std::list<ScreenText*> screen_text_objects_;
   Camera camera;
   Scene scene;
-  GpuManager* gpuManager;
+  VkSceneRenderer* renderer;
   Inner* inner_interface_;
 
  public:

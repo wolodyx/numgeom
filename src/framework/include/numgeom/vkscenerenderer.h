@@ -1,5 +1,5 @@
-#ifndef numgeom_framework_gpumanager_h
-#define numgeom_framework_gpumanager_h
+#ifndef NUMGEOM_FRAMEWORK_VKSCENERENDERER_H
+#define NUMGEOM_FRAMEWORK_VKSCENERENDERER_H
 
 #include <any>
 #include <cstdint>
@@ -12,17 +12,17 @@
 class Application;
 
 /**
-Менеджер GPU связывает состояние приложения (Application) с GPU и руководит
+Класс связывает состояние приложения (Application) с GPU и руководит
 отрисовкой данных в окне графического приложения.
 */
-class GpuManager {
+class VkSceneRenderer {
  public:
   struct Impl;
 
  public:
-  GpuManager(Application*);
+  VkSceneRenderer(Application*);
 
-  ~GpuManager();
+  ~VkSceneRenderer();
 
   //! Запрос на обновление изображения в окне приложения.
   bool update();
@@ -42,10 +42,10 @@ class GpuManager {
   void finalize();
 
  private:
-  GpuManager(const GpuManager&) = delete;
-  GpuManager& operator=(const GpuManager&) = delete;
+  VkSceneRenderer(const VkSceneRenderer&) = delete;
+  VkSceneRenderer& operator=(const VkSceneRenderer&) = delete;
 
  private:
   Impl* m_pimpl;
 };
-#endif  // !numgeom_framework_gpumanager_h
+#endif // !NUMGEOM_FRAMEWORK_VKSCENERENDERER_H

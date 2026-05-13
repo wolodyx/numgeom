@@ -6,8 +6,8 @@
 #include "numgeom/trimesh.h"
 
 class Application;
-class GpuManager;
 class UserInputController;
+class VkSceneRenderer;
 
 /** \class SceneWindow
 \brief Окно графического приложения, в котором отображается сцена.
@@ -30,7 +30,7 @@ class SceneWindow : public QWindow {
   bool event(QEvent*) override;
 
  private:
-  GpuManager* gpu_manager_;
+  VkSceneRenderer* renderer_;
   UserInputController* user_input_controller_;
 };
 #endif  // NUMGEOM_EXAMPLES_APPQT_SCENEWINDOW_H_

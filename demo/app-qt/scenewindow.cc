@@ -2,14 +2,15 @@
 
 #include <iostream>
 
-#include "numgeom/application.h"
-#include "numgeom/gpumanager.h"
-#include "numgeom/userinputcontroller.h"
 #include "qevent.h"
 #include "qvulkaninstance.h"
 
+#include "numgeom/application.h"
+#include "numgeom/userinputcontroller.h"
+#include "numgeom/vkscenerenderer.h"
+
 SceneWindow::SceneWindow(Application* app) {
-  gpu_manager_ = app->GetGpuManager();
+  renderer_ = app->GetRenderer();
   user_input_controller_ = new UserInputController(app);
 }
 
@@ -78,9 +79,9 @@ void SceneWindow::resizeEvent(QResizeEvent* event) {}
 
 void SceneWindow::exposeEvent(QExposeEvent* event) {
   if (this->isExposed()) {
-    gpu_manager_->update();
+    renderer_->update();
   } else {
-    // gpu_manager_->finalize();
+    // renderer_->finalize();
   }
 }
 
@@ -88,13 +89,13 @@ bool SceneWindow::event(QEvent* e) {
   switch (e->type()) {
     case QEvent::Paint:
     case QEvent::UpdateRequest:
-      gpu_manager_->update();
+      renderer_->update();
       break;
     case QEvent::PlatformSurface: {
       auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
       if (pse->surfaceEventType() ==
           QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-        gpu_manager_->finalize();
+        renderer_->finalize();
       }
       break;
     }

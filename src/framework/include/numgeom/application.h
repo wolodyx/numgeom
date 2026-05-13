@@ -10,10 +10,10 @@
 
 class QWindow;
 
-class GpuManager;
 class Scene;
 class SceneObject;
 class ScreenText;
+class VkSceneRenderer;
 
 /** \class Application
 \brief Сущность, в которой содержится все состояние приложения.
@@ -82,7 +82,7 @@ class FRAMEWORK_EXPORT Application {
   void ClearScene();
   //!@}
 
-  GpuManager* GetGpuManager();
+  VkSceneRenderer* GetRenderer();
 
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 

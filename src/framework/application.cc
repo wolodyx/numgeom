@@ -4,10 +4,10 @@
 #include <iostream>
 
 #include "numgeom/alignedboundbox.h"
-#include "numgeom/gpumanager.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/trimesh.h"
+#include "numgeom/vkscenerenderer.h"
 
 #include "applicationinner.h"
 #include "applicationstate.h"
@@ -41,7 +41,7 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 
 Application::Application(int argc, char* argv[]) {
   m_pimpl = new Application::State();
-  m_pimpl->gpuManager = new GpuManager(this);
+  m_pimpl->renderer = new VkSceneRenderer(this);
   m_pimpl->camera.SetBoundBoxFunction(
     [this](){ return this->m_pimpl->scene.GetBoundBox(); });
 }
@@ -95,9 +95,9 @@ glm::mat4 Application::GetProjectionMatrix() const {
   return m_pimpl->camera.GetProjectionMatrix(m_pimpl->scene.GetBoundBox());
 }
 
-void Application::Update() { m_pimpl->gpuManager->update(); }
+void Application::Update() { m_pimpl->renderer->update(); }
 
-GpuManager* Application::GetGpuManager() { return m_pimpl->gpuManager; }
+VkSceneRenderer* Application::GetRenderer() { return m_pimpl->renderer; }
 
 const Scene& Application::GetScene() const { return m_pimpl->scene; }
 

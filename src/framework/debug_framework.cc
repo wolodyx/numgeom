@@ -6,7 +6,7 @@
 
 #include "sceneiterators.h"
 
-TriMesh::Ptr ConvertToTriMesh(const Scene& scene) {
+TriMesh::Ptr ConvertToTriMesh(const Scene* scene) {
   size_t n_verts = 0, n_cells = 0;
   GetElementsCount(scene, n_verts, n_cells);
   if (n_verts == 0 || n_cells == 0)

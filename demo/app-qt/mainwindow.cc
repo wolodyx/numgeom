@@ -67,7 +67,7 @@ void MainWindow::initVulkan() {
   assert(surface != VK_NULL_HANDLE);
   renderer->setSurface(surface);
 
-  app_->SetViewportSizeFunction([this]() {
+  app_->GetActiveScene()->SetViewportSizeFunction([this]() {
     QSize sz = scene_window_->size();
     qreal r = scene_window_->devicePixelRatio();
     uint32_t width = static_cast<uint32_t>(sz.width() * r);
@@ -85,8 +85,9 @@ void MainWindow::initVulkan() {
 
   renderer->initialize();  //< Продолжить начатую выше инициализацию.
 
-  app_->GetScene().AddObject<SceneWidget_AxisIndicator>();
-  app_->FitScene();
+  app_->GetActiveScene()->AddObject<SceneWidget_AxisIndicator>();
+  app_->GetActiveScene()->FitScene();
+  app_->Update();
 }
 
 void MainWindow::createActions() {
@@ -155,8 +156,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,1,0),
                   glm::vec3(0,0,1));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("1")));
     std_view->addAction(act);
   }
@@ -167,8 +169,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,-1),
                   glm::vec3(0,1,0));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("2")));
     std_view->addAction(act);
   }
@@ -179,8 +182,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(-1,0,0),
                   glm::vec3(0,0,1));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("3")));
     std_view->addAction(act);
   }
@@ -191,8 +195,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,-1,0),
                   glm::vec3(0,0,1));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("4")));
     std_view->addAction(act);
   }
@@ -203,8 +208,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,1),
                   glm::vec3(0,-1,0));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("5")));
     std_view->addAction(act);
   }
@@ -215,8 +221,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(1,0,0),
                   glm::vec3(0,0,1));
-              app_->OrientCamera(ortho_basis);
-            });
+              app_->GetActiveScene()->OrientCamera(ortho_basis);
+              app_->Update();
+    });
     act->setShortcut(QKeySequence(tr("6")));
     std_view->addAction(act);
   }
@@ -280,8 +287,9 @@ bool IsGltfFile(const QString& filename) {
 }
 
 void MainWindow::openFile(const QString& filename) {
-  Scene& scene = app_->GetScene();
-  scene.Clear();
+  Scene* scene = app_->GetActiveScene();
+  scene->Clear();
+  app_->Update();
 #ifdef USE_NUMGEOM_MODULE_OCC
   if (IsStepFile(filename)) {
     auto document = LoadStepDocument(filename.toStdWString());
@@ -289,8 +297,9 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла '" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->FitScene();
+    scene->AddObject<SceneObject_TDocStd_Document>(document);
+    scene->FitScene();
+    app_->Update();
     return;
   } else if (IsStlFile(filename)) {
     auto triangulation = LoadStl(filename.toStdWString());
@@ -298,8 +307,9 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла `" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
-    app_->FitScene();
+    scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
+    scene->FitScene();
+    app_->Update();
     return;
   } else if (IsIgesFile(filename)) {
     auto document = LoadIges(filename.toStdWString());
@@ -307,8 +317,9 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла `" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->FitScene();
+    scene->AddObject<SceneObject_TDocStd_Document>(document);
+    scene->FitScene();
+    app_->Update();
     return;
   } else if (IsObjFile(filename)) {
     auto triangulation = LoadObj(filename.toStdWString());
@@ -316,8 +327,9 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла `" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_PolyTriangulation>(triangulation);
-    app_->FitScene();
+    scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
+    scene->FitScene();
+    app_->Update();
     return;
 #ifdef NUMGEOM_OCC_LOAD_VRML
   } else if (IsVrmlFile(filename)) {
@@ -326,8 +338,9 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла `" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->FitScene();
+    scene->AddObject<SceneObject_TDocStd_Document>(document);
+    scene->FitScene();
+    app_->Update();
     return;
 #endif
   } else if (IsGltfFile(filename)) {
@@ -336,15 +349,17 @@ void MainWindow::openFile(const QString& filename) {
       qDebug() << "Ошибка при загрузке файла `" << filename << "'";
       return;
     }
-    scene.AddObject<SceneObject_TDocStd_Document>(document);
-    app_->FitScene();
+    scene->AddObject<SceneObject_TDocStd_Document>(document);
+    scene->FitScene();
+    app_->Update();
     return;
   }
 #endif
   auto mesh = LoadToTriMesh(filename.toStdWString());
   if(mesh) {
-    scene.AddObject<SceneObject_Mesh>(mesh);
-    app_->FitScene();
+    scene->AddObject<SceneObject_Mesh>(mesh);
+    scene->FitScene();
+    app_->Update();
   }
 }
 
@@ -361,7 +376,8 @@ void MainWindow::onOpenFile() {
 }
 
 void MainWindow::onFitScene() {
-  app_->FitScene();
+  app_->GetActiveScene()->FitScene();
+  app_->Update();
 }
 
 void MainWindow::loadRecentFiles() {

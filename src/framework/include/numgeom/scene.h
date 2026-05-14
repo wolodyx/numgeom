@@ -3,9 +3,12 @@
 
 #include <list>
 
+#include "glm/glm.hpp"
+
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
+#include "numgeom/orthobasis.h"
 
 class SceneObject;
 
@@ -22,7 +25,29 @@ class FRAMEWORK_EXPORT Scene {
 
   AlignedBoundBox GetBoundBox() const;
 
+  glm::mat4 GetViewMatrix() const;
+  glm::mat4 GetProjectionMatrix() const;
+
   Iterator<SceneObject*> Objects() const;
+
+  //!@{
+  //! Манипуляции камерой и запрос ее состояния.
+
+  void FitScene();
+
+  void ZoomCamera(float k);
+
+  //! Позиция камеры в глобальной системе координат.
+  glm::vec3 CameraPosition() const;
+
+  //! Перемещение камеры вдоль плоскости экрана
+  //! в направлении экранного вектора `(dx,dy)`.
+  void TranslateCamera(int x, int y, int dx, int dy);
+
+  void RotateCamera(int x, int y, int dx, int dy);
+
+  void OrientCamera(const OrthoBasis<float>&);
+  //!@}
 
   void Clear();
 
@@ -36,6 +61,8 @@ class FRAMEWORK_EXPORT Scene {
 
   bool HasChanges() const;
   void ClearChanges();
+
+  void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
  private:
   Scene(const Scene&) = delete;

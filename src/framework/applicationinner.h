@@ -17,9 +17,6 @@ class Application::Inner {
 
   ~Inner();
 
-  glm::mat4 GetViewMatrix() const;
-  glm::mat4 GetProjectionMatrix() const;
-
   bool HasLogo() const;
 
   const Logo& GetLogo() const;

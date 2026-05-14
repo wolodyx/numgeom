@@ -5,6 +5,6 @@
 
 class Scene;
 
-TriMesh::Ptr ConvertToTriMesh(const Scene&);
+TriMesh::Ptr ConvertToTriMesh(const Scene*);
 
 #endif // !NUMGEOM_FRAMEWORK_DEBUG_FRAMEWORK_H

@@ -5,7 +5,6 @@
 #include <string>
 
 #include "numgeom/framework_export.h"
-#include "numgeom/orthobasis.h"
 #include "numgeom/trimesh.h"
 
 class QWindow;
@@ -46,26 +45,6 @@ class FRAMEWORK_EXPORT Application {
   void AddAxisIndicator();
 
   //!@{
-  //! Манипуляции камерой и запрос ее состояния.
-
-  void FitScene();
-
-  void ZoomCamera(float k);
-
-  //! Позиция камеры в глобальной системе координат.
-  glm::vec3 CameraPosition() const;
-
-  //! Перемещение камеры вдоль плоскости экрана
-  //! в направлении экранного вектора `(dx,dy)`.
-  void TranslateCamera(int x, int y, int dx, int dy);
-
-  void RotateCamera(int x, int y, int dx, int dy);
-
-  void OrientCamera(const OrthoBasis<float>&);
-
-  //!@}
-
-  //!@{
   //! Методы для управления рисованием.
 
   void Update();
@@ -74,18 +53,13 @@ class FRAMEWORK_EXPORT Application {
   //!@{
   //! Взаимодействие со сценой.
 
-  const Scene& GetScene() const;
-  Scene& GetScene();
+  const Scene* GetActiveScene() const;
+  Scene* GetActiveScene();
 
-  const Scene& GetForegroundScene() const;
-  Scene& GetForegroundScene();
-
-  void ClearScene();
-  //!@}
+  const Scene* GetForegroundScene() const;
+  Scene* GetForegroundScene();
 
   VkSceneRenderer* GetRenderer();
-
-  void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
   class Inner;
   Inner* GetInnerInterface();

@@ -42,70 +42,21 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 Application::Application(int argc, char* argv[]) {
   impl_ = new Application::State();
   impl_->renderer = new VkSceneRenderer(this);
-  impl_->camera.SetBoundBoxFunction(
-    [this](){ return this->impl_->scene.GetBoundBox(); });
 }
 
 Application::~Application() { delete impl_; }
-
-void Application::FitScene() {
-  AlignedBoundBox box = impl_->scene.GetBoundBox();
-  box.Scale(1.3);
-  impl_->camera.FitBox(box);
-  this->Update();
-}
-
-void Application::ZoomCamera(float k) {
-  impl_->camera.Zoom(k);
-  this->Update();
-}
-
-glm::vec3 Application::CameraPosition() const {
-  return impl_->camera.GetPosition();
-}
-
-void Application::TranslateCamera(int x, int y, int dx, int dy) {
-  if (dx == 0 && dy == 0) return;
-  impl_->camera.Translate(glm::ivec2{dx,dy});
-  this->Update();
-}
-
-void Application::RotateCamera(int x, int y, int dx, int dy) {
-  if (dx == 0 && dy == 0) return;
-  AlignedBoundBox box = impl_->scene.GetBoundBox();
-  if (box.IsEmpty())
-    return;
-  impl_->camera.SetPivotPoint(box.GetCenter());
-  glm::vec2 screen_offset(static_cast<float>(dx), static_cast<float>(dy));
-  impl_->camera.RotateAroundPivot(screen_offset);
-  this->Update();
-}
-
-void Application::OrientCamera(const OrthoBasis<float>& ortho_basis) {
-  impl_->camera.Orient(ortho_basis);
-  this->FitScene();
-}
 
 void Application::Update() { impl_->renderer->update(); }
 
 VkSceneRenderer* Application::GetRenderer() { return impl_->renderer; }
 
-const Scene& Application::GetScene() const { return impl_->scene; }
+const Scene* Application::GetActiveScene() const { return impl_->scenes_.front(); }
 
-Scene& Application::GetScene() { return impl_->scene; }
+Scene* Application::GetActiveScene() { return impl_->scenes_.front(); }
 
-const Scene& Application::GetForegroundScene() const { return impl_->foreground_scene; }
+const Scene* Application::GetForegroundScene() const { return impl_->scenes_.back(); }
 
-Scene& Application::GetForegroundScene() { return impl_->foreground_scene; }
-
-void Application::ClearScene() {
-  impl_->scene.Clear();
-  this->Update();
-}
-
-void Application::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
-  impl_->camera.SetViewportSizeFunction(func);
-}
+Scene* Application::GetForegroundScene() { return impl_->scenes_.back(); }
 
 void Application::SetLogo(const std::string& image_filename,
                           const glm::ivec2& screen_position) {
@@ -138,5 +89,5 @@ ScreenText* Application::SetText(const std::string& text) {
 }
 
 void Application::AddAxisIndicator() {
-  impl_->foreground_scene.AddObject<SceneWidget_AxisIndicator>();
+  impl_->scenes_.back()->AddObject<SceneWidget_AxisIndicator>();
 }

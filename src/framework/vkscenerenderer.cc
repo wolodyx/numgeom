@@ -3215,7 +3215,7 @@ bool VkSceneRenderer::initialize() {
 }
 
 namespace {
-void UpdateScene(VulkanState* state, const Scene& scene) {
+void UpdateScene(VulkanState* state, const Scene* scene) {
   if (state->buffer_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(state->allocator, state->buffer_vertex, state->alloc_vertex);
     vmaDestroyBuffer(state->allocator, state->buffer_normal, state->alloc_normal);
@@ -3343,7 +3343,7 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
   state->index_count = 3 * n_cells;
 }
 
-void UpdateForegroundScene(VulkanState* state, const Scene& scene) {
+void UpdateForegroundScene(VulkanState* state, const Scene* scene) {
   if (state->buffer_fg_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(state->allocator, state->buffer_fg_vertex, state->alloc_fg_vertex);
     vmaDestroyBuffer(state->allocator, state->buffer_fg_normal, state->alloc_fg_normal);
@@ -3472,21 +3472,20 @@ void UpdateForegroundScene(VulkanState* state, const Scene& scene) {
 }
 
 void updateDescriptorSets(Application* app, VulkanState* state) {
-  auto* app_inner_if = app->GetInnerInterface();
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
-  glm::mat4 model_view_matrix = app_inner_if->GetViewMatrix();
+  glm::mat4 model_view_matrix = app->GetActiveScene()->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
   VertexBufferObject vbo{
-    .mvpMatrix = app_inner_if->GetProjectionMatrix() * model_view_matrix,
+    .mvpMatrix = app->GetActiveScene()->GetProjectionMatrix() * model_view_matrix,
     .mvMatrix = model_view_matrix,
     .normalMatrixRow0 = glm::vec4(normal_matrix[0], 0.0f),
     .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),
     .normalMatrixRow2 = glm::vec4(normal_matrix[2], 0.0f)
   };
   // Адаптивное размещение источника освещения на основе размера сцены
-  AlignedBoundBox box = app->GetScene().GetBoundBox();
-  glm::vec3 cameraPos = app->CameraPosition();
+  AlignedBoundBox box = app->GetActiveScene()->GetBoundBox();
+  glm::vec3 cameraPos = app->GetActiveScene()->CameraPosition();
   glm::vec3 sceneCenter = box.GetCenter();
   glm::vec3 sceneSize = box.GetSize();
   float sceneRadius = glm::length(sceneSize) * 0.5f;
@@ -3606,20 +3605,20 @@ void updateDataForFrame(Application* app, VulkanState* state) {
   {
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
-    Scene& scene = app->GetScene();
-    if (scene.HasChanges()) {
+    Scene* scene = app->GetActiveScene();
+    if (scene->HasChanges()) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
       UpdateScene(state, scene);
-      scene.ClearChanges();
+      scene->ClearChanges();
       state->stopRendering = false;
     }
-    Scene& foreground_scene = app->GetForegroundScene();
-    if (foreground_scene.HasChanges()) {
+    Scene* foreground_scene = app->GetForegroundScene();
+    if (foreground_scene->HasChanges()) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
       UpdateForegroundScene(state, foreground_scene);
-      foreground_scene.ClearChanges();
+      foreground_scene->ClearChanges();
       state->stopRendering = false;
     }
   }

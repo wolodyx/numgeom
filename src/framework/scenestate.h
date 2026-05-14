@@ -3,8 +3,11 @@
 
 #include "numgeom/scene.h"
 
+#include "camera.h"
+
 class Scene::State {
  public:
+  Camera camera_;
   std::list<SceneObject*> objects_;
   bool has_changes_ = true;
 };

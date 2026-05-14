@@ -7,7 +7,6 @@
 #include "numgeom/scene.h"
 #include "numgeom/screentext.h"
 
-#include "camera.h"
 #include "logo.h"
 
 /** \class Application::Impl
@@ -15,15 +14,15 @@
 */
 class Application::State {
  public:
-  Logo logo;
-  std::list<ScreenText*> screen_text_objects_;
-  Camera camera;
-  Scene scene;
-  Scene foreground_scene;
-  VkSceneRenderer* renderer;
-  Inner* inner_interface_;
+  State();
+  ~State();
 
  public:
-  ~State();
+  Logo logo;
+  std::list<ScreenText*> screen_text_objects_;
+  std::list<Scene*> scenes_;
+  Scene* active_scene_ = nullptr;
+  VkSceneRenderer* renderer = nullptr;
+  Inner* inner_interface_ = nullptr;
 };
 #endif  // !NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H

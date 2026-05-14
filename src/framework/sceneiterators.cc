@@ -5,9 +5,9 @@
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject.h"
 
-void GetElementsCount(const Scene& scene, size_t& n_verts, size_t& n_cells) {
+void GetElementsCount(const Scene* scene, size_t& n_verts, size_t& n_cells) {
   n_verts = 0, n_cells = 0;
-  for (const SceneObject* o : scene.Objects()) {
+  for (const SceneObject* o : scene->Objects()) {
     for (Drawable* d : o->Drawables()) {
       if(d->Type() != Drawable::PrimitiveType::Triangles)
         continue;
@@ -21,8 +21,8 @@ namespace {
 class SceneVertexIterator : public IteratorImpl<glm::vec3> {
  public:
 
-  SceneVertexIterator(const Scene& scene) {
-    it_sceneobject_ = scene.Objects();
+  SceneVertexIterator(const Scene* scene) {
+    it_sceneobject_ = scene->Objects();
     if(!it_sceneobject_.isEnd()) {
       it_drawable_ = (*it_sceneobject_)->Drawables();
       if(!it_drawable_.isEnd()) {
@@ -86,7 +86,7 @@ class SceneVertexIterator : public IteratorImpl<glm::vec3> {
 };
 }; // namespace
 
-Iterator<glm::vec3> GetVertexIterator(const Scene& scene) {
+Iterator<glm::vec3> GetVertexIterator(const Scene* scene) {
   auto impl = new SceneVertexIterator(scene);
   return Iterator<glm::vec3>(impl);
 }
@@ -95,8 +95,8 @@ namespace {
 class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
  public:
 
-   SceneTriaIterator(const Scene& scene) {
-     it_sceneobject_ = scene.Objects();
+   SceneTriaIterator(const Scene* scene) {
+     it_sceneobject_ = scene->Objects();
      if(!it_sceneobject_.isEnd()) {
        it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
        if(!it_drawable_.isEnd()) {
@@ -171,7 +171,7 @@ class SceneTriaIterator : public IteratorImpl<glm::u32vec3> {
 };
 }
 
-Iterator<glm::u32vec3> GetTriaIterator(const Scene& scene) {
+Iterator<glm::u32vec3> GetTriaIterator(const Scene* scene) {
   auto impl = new SceneTriaIterator(scene);
   return Iterator<glm::u32vec3>(impl);
 }
@@ -231,8 +231,8 @@ namespace {
 class IteratorImpl_Drawable2Normals : public IteratorImpl<glm::vec3> {
  public:
 
-   IteratorImpl_Drawable2Normals(const Scene& scene) {
-     it_sceneobject_ = scene.Objects();
+   IteratorImpl_Drawable2Normals(const Scene* scene) {
+     it_sceneobject_ = scene->Objects();
      if(!it_sceneobject_.isEnd()) {
        it_drawable_ = GetTriaDrawables((*it_sceneobject_)->Drawables());
        if(!it_drawable_.isEnd()) {
@@ -297,7 +297,7 @@ class IteratorImpl_Drawable2Normals : public IteratorImpl<glm::vec3> {
 };
 }
 
-Iterator<glm::vec3> GetNormalIterator(const Scene& scene) {
+Iterator<glm::vec3> GetNormalIterator(const Scene* scene) {
   auto impl = new IteratorImpl_Drawable2Normals(scene);
   return Iterator<glm::vec3>(impl);
 }
@@ -306,8 +306,8 @@ namespace {
 class SceneColorIterator : public IteratorImpl<glm::vec3> {
  public:
 
-  SceneColorIterator(const Scene& scene) {
-    it_sceneobject_ = scene.Objects();
+  SceneColorIterator(const Scene* scene) {
+    it_sceneobject_ = scene->Objects();
     if(!it_sceneobject_.isEnd()) {
       it_drawable_ = (*it_sceneobject_)->Drawables();
       if(!it_drawable_.isEnd()) {
@@ -371,7 +371,7 @@ class SceneColorIterator : public IteratorImpl<glm::vec3> {
 };
 }; // namespace
 
-Iterator<glm::vec3> GetColorIterator(const Scene& scene) {
+Iterator<glm::vec3> GetColorIterator(const Scene* scene) {
   auto impl = new SceneColorIterator(scene);
   return Iterator<glm::vec3>(impl);
 }

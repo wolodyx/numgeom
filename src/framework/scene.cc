@@ -7,6 +7,8 @@
 
 Scene::Scene() {
   state_ = new State();
+  state_->camera_.SetBoundBoxFunction(
+    [this](){ return this->GetBoundBox(); });
 }
 
 Scene::~Scene() {
@@ -58,4 +60,50 @@ Iterator<SceneObject*> Scene::Objects() const {
 void Scene::AddObject(SceneObject* object) {
   state_->objects_.push_back(object);
   state_->has_changes_ = true;
+}
+
+glm::mat4 Scene::GetViewMatrix() const {
+  return state_->camera_.GetViewMatrix();
+}
+
+glm::mat4 Scene::GetProjectionMatrix() const {
+  return state_->camera_.GetProjectionMatrix(this->GetBoundBox());
+}
+
+void Scene::FitScene() {
+  AlignedBoundBox box = this->GetBoundBox();
+  box.Scale(1.3);
+  state_->camera_.FitBox(box);
+}
+
+void Scene::ZoomCamera(float k) {
+  state_->camera_.Zoom(k);
+}
+
+glm::vec3 Scene::CameraPosition() const {
+  return state_->camera_.GetPosition();
+}
+
+void Scene::TranslateCamera(int x, int y, int dx, int dy) {
+  if (dx == 0 && dy == 0) return;
+  state_->camera_.Translate(glm::ivec2{dx,dy});
+}
+
+void Scene::RotateCamera(int x, int y, int dx, int dy) {
+  if (dx == 0 && dy == 0) return;
+  AlignedBoundBox box = this->GetBoundBox();
+  if (box.IsEmpty())
+    return;
+  state_->camera_.SetPivotPoint(box.GetCenter());
+  glm::vec2 screen_offset(static_cast<float>(dx), static_cast<float>(dy));
+  state_->camera_.RotateAroundPivot(screen_offset);
+}
+
+void Scene::OrientCamera(const OrthoBasis<float>& ortho_basis) {
+  state_->camera_.Orient(ortho_basis);
+  this->FitScene();
+}
+
+void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
+  state_->camera_.SetViewportSizeFunction(func);
 }

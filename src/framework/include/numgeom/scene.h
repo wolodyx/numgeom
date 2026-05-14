@@ -30,8 +30,7 @@ class FRAMEWORK_EXPORT Scene {
   template<typename ObjectType, class... _Types>
   SceneObject* AddObject(_Types&&... _Args) {
     auto item = new ObjectType(this, _Args...);
-    objects_.push_back(item);
-    has_changes_ = true;
+    this->AddObject(item);
     return item;
   }
 
@@ -41,9 +40,10 @@ class FRAMEWORK_EXPORT Scene {
  private:
   Scene(const Scene&) = delete;
   Scene& operator=(const Scene&) = delete;
+  void AddObject(SceneObject* _Object);
 
  private:
-  std::list<SceneObject*> objects_;
-  bool has_changes_ = true;
+  class State;
+  State* state_;
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENE_H

@@ -29,6 +29,7 @@ set(SOURCE_FILES
   logo.cc                   logo.h
   scene.cc
   sceneiterators.cc         sceneiterators.h
+  scenestate.cc             scenestate.h
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc

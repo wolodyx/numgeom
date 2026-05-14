@@ -29,7 +29,7 @@ on:
 
 jobs:
   build-system:
-    runs-on: windows-latest
+    runs-on: windows-2022
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -67,7 +67,7 @@ jobs:
           BOOST_ROOT: ${{ steps.install-boost.outputs.BOOST_ROOT }}
 
   build-with-vcpkg:
-    runs-on: windows-latest
+    runs-on: windows-2022
     env:
       VCPKG_BINARY_SOURCES: clear;x-aws,s3://${{ secrets.YC_BUCKET_NAME }}/vcpkg-cache/,readwrite
       AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}

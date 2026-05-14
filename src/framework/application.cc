@@ -94,6 +94,10 @@ const Scene& Application::GetScene() const { return impl_->scene; }
 
 Scene& Application::GetScene() { return impl_->scene; }
 
+const Scene& Application::GetForegroundScene() const { return impl_->foreground_scene; }
+
+Scene& Application::GetForegroundScene() { return impl_->foreground_scene; }
+
 void Application::ClearScene() {
   impl_->scene.Clear();
   this->Update();
@@ -131,4 +135,8 @@ ScreenText* Application::SetText(const std::string& text) {
   impl_->screen_text_objects_.push_back(o);
   this->Update();
   return o;
+}
+
+void Application::AddAxisIndicator() {
+  impl_->foreground_scene.AddObject<SceneWidget_AxisIndicator>();
 }

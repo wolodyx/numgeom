@@ -143,6 +143,7 @@ struct VulkanState {
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipeline logo_pipeline = VK_NULL_HANDLE;
   VkPipeline text_pipeline = VK_NULL_HANDLE;
+  VkPipeline fg_pipeline = VK_NULL_HANDLE;
 
   VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
 
@@ -193,12 +194,23 @@ struct VulkanState {
   VmaAllocation alloc_text_vertex = VK_NULL_HANDLE;
   VkBuffer buffer_text_index = VK_NULL_HANDLE;
   VmaAllocation alloc_text_index = VK_NULL_HANDLE;
+
+  // Буферы для foreground сцены
+  VkBuffer buffer_fg_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_fg_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_fg_normal = VK_NULL_HANDLE;
+  VmaAllocation alloc_fg_normal = VK_NULL_HANDLE;
+  VkBuffer buffer_fg_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_fg_color = VK_NULL_HANDLE;
+  VkBuffer buffer_fg_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_fg_index = VK_NULL_HANDLE;
   //! \}
 
   //! Количество примитивов для отрисовки.
   uint32_t index_count = 0;
   uint32_t logo_index_count = 0;
   uint32_t text_index_count = 0;
+  uint32_t fg_index_count = 0;
 
   //! Память устройства, в котором содержатся изображения в
   //! `ImageResources::msaaImage`.
@@ -1003,6 +1015,204 @@ bool CreateTextPipeline(VulkanState* state) {
   return true;
 }
 
+bool CreateForegroundPipeline(VulkanState* state) {
+  VkResult r;
+
+  // Подготавливаем шейдерные модули для foreground сцены (те же, что и для основной сцены).
+  static uint32_t vs_spirv_source[] = {
+#include "app.vert.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_vs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(vs_spirv_source),
+      .pCode = (uint32_t*)vs_spirv_source,
+  };
+  VkShaderModule vs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Foreground vertex shader creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  static uint32_t fs_spirv_source[] = {
+#include "app.frag.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_fs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(fs_spirv_source),
+      .pCode = (uint32_t*)fs_spirv_source,
+  };
+  VkShaderModule fs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Foreground fragment shader creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    return false;
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT,
+          .module = vs_module,
+          .pName = "main",
+      },
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .module = fs_module,
+          .pName = "main",
+      },
+  };
+
+  // Vertex input for scene (same as main pipeline)
+  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
+      VkVertexInputBindingDescription{
+        .binding = 0,
+        .stride = 3 * sizeof(float), // position
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+      VkVertexInputBindingDescription{
+        .binding = 1,
+        .stride = 3 * sizeof(float), // normal
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+      VkVertexInputBindingDescription{
+        .binding = 2,
+        .stride = 3 * sizeof(float), // color
+        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+      },
+  };
+  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+      VkVertexInputAttributeDescription{
+        .location = 0,
+        .binding = 0,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 1,
+        .binding = 1,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+      },
+      VkVertexInputAttributeDescription{
+        .location = 2,
+        .binding = 2,
+        .format = VK_FORMAT_R32G32B32_SFLOAT,
+        .offset = 0
+      },
+  };
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
+      .pVertexBindingDescriptions = vertex_binding_descs.data(),
+      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
+      .pVertexAttributeDescriptions = vertex_attr_descs.data()
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = false,
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_BACK_BIT,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = state->sampleCount,
+  };
+
+  // Disable depth test for foreground objects (to appear on top)
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE,
+      .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+  };
+
+  // No alpha blending (unless foreground objects need transparency)
+  VkPipelineColorBlendAttachmentState attachment_state = {
+      .blendEnable = VK_FALSE,
+      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+  };
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = 1,
+      .pAttachments = &attachment_state,
+  };
+
+  VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(ci_stages.size()),
+      .pStages = ci_stages.data(),
+      .pVertexInputState = &ci_vertex_input_state,
+      .pInputAssemblyState = &ci_input_assembly_state,
+      .pViewportState = &ci_viewport_state,
+      .pRasterizationState = &ci_rasterization_state,
+      .pMultisampleState = &ci_multisample_state,
+      .pDepthStencilState = &ci_depth_stencil_state,
+      .pColorBlendState = &ci_color_blend_state,
+      .pDynamicState = &ci_pipeline_dynamic_state,
+      .layout = state->pipelineLayout,
+      .renderPass = state->renderpass,
+      .subpass = 0,
+  }};
+  VkPipeline pipelines[] = {VK_NULL_HANDLE};
+  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                nullptr, pipelines);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Foreground graphics pipeline creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  state->fg_pipeline = pipelines[0];
+
+  if (state->fg_pipeline == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Foreground graphics pipeline creation error.";
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format("Foreground graphics pipeline {} is created.",
+                                          static_cast<void*>(&state->fg_pipeline));
+
+  vkDestroyShaderModule(state->device, vs_module, nullptr);
+  vkDestroyShaderModule(state->device, fs_module, nullptr);
+
+  return true;
+}
+
 bool initImage(VulkanState* state, ImageResources* resources) {
   BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
 
@@ -1487,6 +1697,42 @@ void render(VulkanState* state, ImageResources& image, FrameResources& frame) {
     vkCmdSetScissor(frame.cmdBuf, 0, 1, &scissor);
 
     vkCmdDrawIndexed(frame.cmdBuf, state->index_count, 1, 0, 0, 0);
+  }
+
+  // Draw foreground scene if available (depth test disabled)
+  if (state->fg_pipeline != VK_NULL_HANDLE &&
+      state->buffer_fg_vertex != VK_NULL_HANDLE &&
+      state->buffer_fg_index != VK_NULL_HANDLE &&
+      state->fg_index_count > 0) {
+    vkCmdBindPipeline(frame.cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->fg_pipeline);
+    // Bind descriptor set (same as main scene)
+    vkCmdBindDescriptorSets(frame.cmdBuf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            state->pipelineLayout, 0, 1, &frame.descSet, 0,
+                            nullptr);
+    // Bind foreground vertex buffers (bindings 0,1,2)
+    std::vector<VkBuffer> fg_buffers = {state->buffer_fg_vertex, state->buffer_fg_normal, state->buffer_fg_color};
+    VkDeviceSize offsets[] = {0, 0, 0};
+    vkCmdBindVertexBuffers(frame.cmdBuf, 0, fg_buffers.size(), fg_buffers.data(), offsets);
+    // Bind foreground index buffer
+    vkCmdBindIndexBuffer(frame.cmdBuf, state->buffer_fg_index, 0,
+                         VK_INDEX_TYPE_UINT32);
+    // Set viewport and scissor (in case main scene wasn't drawn)
+    const VkViewport viewport = {
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(state->imageExtent.width),
+        .height = static_cast<float>(state->imageExtent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+    vkCmdSetViewport(frame.cmdBuf, 0, 1, &viewport);
+    const VkRect2D scissor = {
+        .offset = {0, 0},
+        .extent = state->imageExtent,
+    };
+    vkCmdSetScissor(frame.cmdBuf, 0, 1, &scissor);
+    vkCmdDrawIndexed(frame.cmdBuf, state->fg_index_count, 1, 0, 0, 0);
   }
 
   // Draw logo overlay if available
@@ -2862,6 +3108,10 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
   if (!createGraphicsPipeline(state)) return false;
   CHECK_STATE(s, VulkanInitState::Pipeline);
 
+  if (!CreateForegroundPipeline(state)) {
+    BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground pipeline, foreground objects will not be rendered";
+  }
+
   // Create logo resources
   auto app_inner_if = gpm->app->GetInnerInterface();
   if (app_inner_if->HasLogo()) {
@@ -3093,6 +3343,134 @@ void UpdateScene(VulkanState* state, const Scene& scene) {
   state->index_count = 3 * n_cells;
 }
 
+void UpdateForegroundScene(VulkanState* state, const Scene& scene) {
+  if (state->buffer_fg_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_vertex, state->alloc_fg_vertex);
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_normal, state->alloc_fg_normal);
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_color, state->alloc_fg_color);
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_index, state->alloc_fg_index);
+    state->buffer_fg_vertex = VK_NULL_HANDLE;
+    state->buffer_fg_normal = VK_NULL_HANDLE;
+    state->buffer_fg_color = VK_NULL_HANDLE;
+    state->buffer_fg_index = VK_NULL_HANDLE;
+  }
+
+  size_t n_verts = 0, n_cells = 0;
+  GetElementsCount(scene, n_verts, n_cells);
+
+  VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
+  VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
+  VkDeviceSize color_buffer_size = Aligned(3 * n_verts * sizeof(float), 256);
+  VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
+
+  if(vertex_buffer_size == 0)
+    return;
+
+  {
+    // Выделяем память под буфер вершин.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = vertex_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    VkResult r = vmaCreateBuffer(state->allocator,
+                                 &ci_buffer, &ci_allocation,
+                                 &state->buffer_fg_vertex, &state->alloc_fg_vertex,
+                                 nullptr);
+    // Копируем вершины.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_fg_vertex, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    for (glm::vec3 pt : GetVertexIterator(scene)) {
+      *data++ = pt.x;
+      *data++ = pt.y;
+      *data++ = pt.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_fg_vertex);
+  }
+
+  {
+    // Выделяем память под буфер с нормалями.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = normal_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_fg_normal,
+                    &state->alloc_fg_normal, nullptr);
+    // Копируем нормали.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_fg_normal, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    for (glm::vec3 n : GetNormalIterator(scene)) {
+      *data++ = n.x;
+      *data++ = n.y;
+      *data++ = n.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_fg_normal);
+  }
+
+  {
+    // Выделяем память под буфер с цветами.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = color_buffer_size,
+        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_fg_color,
+                    &state->alloc_fg_color, nullptr);
+    // Копируем цвета.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_fg_color, &mapped_data);
+    float* data = reinterpret_cast<float*>(mapped_data);
+    for (glm::vec3 c : GetColorIterator(scene)) {
+      *data++ = c.x;
+      *data++ = c.y;
+      *data++ = c.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_fg_color);
+  }
+
+  {
+    // Выделяем память под индексный буфер.
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = index_buffer_size,
+        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(state->allocator,
+                    &ci_buffer, &ci_allocation, &state->buffer_fg_index,
+                    &state->alloc_fg_index, nullptr);
+
+    // Копируем индексный буфер.
+    void* mapped_data = nullptr;
+    vmaMapMemory(state->allocator, state->alloc_fg_index, &mapped_data);
+    uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
+    for (glm::u32vec3 tr : GetTriaIterator(scene)) {
+      *data++ = tr.x;
+      *data++ = tr.y;
+      *data++ = tr.z;
+    }
+    vmaUnmapMemory(state->allocator, state->alloc_fg_index);
+  }
+
+  state->fg_index_count = 3 * n_cells;
+}
+
 void updateDescriptorSets(Application* app, VulkanState* state) {
   auto* app_inner_if = app->GetInnerInterface();
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
@@ -3236,6 +3614,14 @@ void updateDataForFrame(Application* app, VulkanState* state) {
       scene.ClearChanges();
       state->stopRendering = false;
     }
+    Scene& foreground_scene = app->GetForegroundScene();
+    if (foreground_scene.HasChanges()) {
+      state->stopRendering = true;
+      vkQueueWaitIdle(state->queue);
+      UpdateForegroundScene(state, foreground_scene);
+      foreground_scene.ClearChanges();
+      state->stopRendering = false;
+    }
   }
   updateDescriptorSets(app, state);
 }
@@ -3335,6 +3721,10 @@ void VkSceneRenderer::finalize() {
     vkDestroyPipeline(state->device, state->logo_pipeline, nullptr);
     state->logo_pipeline = VK_NULL_HANDLE;
   }
+  if (state->fg_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->fg_pipeline, nullptr);
+    state->fg_pipeline = VK_NULL_HANDLE;
+  }
 
   vkDestroyPipelineLayout(state->device, state->pipelineLayout, nullptr);
   vkDestroyDescriptorSetLayout(state->device, state->descLayout, nullptr);
@@ -3351,6 +3741,24 @@ void VkSceneRenderer::finalize() {
   vmaDestroyBuffer(state->allocator, state->buffer_color, state->alloc_color);
   vmaDestroyBuffer(state->allocator, state->buffer_index, state->alloc_index);
   vmaDestroyBuffer(state->allocator, state->buffer_frame, state->alloc_frame);
+
+  // Cleanup foreground scene buffers
+  if (state->buffer_fg_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_vertex, state->alloc_fg_vertex);
+    state->buffer_fg_vertex = VK_NULL_HANDLE;
+  }
+  if (state->buffer_fg_normal != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_normal, state->alloc_fg_normal);
+    state->buffer_fg_normal = VK_NULL_HANDLE;
+  }
+  if (state->buffer_fg_color != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_color, state->alloc_fg_color);
+    state->buffer_fg_color = VK_NULL_HANDLE;
+  }
+  if (state->buffer_fg_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, state->buffer_fg_index, state->alloc_fg_index);
+    state->buffer_fg_index = VK_NULL_HANDLE;
+  }
 
   // Cleanup logo quad buffers
   if (state->buffer_logo_vertex != VK_NULL_HANDLE) {

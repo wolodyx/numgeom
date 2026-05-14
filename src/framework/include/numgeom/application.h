@@ -43,6 +43,8 @@ class FRAMEWORK_EXPORT Application {
   //! Добавление текста на передний план сцены.
   ScreenText* SetText(const std::string& text);
 
+  void AddAxisIndicator();
+
   //!@{
   //! Манипуляции камерой и запрос ее состояния.
 
@@ -74,6 +76,9 @@ class FRAMEWORK_EXPORT Application {
 
   const Scene& GetScene() const;
   Scene& GetScene();
+
+  const Scene& GetForegroundScene() const;
+  Scene& GetForegroundScene();
 
   void ClearScene();
   //!@}

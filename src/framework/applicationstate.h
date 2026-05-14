@@ -19,6 +19,7 @@ class Application::State {
   std::list<ScreenText*> screen_text_objects_;
   Camera camera;
   Scene scene;
+  Scene foreground_scene;
   VkSceneRenderer* renderer;
   Inner* inner_interface_;
 

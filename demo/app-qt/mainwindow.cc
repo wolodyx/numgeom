@@ -36,7 +36,35 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   scene_window_->setSurfaceType(QSurface::VulkanSurface);
   QWidget* widget = QWidget::createWindowContainer(scene_window_, this);
   this->setCentralWidget(widget);
+}
 
+MainWindow::~MainWindow() {}
+
+void MainWindow::initVulkan() {
+  auto* renderer = app_->GetRenderer();
+  vulkan_instance_.setVkInstance(renderer->GetInstance());
+  if (!vulkan_instance_.create()) qFatal("Vulkan instance creating error");
+  scene_window_->setVulkanInstance(&vulkan_instance_);
+
+  auto bg_scene = app_->AddScene("mainscene");
+  app_->GetActiveScene()->SetViewportSizeFunction([this]() {
+    QSize sz = scene_window_->size();
+    qreal r = scene_window_->devicePixelRatio();
+    uint32_t width = static_cast<uint32_t>(sz.width() * r);
+    uint32_t height = static_cast<uint32_t>(sz.height() * r);
+    return std::make_tuple(width, height);
+  });
+  auto trimesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");
+  bg_scene->AddObject<SceneObject_Mesh>(trimesh);
+  auto fg_scene = app_->AddScene("axis-indicator", bg_scene);
+  fg_scene->AddObject<SceneWidget_AxisIndicator>();
+
+  VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(scene_window_);
+  assert(surface != VK_NULL_HANDLE);
+  renderer->SetSurface(surface);
+  renderer->Initialize();  //< Продолжить начатую выше инициализацию.
+
+  auto scene = app_->GetActiveScene();
   // Load PNG logo from Qt resources
   // Use QFile instead of QResource because Qt resources are compressed by default
   // and QResource::data() returns compressed data, while QFile automatically decompresses
@@ -47,47 +75,15 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
   } else {
     QByteArray resource_data = resource_file.readAll();
     resource_file.close();
-    app_->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
-                  resource_data.size(), glm::ivec2(5,5));
+    scene->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
+                   resource_data.size(), glm::ivec2(5,5));
   }
 
-  auto sco = app_->SetText("Text rendering test");
+  auto sco = scene->SetText("Text rendering test");
   sco->SetPosition(glm::ivec2(5,100));
-}
 
-MainWindow::~MainWindow() {}
-
-void MainWindow::initVulkan() {
-  auto* renderer = app_->GetRenderer();
-  vulkan_instance_.setVkInstance(renderer->instance());
-  if (!vulkan_instance_.create()) qFatal("Vulkan instance creating error");
-  scene_window_->setVulkanInstance(&vulkan_instance_);
-
-  VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(scene_window_);
-  assert(surface != VK_NULL_HANDLE);
-  renderer->setSurface(surface);
-
-  app_->GetActiveScene()->SetViewportSizeFunction([this]() {
-    QSize sz = scene_window_->size();
-    qreal r = scene_window_->devicePixelRatio();
-    uint32_t width = static_cast<uint32_t>(sz.width() * r);
-    uint32_t height = static_cast<uint32_t>(sz.height() * r);
-    return std::make_tuple(width, height);
-  });
-  renderer->setImageExtentFunction(
-      [this]() -> std::tuple<uint32_t, uint32_t> {
-        QSize sz = scene_window_->size();
-        qreal r = scene_window_->devicePixelRatio();
-        uint32_t width = static_cast<uint32_t>(sz.width() * r);
-        uint32_t height = static_cast<uint32_t>(sz.height() * r);
-        return std::make_tuple(width, height);
-      });
-
-  renderer->initialize();  //< Продолжить начатую выше инициализацию.
-
-  app_->GetActiveScene()->AddObject<SceneWidget_AxisIndicator>();
-  app_->GetActiveScene()->FitScene();
-  app_->Update();
+  bg_scene->FitScene();
+  //app_->Update();
 }
 
 void MainWindow::createActions() {

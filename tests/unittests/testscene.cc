@@ -9,7 +9,7 @@
 #include "utilities.h"
 
 TEST(Scene, IterateThroughVertex) {
-  Scene scene;
+  Scene scene("scene");
   TriMesh::Ptr mesh = LoadTriMeshFromVtk(TestData("polydata-cube.vtk"));
   SceneObject* so_mesh = scene.AddObject<SceneObject_Mesh>(mesh);
   ASSERT_TRUE(so_mesh != nullptr);

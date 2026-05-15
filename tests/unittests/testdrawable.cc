@@ -21,7 +21,7 @@ Drawable* AddDrawable(Scene& scene, _Types&&... _Args) {
 }
 
 TEST(Drawable, DrawableSphereGetVertices) {
-  Scene scene;
+  Scene scene("scene");
   const glm::vec3 center(0.0, 0.0, 0.0);
   Drawable* d = AddDrawable<Drawable2_Sphere>(scene, center, 1.0f, 10, 10);
   EXPECT_EQ(d->GetVertsCount(), 92);
@@ -37,7 +37,7 @@ TEST(Drawable, DrawableSphereGetVertices) {
 }
 
 TEST(Drawable, DrawableSphereGetNormals) {
-  Scene scene;
+  Scene scene("scene");
   const glm::vec3 center(0.0, 0.0, 0.0);
   Drawable* d = AddDrawable<Drawable2_Sphere>(scene, center, 1.0f, 10, 10);
   auto d2 = Drawable2::Cast(d);
@@ -51,7 +51,7 @@ TEST(Drawable, DrawableSphereGetNormals) {
 }
 
 TEST(Drawable, DrawableSphereGetTriangles) {
-  Scene scene;
+  Scene scene("scene");
   const glm::vec3 center(0.0, 0.0, 0.0);
   Drawable* d = AddDrawable<Drawable2_Sphere>(scene, center, 1.0f, 10, 10);
   Drawable2* d2 = Drawable2::Cast(d);

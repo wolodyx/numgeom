@@ -2,10 +2,6 @@
 #define NUMGEOM_FRAMEWORK_APPLICATIONINNER_H
 
 #include "numgeom/application.h"
-#include "numgeom/iterator.h"
-
-class Logo;
-class ScreenText;
 
 /** \class Application::Inner
 \brief Дополнительный (скрытый) интерфейс класса `Application`, необходимый для
@@ -16,14 +12,6 @@ class Application::Inner {
   Inner(State* pimpl);
 
   ~Inner();
-
-  bool HasLogo() const;
-
-  const Logo& GetLogo() const;
-
-  bool HasScreenTexts() const;
-
-  Iterator<const ScreenText*> GetScreenTextObjects() const;
 
  private:
   State* impl_;

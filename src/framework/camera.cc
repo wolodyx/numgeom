@@ -69,6 +69,12 @@ glm::mat4 Camera::GetProjectionMatrix(const AlignedBoundBox& box) const {
   return m;
 }
 
+glm::uvec2 Camera::GetScreenSize() const {
+  glm::uvec2 sz;
+  std::tie(sz.x, sz.y) = get_viewport_size_function_();
+  return sz;
+}
+
 glm::vec3 Camera::GetPosition() const { return eye_; }
 
 glm::vec3 Camera::GetPivotPoint() const {

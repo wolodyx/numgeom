@@ -23,6 +23,8 @@ class Camera {
 
   glm::mat4 GetProjectionMatrix(const AlignedBoundBox&) const;
 
+  glm::uvec2 GetScreenSize() const;
+
   glm::vec3 GetPosition() const;
   glm::vec3 GetPivotPoint() const;
   void SetPivotPoint(const glm::vec3&);

@@ -2,17 +2,24 @@
 
 #include "numgeom/iteratorimpl.hpp"
 #include "numgeom/sceneobject.h"
+#include "numgeom/screentext.h"
 
+#include "sceneinner.h"
 #include "scenestate.h"
 
-Scene::Scene() {
+Scene::Scene(const std::string& name) {
   state_ = new State();
+  state_->name_ = name;
   state_->camera_.SetBoundBoxFunction(
     [this](){ return this->GetBoundBox(); });
 }
 
 Scene::~Scene() {
   delete state_;
+}
+
+std::string Scene::GetName() const {
+  return state_->name_;
 }
 
 AlignedBoundBox Scene::GetBoundBox() const {
@@ -70,6 +77,10 @@ glm::mat4 Scene::GetProjectionMatrix() const {
   return state_->camera_.GetProjectionMatrix(this->GetBoundBox());
 }
 
+glm::uvec2 Scene::GetScreenSize() const {
+  return state_->camera_.GetScreenSize();
+}
+
 void Scene::FitScene() {
   AlignedBoundBox box = this->GetBoundBox();
   box.Scale(1.3);
@@ -106,4 +117,33 @@ void Scene::OrientCamera(const OrthoBasis<float>& ortho_basis) {
 
 void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
   state_->camera_.SetViewportSizeFunction(func);
+}
+
+void Scene::SetLogo(const std::string& image_filename,
+                          const glm::ivec2& screen_position) {
+  state_->logo = Logo(image_filename, screen_position);
+}
+
+void Scene::SetLogo(const unsigned char* image_data,
+                          size_t image_data_size,
+                          const glm::ivec2& screen_position) {
+  state_->logo = Logo(image_data, image_data_size, screen_position);
+}
+
+ScreenText* Scene::SetText(const std::string& text) {
+  auto o = new ScreenText(text, glm::ivec2(0,0));
+  state_->screen_text_objects_.push_back(o);
+  return o;
+}
+
+Scene::Inner* Scene::GetInnerInterface() {
+  if (state_->inner_interface_ == nullptr)
+    state_->inner_interface_ = new Inner(state_);
+  return state_->inner_interface_;
+}
+
+const Scene::Inner* Scene::GetInnerInterface() const {
+  if (state_->inner_interface_ == nullptr)
+    state_->inner_interface_ = new Inner(state_);
+  return state_->inner_interface_;
 }

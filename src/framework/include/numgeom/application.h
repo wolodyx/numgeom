@@ -5,6 +5,7 @@
 #include <string>
 
 #include "numgeom/framework_export.h"
+#include "numgeom/iterator.h"
 #include "numgeom/trimesh.h"
 
 class QWindow;
@@ -30,19 +31,7 @@ class FRAMEWORK_EXPORT Application {
 
   ~Application();
 
-  /** \brief Установка логотипа приложения.
-  \param image_filename Имя файла с изображением логотипа.
-  \param screen_position Позиция левого верхнего угла логотипа на экране.
-  */
-  void SetLogo(const std::string& image_filename,
-               const glm::ivec2& screen_position);
-  void SetLogo(const unsigned char* image_data, size_t image_data_size,
-               const glm::ivec2& screen_position);
-
-  //! Добавление текста на передний план сцены.
-  ScreenText* SetText(const std::string& text);
-
-  void AddAxisIndicator();
+  Scene* AddAxisIndicator();
 
   //!@{
   //! Методы для управления рисованием.
@@ -51,13 +40,26 @@ class FRAMEWORK_EXPORT Application {
   //!@}
 
   //!@{
-  //! Взаимодействие со сценой.
+  //! Взаимодействие со сценами.
+
+  //! Добавляет новую сцену с именем. Если задан `background_scene`,
+  //! то создаваемая сцена будет выводиться на переднем плане.
+  Scene* AddScene(const std::string&, Scene* background_scene = nullptr);
+
+  bool RemoveScene(Scene*);
+
+  Scene* GetScene(const std::string&);
+  const Scene* GetScene(const std::string&) const;
+
+  bool SetActiveScene(Scene*);
 
   const Scene* GetActiveScene() const;
   Scene* GetActiveScene();
 
-  const Scene* GetForegroundScene() const;
-  Scene* GetForegroundScene();
+  Iterator<Scene*> GetForegroundScenes(Scene*);
+
+  Scene* GetBackgroundScene(Scene*);
+  //!@}
 
   VkSceneRenderer* GetRenderer();
 

@@ -32,6 +32,7 @@
 
 #include "applicationinner.h"
 #include "logo.h"
+#include "sceneinner.h"
 #include "sceneiterators.h"
 #include "screentextds.h"
 #include "screentextinner.h"
@@ -260,23 +261,17 @@ struct VkSceneRenderer::Impl {
   Xcb xcb;
 #endif
   VulkanState vulkanState;
-  std::function<std::tuple<uint32_t, uint32_t>()> getImageExtent;
 };
 
 VkSceneRenderer::VkSceneRenderer(Application* app) {
   assert(app != nullptr);
 
-  m_pimpl = new Impl{
+  m_pimpl = new Impl {
       .app = app,
   };
 }
 
 VkSceneRenderer::~VkSceneRenderer() { delete m_pimpl; }
-
-void VkSceneRenderer::setImageExtentFunction(
-    std::function<std::tuple<uint32_t, uint32_t>()> func) {
-  m_pimpl->getImageExtent = func;
-}
 
 namespace {
 ;
@@ -3038,28 +3033,25 @@ bool CreateTextQuadBuffers(VulkanState* state, const ScreenText* text) {
   return true;
 }
 
-bool UpdateLogoBuffers(Application* app, VulkanState* state) {
-  auto app_inner_if = app->GetInnerInterface();
-  if (!app_inner_if->HasLogo()) {
-    return true; // No logo, nothing to update
-  }
-  const Logo& logo = app_inner_if->GetLogo();
+bool UpdateLogoBuffers(Scene* scene, VulkanState* state) {
+  auto scene_inner_if = scene->GetInnerInterface();
+  if (!scene_inner_if->HasLogo())
+    return true;
+  const Logo& logo = scene_inner_if->GetLogo();
   return CreateLogoQuadBuffers(state, logo);
 }
 
-bool UpdateTextBuffers(Application* app, VulkanState* state) {
-  auto app_inner_if = app->GetInnerInterface();
-  if (!app_inner_if->HasScreenTexts()) {
-    return true; // No text, nothing to update
-  }
-  const ScreenText* text = *app_inner_if->GetScreenTextObjects();
+bool UpdateTextBuffers(Scene* scene, VulkanState* state) {
+  auto scene_inner_if = scene->GetInnerInterface();
+  if (!scene_inner_if->HasScreenTexts())
+    return true;
+  const ScreenText* text = *scene_inner_if->GetScreenTextObjects();
   return CreateTextQuadBuffers(state, text);
 }
 
-bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
+bool initialize(Scene* scene, VulkanState* state, VulkanInitState s) {
   BOOST_LOG_TRIVIAL(trace) << "Start vkscenerenderer initialization ...";
 
-  VulkanState* state = &gpm->vulkanState;
   VkResult r = VK_SUCCESS;
 
   // Выбираем экземпляр vulkan, если еще не выбран.
@@ -3067,8 +3059,7 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
   CHECK_STATE(s, VulkanInitState::Instance);
 
   // Создаем поверхность vulkan.
-  // auto* xcb = &gpm->xcb;
-  if (state->surface == VK_NULL_HANDLE /*&& !createSurface(state,xcb)*/)
+  if (state->surface == VK_NULL_HANDLE)
     return false;
   CHECK_STATE(s, VulkanInitState::Surface);
 
@@ -3100,9 +3091,9 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
   CHECK_STATE(s, VulkanInitState::Renderpass);
 
   // Создаем объект swapchain.
-  uint32_t width, height;
-  std::tie(width, height) = gpm->getImageExtent();
-  if (!recreateSwapchain(state, VkExtent2D{width, height})) return false;
+  glm::uvec2 screen_size = scene->GetScreenSize();
+  if (!recreateSwapchain(state, VkExtent2D{screen_size.x, screen_size.y}))
+    return false;
   CHECK_STATE(s, VulkanInitState::Swapchain);
 
   if (!createGraphicsPipeline(state)) return false;
@@ -3113,9 +3104,9 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
   }
 
   // Create logo resources
-  auto app_inner_if = gpm->app->GetInnerInterface();
-  if (app_inner_if->HasLogo()) {
-    const Logo& logo = app_inner_if->GetLogo();
+  auto scene_inner_if = scene->GetInnerInterface();
+  if (scene_inner_if->HasLogo()) {
+    const Logo& logo = scene_inner_if->GetLogo();
     if (!CreateLogoResources(state,logo)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to create logo resources, continuing without logo";
     } else {
@@ -3131,8 +3122,8 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
   }
 
   // Create text resources
-  if (app_inner_if->HasScreenTexts()) {
-    const ScreenText* text = *app_inner_if->GetScreenTextObjects();
+  if (scene_inner_if->HasScreenTexts()) {
+    const ScreenText* text = *scene_inner_if->GetScreenTextObjects();
     if (!CreateTextResources(state, text)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to create text resources, continuing without text";
     } else {
@@ -3199,19 +3190,21 @@ bool initialize(VkSceneRenderer::Impl* gpm, VulkanInitState s) {
 
 }  // namespace
 
-VkInstance VkSceneRenderer::instance() const {
-  ::initialize(m_pimpl, VulkanInitState::Instance);
+VkInstance VkSceneRenderer::GetInstance() const {
+  ::initialize(m_pimpl->app->GetActiveScene(), &m_pimpl->vulkanState,
+               VulkanInitState::Instance);
   return m_pimpl->vulkanState.instance;
 }
 
-void VkSceneRenderer::setSurface(VkSurfaceKHR surface) {
+void VkSceneRenderer::SetSurface(VkSurfaceKHR surface) {
   VulkanState* state = &m_pimpl->vulkanState;
   state->surface = surface;
   state->externalSurface = true;
 }
 
-bool VkSceneRenderer::initialize() {
-  return ::initialize(m_pimpl, VulkanInitState::End);
+bool VkSceneRenderer::Initialize() {
+  return ::initialize(m_pimpl->app->GetActiveScene(), &m_pimpl->vulkanState,
+                      VulkanInitState::End);
 }
 
 namespace {
@@ -3471,21 +3464,21 @@ void UpdateForegroundScene(VulkanState* state, const Scene* scene) {
   state->fg_index_count = 3 * n_cells;
 }
 
-void updateDescriptorSets(Application* app, VulkanState* state) {
+void updateDescriptorSets(Scene* scene, VulkanState* state) {
   FrameResources& frame = state->frameRes[state->currentFrameIndex];
 
-  glm::mat4 model_view_matrix = app->GetActiveScene()->GetViewMatrix();
+  glm::mat4 model_view_matrix = scene->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
   VertexBufferObject vbo{
-    .mvpMatrix = app->GetActiveScene()->GetProjectionMatrix() * model_view_matrix,
+    .mvpMatrix = scene->GetProjectionMatrix() * model_view_matrix,
     .mvMatrix = model_view_matrix,
     .normalMatrixRow0 = glm::vec4(normal_matrix[0], 0.0f),
     .normalMatrixRow1 = glm::vec4(normal_matrix[1], 0.0f),
     .normalMatrixRow2 = glm::vec4(normal_matrix[2], 0.0f)
   };
   // Адаптивное размещение источника освещения на основе размера сцены
-  AlignedBoundBox box = app->GetActiveScene()->GetBoundBox();
-  glm::vec3 cameraPos = app->GetActiveScene()->CameraPosition();
+  AlignedBoundBox box = scene->GetBoundBox();
+  glm::vec3 cameraPos = scene->CameraPosition();
   glm::vec3 sceneCenter = box.GetCenter();
   glm::vec3 sceneSize = box.GetSize();
   float sceneRadius = glm::length(sceneSize) * 0.5f;
@@ -3601,11 +3594,10 @@ void updateDataForFrame(Application* app, VulkanState* state) {
 
   // Если следует обновить сцену, то ожидаем завершения заданий в очередях
   // и блокируем рендеринг до обновления вершинных и индексных буферов.
-  static void* s_oldSceneHash = nullptr;
+  Scene* scene = app->GetActiveScene();
   {
     static std::mutex mtx;
     std::lock_guard<std::mutex> lock(mtx);
-    Scene* scene = app->GetActiveScene();
     if (scene->HasChanges()) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
@@ -3613,7 +3605,12 @@ void updateDataForFrame(Application* app, VulkanState* state) {
       scene->ClearChanges();
       state->stopRendering = false;
     }
-    Scene* foreground_scene = app->GetForegroundScene();
+    Scene* foreground_scene = nullptr;
+    {
+      auto it = app->GetForegroundScenes(scene);
+      if (!it.isEnd())
+        foreground_scene = *it;
+    }
     if (foreground_scene->HasChanges()) {
       state->stopRendering = true;
       vkQueueWaitIdle(state->queue);
@@ -3622,26 +3619,29 @@ void updateDataForFrame(Application* app, VulkanState* state) {
       state->stopRendering = false;
     }
   }
-  updateDescriptorSets(app, state);
+  updateDescriptorSets(scene, state);
 }
 }  // namespace
 
-bool VkSceneRenderer::update() {
+bool VkSceneRenderer::Update(Scene* scene) {
+  if (!scene) {
+    scene = m_pimpl->app->GetActiveScene();
+  }
+
   VulkanState* state = &m_pimpl->vulkanState;
   if (state->stopRendering) return false;
 
-  VkExtent2D currentExtent;
-  std::tie(currentExtent.width, currentExtent.height) =
-      m_pimpl->getImageExtent();
+  auto screen_size = scene->GetScreenSize();
+  VkExtent2D currentExtent(screen_size.x, screen_size.y);
   if (state->imageExtent.width != currentExtent.width ||
       state->imageExtent.height != currentExtent.height) {
     if (!recreateSwapchain(state, currentExtent)) return false;
     // Update logo buffers for new window size
-    if (!UpdateLogoBuffers(m_pimpl->app, state)) {
+    if (!UpdateLogoBuffers(scene,state)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
     }
     // Update text buffers for new window size
-    if (!UpdateTextBuffers(m_pimpl->app, state)) {
+    if (!UpdateTextBuffers(scene,state)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
     }
   }
@@ -3664,15 +3664,15 @@ bool VkSceneRenderer::update() {
                               frame.acquireSemaphore, VK_NULL_HANDLE, &index);
     if (r == VK_SUBOPTIMAL_KHR || r == VK_ERROR_OUT_OF_DATE_KHR) {
       // Размеры окна.
-      VkExtent2D extent;
-      std::tie(extent.width, extent.height) = m_pimpl->getImageExtent();
+      auto screen_size = scene->GetScreenSize();
+      VkExtent2D extent(screen_size.x,screen_size.y);
       recreateSwapchain(state, extent);
       // Update logo buffers for new window size
-      if (!UpdateLogoBuffers(m_pimpl->app, state)) {
+      if (!UpdateLogoBuffers(scene,state)) {
         BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
       }
       // Update text buffers for new window size
-      if (!UpdateTextBuffers(m_pimpl->app, state)) {
+      if (!UpdateTextBuffers(scene,state)) {
         BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
       }
       continue;
@@ -3702,7 +3702,7 @@ bool VkSceneRenderer::update() {
   return true;
 }
 
-void VkSceneRenderer::finalize() {
+void VkSceneRenderer::Finalize() {
   VulkanState* state = &m_pimpl->vulkanState;
 
   vkDeviceWaitIdle(state->device);

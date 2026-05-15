@@ -28,6 +28,7 @@ set(SOURCE_FILES
   drawable_sphere.cc
   logo.cc                   logo.h
   scene.cc
+  sceneinner.cc             sceneinner.h
   sceneiterators.cc         sceneiterators.h
   scenestate.cc             scenestate.h
   sceneobject.cc

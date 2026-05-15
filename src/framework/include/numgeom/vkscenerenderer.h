@@ -10,6 +10,7 @@
 #include "glm/glm.hpp"
 
 class Application;
+class Scene;
 
 /**
 Класс связывает состояние приложения (Application) с GPU и руководит
@@ -25,21 +26,19 @@ class VkSceneRenderer {
   ~VkSceneRenderer();
 
   //! Запрос на обновление изображения в окне приложения.
-  bool update();
+  bool Update(Scene* = nullptr);
 
   //! Возвращает экземпляр vulkan:
   //! существующий или, если отсутствует, то вновь созданный.
-  VkInstance instance() const;
+  VkInstance GetInstance() const;
 
   //! Задает внешнюю поверхность vulkan.
-  void setSurface(VkSurfaceKHR);
+  void SetSurface(VkSurfaceKHR);
 
   //! Инициализация объектов vulkan и всей подсистемы взаимодействия с GPU.
-  bool initialize();
+  bool Initialize();
 
-  void setImageExtentFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
-
-  void finalize();
+  void Finalize();
 
  private:
   VkSceneRenderer(const VkSceneRenderer&) = delete;

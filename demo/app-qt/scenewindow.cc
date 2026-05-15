@@ -79,7 +79,7 @@ void SceneWindow::resizeEvent(QResizeEvent* event) {}
 
 void SceneWindow::exposeEvent(QExposeEvent* event) {
   if (this->isExposed()) {
-    renderer_->update();
+    renderer_->Update();
   } else {
     // renderer_->finalize();
   }
@@ -89,13 +89,13 @@ bool SceneWindow::event(QEvent* e) {
   switch (e->type()) {
     case QEvent::Paint:
     case QEvent::UpdateRequest:
-      renderer_->update();
+      renderer_->Update();
       break;
     case QEvent::PlatformSurface: {
       auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
       if (pse->surfaceEventType() ==
           QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-        renderer_->finalize();
+        renderer_->Finalize();
       }
       break;
     }

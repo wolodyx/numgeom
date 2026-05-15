@@ -2,6 +2,7 @@
 #define NUMGEOM_FRAMEWORK_SCENE_H
 
 #include <list>
+#include <string>
 
 #include "glm/glm.hpp"
 
@@ -11,6 +12,7 @@
 #include "numgeom/orthobasis.h"
 
 class SceneObject;
+class ScreenText;
 
 /**
 \class Scene
@@ -20,13 +22,16 @@ class SceneObject;
 */
 class FRAMEWORK_EXPORT Scene {
  public:
-  Scene();
+  Scene(const std::string& name);
   ~Scene();
+
+  std::string GetName() const;
 
   AlignedBoundBox GetBoundBox() const;
 
   glm::mat4 GetViewMatrix() const;
   glm::mat4 GetProjectionMatrix() const;
+  glm::uvec2 GetScreenSize() const;
 
   Iterator<SceneObject*> Objects() const;
 
@@ -49,6 +54,18 @@ class FRAMEWORK_EXPORT Scene {
   void OrientCamera(const OrthoBasis<float>&);
   //!@}
 
+  /** \brief Установка логотипа приложения.
+  \param image_filename Имя файла с изображением логотипа.
+  \param screen_position Позиция левого верхнего угла логотипа на экране.
+  */
+  void SetLogo(const std::string& image_filename,
+               const glm::ivec2& screen_position);
+  void SetLogo(const unsigned char* image_data, size_t image_data_size,
+               const glm::ivec2& screen_position);
+
+  //! Добавление текста на передний план сцены.
+  ScreenText* SetText(const std::string& text);
+
   void Clear();
 
   //! Добавление в сцену объекта по заданному типу и аргументам конструирования.
@@ -63,6 +80,10 @@ class FRAMEWORK_EXPORT Scene {
   void ClearChanges();
 
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
+
+  class Inner;
+  Inner* GetInnerInterface();
+  const Inner* GetInnerInterface() const;
 
  private:
   Scene(const Scene&) = delete;

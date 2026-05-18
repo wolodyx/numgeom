@@ -56,8 +56,8 @@ void MainWindow::initVulkan() {
   });
   auto trimesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");
   bg_scene->AddObject<SceneObject_Mesh>(trimesh);
-  auto fg_scene = app_->AddScene("axis-indicator", bg_scene);
-  fg_scene->AddObject<SceneWidget_AxisIndicator>();
+  // auto fg_scene = app_->AddScene("axis-indicator", bg_scene);
+  // fg_scene->AddObject<SceneWidget_AxisIndicator>();
 
   VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(scene_window_);
   assert(surface != VK_NULL_HANDLE);
@@ -89,6 +89,7 @@ void MainWindow::initVulkan() {
 void MainWindow::createActions() {
   this->createFileMenu();
   this->createViewMenu();
+  this->createWidgetMenu();
 }
 
 void MainWindow::createFileMenu() {
@@ -222,6 +223,19 @@ void MainWindow::createViewMenu() {
     });
     act->setShortcut(QKeySequence(tr("6")));
     std_view->addAction(act);
+  }
+}
+
+void MainWindow::createWidgetMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&Widget"));
+
+  {
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/axis-indicator-16.png"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Add axis indicator"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onAddAxisIndicator()));
+    menu->addAction(act);
   }
 }
 
@@ -373,6 +387,16 @@ void MainWindow::onOpenFile() {
 
 void MainWindow::onFitScene() {
   app_->GetActiveScene()->FitScene();
+  app_->Update();
+}
+
+void MainWindow::onAddAxisIndicator() {
+  auto scene = app_->GetActiveScene();
+  if (!scene)
+    return;
+  scene->Clear();
+  scene->AddObject<SceneWidget_AxisIndicator>();
+  scene->FitScene();
   app_->Update();
 }
 

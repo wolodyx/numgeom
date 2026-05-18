@@ -3577,7 +3577,7 @@ void UpdateDataForFrame(Application* app, VulkanState* state) {
       if (!it.isEnd())
         foreground_scene = *it;
     }
-    if (foreground_scene->HasChanges()) {
+    if (foreground_scene && foreground_scene->HasChanges()) {
       state->stop_rendering = true;
       vkQueueWaitIdle(state->queue);
       UpdateForegroundScene(state, foreground_scene);

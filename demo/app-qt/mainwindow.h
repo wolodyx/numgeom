@@ -20,6 +20,7 @@ class MainWindow : public QMainWindow {
   void createActions();
   void createFileMenu();
   void createViewMenu();
+  void createWidgetMenu();
   void updateRecentFilesMenu();
   void loadRecentFiles();
   void saveRecentFiles();
@@ -32,6 +33,7 @@ class MainWindow : public QMainWindow {
   void onOpenRecentFile();
   void onQuit();
   void onFitScene();
+  void onAddAxisIndicator();
 
  private:
   Application* app_;

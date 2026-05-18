@@ -41,16 +41,16 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 
 Application::Application(int argc, char* argv[]) {
   impl_ = new Application::State();
-  impl_->renderer = new VkSceneRenderer(this);
+  impl_->renderer_ = new VkSceneRenderer(this);
 }
 
 Application::~Application() { delete impl_; }
 
 void Application::Update() {
-  impl_->renderer->Update(this->GetActiveScene());
+  impl_->renderer_->Update(this->GetActiveScene());
 }
 
-VkSceneRenderer* Application::GetRenderer() { return impl_->renderer; }
+VkSceneRenderer* Application::GetRenderer() { return impl_->renderer_; }
 
 const Scene* Application::GetActiveScene() const { return impl_->active_scene_; }
 

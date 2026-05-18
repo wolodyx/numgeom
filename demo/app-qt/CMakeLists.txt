@@ -3,6 +3,7 @@ set(SOURCE_FILES
   loadtotrimesh.cc          loadtotrimesh.h
   mainwindow.cc             mainwindow.h
   scenewindow.cc            scenewindow.h
+  scenemdisubwindow.cc      scenemdisubwindow.h
 )
 
 set(RESOURCE_FILES

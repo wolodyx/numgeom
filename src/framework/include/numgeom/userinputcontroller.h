@@ -3,11 +3,12 @@
 
 #include "glm/glm.hpp"
 
-class Application;
+class Scene;
+class VkSceneRenderer;
 
 class UserInputController {
  public:
-  UserInputController(Application* app);
+  UserInputController(Scene*, VkSceneRenderer*);
 
   ~UserInputController();
 
@@ -37,7 +38,7 @@ class UserInputController {
 
  private:
   struct Impl;
-  Impl* m_pimpl;
+  Impl* impl_;
 };
 
 #endif  // !numgeom_framework_userinputcontroller_h

@@ -2,11 +2,13 @@
 #define NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_
 
 #include "qmainwindow.h"
+#include "qmdiarea.h"
 #include "qsettings.h"
 #include "qvulkaninstance.h"
 
 class Application;
 class SceneWindow;
+class SceneMdiSubWindow;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -16,16 +18,23 @@ class MainWindow : public QMainWindow {
   ~MainWindow();
   void initVulkan();
 
+  // Возвращает активное MDI подокно (или nullptr, если нет окон)
+  SceneMdiSubWindow* GetActiveMdiSubWindow() const;
+
  private:
   void createActions();
   void createFileMenu();
   void createViewMenu();
   void createWidgetMenu();
+  void createWindowMenu();
   void updateRecentFilesMenu();
   void loadRecentFiles();
   void saveRecentFiles();
   void addToRecentFiles(const QString& filepath);
   void openFile(const QString&);
+
+  // Создает новое MDI подокно с заданным именем сцены
+  SceneMdiSubWindow* CreateMdiSubWindow(const QString& scene_name);
 
  private slots:
   void onScreenshot();
@@ -34,14 +43,28 @@ class MainWindow : public QMainWindow {
   void onQuit();
   void onFitScene();
   void onAddAxisIndicator();
+  void updateWindowMenu(); //!< Обновляет список окон в меню Window.
+
+  // Window menu slots
+  void onNewWindow();
+  void onCloseWindow();
+  void onCloseAllWindows();
+  void onTileWindows();
+  void onCascadeWindows();
+  void onNextWindow();
+  void onPreviousWindow();
+  void onWindowActivated();
+  void onSubWindowActivated(QMdiSubWindow* window);
 
  private:
   Application* app_;
-  SceneWindow* scene_window_;
+  QMdiArea* mdi_area_;
   QVulkanInstance vulkan_instance_;
   QSettings settings_;
   QStringList recent_files_;
   static const int kMaxRecentFiles = 10;
   QMenu* recent_files_menu_;
+  QMenu* window_list_menu_;
+  bool updating_window_menu_;
 };
 #endif  // NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_

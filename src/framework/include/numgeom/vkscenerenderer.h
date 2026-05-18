@@ -26,26 +26,23 @@ class VkSceneRenderer {
   ~VkSceneRenderer();
 
   //! Запрос на обновление связанного со сценой изображения.
-  //! Если сцена не передана, то обновляется текущая сцена приложения.
-  bool Update(Scene* = nullptr);
+  bool Update(Scene*);
 
   //! Возвращает экземпляр vulkan:
   //! существующий или, если отсутствует, то вновь созданный.
   VkInstance GetInstance() const;
 
-  //! Задает внешнюю поверхность vulkan.
-  void SetSurface(VkSurfaceKHR);
+  //! Инициализация объектов vulkan для новой сцены.
+  bool Initialize(Scene* scene, VkSurfaceKHR surface);
 
-  //! Инициализация объектов vulkan и всей подсистемы взаимодействия с GPU.
-  bool Initialize();
-
-  void Finalize();
+  //! Очистка объектов vulkan для сцены.
+  void Finalize(Scene*);
 
  private:
   VkSceneRenderer(const VkSceneRenderer&) = delete;
   VkSceneRenderer& operator=(const VkSceneRenderer&) = delete;
 
  private:
-  Impl* m_pimpl;
+  Impl* impl_;
 };
 #endif // !NUMGEOM_FRAMEWORK_VKSCENERENDERER_H

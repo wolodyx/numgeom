@@ -18,7 +18,7 @@ class Application::State {
   std::map<std::string,Scene*> scenes_;
   std::map<Scene*,Scene*> foreground2background_;
   Scene* active_scene_ = nullptr;
-  VkSceneRenderer* renderer = nullptr;
+  VkSceneRenderer* renderer_ = nullptr;
   Inner* inner_interface_ = nullptr;
 };
 #endif  // !NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H

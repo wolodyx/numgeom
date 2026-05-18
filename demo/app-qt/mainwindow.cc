@@ -2,6 +2,7 @@
 
 #include <iostream>
 
+#include "qactiongroup.h"
 #include "qapplication.h"
 #include "qdir.h"
 #include "qevent.h"
@@ -27,47 +28,63 @@
 
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
+#include "scenemdisubwindow.h"
 
-MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo") {
+MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updating_window_menu_(false) {
   app_ = app;
   loadRecentFiles();
+  mdi_area_ = new QMdiArea(this);
+  this->setCentralWidget(mdi_area_);
   this->createActions();
-  scene_window_ = new SceneWindow(app_);
-  scene_window_->setSurfaceType(QSurface::VulkanSurface);
-  QWidget* widget = QWidget::createWindowContainer(scene_window_, this);
-  this->setCentralWidget(widget);
 }
 
 MainWindow::~MainWindow() {}
+
+SceneMdiSubWindow* MainWindow::GetActiveMdiSubWindow() const {
+  QMdiSubWindow* sub = mdi_area_->activeSubWindow();
+  return qobject_cast<SceneMdiSubWindow*>(sub);
+}
+
+SceneMdiSubWindow* MainWindow::CreateMdiSubWindow(const QString& scene_name) {
+  SceneMdiSubWindow* sub = new SceneMdiSubWindow(app_, scene_name, &vulkan_instance_, mdi_area_);
+  sub->setAttribute(Qt::WA_DeleteOnClose);
+  mdi_area_->addSubWindow(sub);
+  sub->showMaximized();
+  connect(sub, SIGNAL(destroyed(QObject*)), this, SLOT(updateWindowMenu()));
+  updateWindowMenu();
+  SceneWindow* scene_window = sub->GetSceneWindow();
+  scene_window->Initialize(&vulkan_instance_, scene_name);
+  return sub;
+}
 
 void MainWindow::initVulkan() {
   auto* renderer = app_->GetRenderer();
   vulkan_instance_.setVkInstance(renderer->GetInstance());
   if (!vulkan_instance_.create()) qFatal("Vulkan instance creating error");
-  scene_window_->setVulkanInstance(&vulkan_instance_);
 
-  auto bg_scene = app_->AddScene("mainscene");
-  app_->GetActiveScene()->SetViewportSizeFunction([this]() {
-    QSize sz = scene_window_->size();
-    qreal r = scene_window_->devicePixelRatio();
-    uint32_t width = static_cast<uint32_t>(sz.width() * r);
-    uint32_t height = static_cast<uint32_t>(sz.height() * r);
-    return std::make_tuple(width, height);
-  });
+  CreateMdiSubWindow("mainscene");
+
+  // Получаем активное MDI подокно (первое созданное)
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) {
+    qFatal("No active MDI subwindow found");
+    return;
+  }
+
+  // Сцена уже создана в конструкторе SceneMdiSubWindow
+  Scene* scene = active_sub->GetScene();
+  if (!scene) {
+    qFatal("Failed to get scene from active subwindow");
+    return;
+  }
+
+  // Добавляем тестовый куб
   auto trimesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");
-  bg_scene->AddObject<SceneObject_Mesh>(trimesh);
-  // auto fg_scene = app_->AddScene("axis-indicator", bg_scene);
+  scene->AddObject<SceneObject_Mesh>(trimesh);
+  // auto fg_scene = app_->AddScene("axis-indicator", scene);
   // fg_scene->AddObject<SceneWidget_AxisIndicator>();
 
-  VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(scene_window_);
-  assert(surface != VK_NULL_HANDLE);
-  renderer->SetSurface(surface);
-  renderer->Initialize();  //< Продолжить начатую выше инициализацию.
-
-  auto scene = app_->GetActiveScene();
-  // Load PNG logo from Qt resources
-  // Use QFile instead of QResource because Qt resources are compressed by default
-  // and QResource::data() returns compressed data, while QFile automatically decompresses
+  // Загружаем логотип
   QFile resource_file(":/resources/logo.png");
   if (!resource_file.open(QIODevice::ReadOnly)) {
     // Log error but don't crash - application can work without logo
@@ -76,13 +93,13 @@ void MainWindow::initVulkan() {
     QByteArray resource_data = resource_file.readAll();
     resource_file.close();
     scene->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
-                   resource_data.size(), glm::ivec2(5,5));
+                      resource_data.size(), glm::ivec2(5,5));
   }
 
   auto sco = scene->SetText("Text rendering test");
   sco->SetPosition(glm::ivec2(5,100));
 
-  bg_scene->FitScene();
+  scene->FitScene();
   //app_->Update();
 }
 
@@ -90,6 +107,7 @@ void MainWindow::createActions() {
   this->createFileMenu();
   this->createViewMenu();
   this->createWidgetMenu();
+  this->createWindowMenu();
 }
 
 void MainWindow::createFileMenu() {
@@ -239,12 +257,90 @@ void MainWindow::createWidgetMenu() {
   }
 }
 
+void MainWindow::createWindowMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&Window"));
+  QActionGroup* window_action_group_ = new QActionGroup(this);
+  window_action_group_->setExclusive(true);
+
+  // New Window
+  QAction* new_window_act = new QAction(tr("&New Window"), this);
+  new_window_act->setShortcuts(QKeySequence::New);
+  new_window_act->setStatusTip(tr("Create a new window"));
+  connect(new_window_act, SIGNAL(triggered()), this, SLOT(onNewWindow()));
+  menu->addAction(new_window_act);
+
+  // Close Window
+  QAction* close_window_act = new QAction(tr("&Close Window"), this);
+  close_window_act->setShortcut(QKeySequence(tr("Ctrl+W")));
+  close_window_act->setStatusTip(tr("Close the active window"));
+  connect(close_window_act, SIGNAL(triggered()), this, SLOT(onCloseWindow()));
+  menu->addAction(close_window_act);
+
+  // Close All Windows
+  QAction* close_all_act = new QAction(tr("Close All Windows"), this);
+  close_all_act->setStatusTip(tr("Close all windows"));
+  connect(close_all_act, SIGNAL(triggered()), this, SLOT(onCloseAllWindows()));
+  menu->addAction(close_all_act);
+
+  menu->addSeparator();
+
+  // Tile Windows
+  QAction* tile_act = new QAction(tr("&Tile"), this);
+  tile_act->setStatusTip(tr("Tile the windows"));
+  connect(tile_act, SIGNAL(triggered()), this, SLOT(onTileWindows()));
+  menu->addAction(tile_act);
+
+  // Cascade Windows
+  QAction* cascade_act = new QAction(tr("&Cascade"), this);
+  cascade_act->setStatusTip(tr("Cascade the windows"));
+  connect(cascade_act, SIGNAL(triggered()), this, SLOT(onCascadeWindows()));
+  menu->addAction(cascade_act);
+
+  menu->addSeparator();
+
+  // Next Window
+  QAction* next_act = new QAction(tr("&Next"), this);
+  next_act->setShortcut(QKeySequence(tr("Ctrl+Tab")));
+  next_act->setStatusTip(tr("Move focus to next window"));
+  connect(next_act, SIGNAL(triggered()), this, SLOT(onNextWindow()));
+  menu->addAction(next_act);
+
+  // Previous Window
+  QAction* prev_act = new QAction(tr("&Previous"), this);
+  prev_act->setShortcut(QKeySequence(tr("Ctrl+Shift+Tab")));
+  prev_act->setStatusTip(tr("Move focus to previous window"));
+  connect(prev_act, SIGNAL(triggered()), this, SLOT(onPreviousWindow()));
+  menu->addAction(prev_act);
+
+  menu->addSeparator();
+
+  // Dynamic window list submenu
+  window_list_menu_ = menu->addMenu(tr("Windows"));
+  updateWindowMenu();
+
+  // Connect signals from MDI area to update window list and active scene
+  connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
+          this, SLOT(updateWindowMenu()));
+  connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
+          this, SLOT(onSubWindowActivated(QMdiSubWindow*)));
+}
+
 void MainWindow::onScreenshot() {
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) {
+    qWarning() << "No active window for screenshot";
+    return;
+  }
+
   QString filename = "screen.png";
   QScreen* screen = QApplication::primaryScreen();
+
+  // Get the global position and size of the active subwindow
+  QPoint global_pos = active_sub->mapToGlobal(QPoint(0, 0));
+  QSize size = active_sub->size();
+
   QPixmap screenshot = screen->grabWindow(
-      0, this->mapToGlobal(QPoint(0, 0)).x(),
-      this->mapToGlobal(QPoint(0, 0)).y(), this->width(), this->height());
+      0, global_pos.x(), global_pos.y(), size.width(), size.height());
   screenshot.save(filename, "PNG");
 }
 
@@ -297,7 +393,15 @@ bool IsGltfFile(const QString& filename) {
 }
 
 void MainWindow::openFile(const QString& filename) {
-  Scene* scene = app_->GetActiveScene();
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+
+  // Update window title with filename
+  QFileInfo fileInfo(filename);
+  active_sub->setWindowTitle(fileInfo.fileName());
+
   scene->Clear();
   app_->Update();
 #ifdef USE_NUMGEOM_MODULE_OCC
@@ -386,18 +490,113 @@ void MainWindow::onOpenFile() {
 }
 
 void MainWindow::onFitScene() {
-  app_->GetActiveScene()->FitScene();
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+  scene->FitScene();
   app_->Update();
 }
 
 void MainWindow::onAddAxisIndicator() {
-  auto scene = app_->GetActiveScene();
-  if (!scene)
-    return;
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
   scene->Clear();
   scene->AddObject<SceneWidget_AxisIndicator>();
   scene->FitScene();
   app_->Update();
+}
+
+// Window menu slots
+void MainWindow::onNewWindow() {
+  CreateMdiSubWindow(QString("scene_%1").arg(mdi_area_->subWindowList().size() + 1));
+}
+
+void MainWindow::onCloseWindow() {
+  QMdiSubWindow* active = mdi_area_->activeSubWindow();
+  if (active) {
+    active->close();
+    // Menu will be updated via destroyed signal, but update immediately
+    updateWindowMenu();
+  }
+}
+
+void MainWindow::onCloseAllWindows() {
+  mdi_area_->closeAllSubWindows();
+  // Menu will be updated via destroyed signals, but update immediately
+  updateWindowMenu();
+  // If all windows were closed, create a new one
+  if (mdi_area_->subWindowList().isEmpty()) {
+    CreateMdiSubWindow(tr("Scene %1").arg(1));
+  }
+}
+
+void MainWindow::onTileWindows() {
+  mdi_area_->tileSubWindows();
+}
+
+void MainWindow::onCascadeWindows() {
+  mdi_area_->cascadeSubWindows();
+}
+
+void MainWindow::onNextWindow() {
+  mdi_area_->activateNextSubWindow();
+}
+
+void MainWindow::onPreviousWindow() {
+  mdi_area_->activatePreviousSubWindow();
+}
+
+void MainWindow::onWindowActivated() {
+  QAction* s = dynamic_cast<QAction*>(sender());
+  if (!s || !s->data().isValid()) return;
+  int index = s->data().toInt();
+  QList<QMdiSubWindow*> windows = mdi_area_->subWindowList();
+  if (index >= 0 && index < windows.size()) {
+    mdi_area_->setActiveSubWindow(windows.at(index));
+  }
+}
+
+void MainWindow::updateWindowMenu() {
+  // Guard against recursive calls
+  if (updating_window_menu_) {
+    return;
+  }
+  updating_window_menu_ = true;
+
+  // Safety check: ensure window_list_menu_ is initialized
+  if (!window_list_menu_) {
+    updating_window_menu_ = false;
+    return;
+  }
+
+  window_list_menu_->clear();
+  QList<QMdiSubWindow*> windows = mdi_area_->subWindowList();
+  if (windows.isEmpty()) {
+    QAction* act = new QAction(tr("No windows"), this);
+    act->setEnabled(false);
+    window_list_menu_->addAction(act);
+    updating_window_menu_ = false;
+    return;
+  }
+  QMdiSubWindow* active = mdi_area_->activeSubWindow();
+  for (int i = 0; i < windows.size(); ++i) {
+    QMdiSubWindow* win = windows.at(i);
+    QString title = win->windowTitle();
+    if (title.isEmpty()) {
+      title = tr("Window %1").arg(i + 1);
+    }
+    QAction* act = new QAction(title, this);
+    act->setCheckable(true);
+    act->setChecked(win == active);
+    act->setData(i);
+    connect(act, SIGNAL(triggered()), this, SLOT(onWindowActivated()));
+    window_list_menu_->addAction(act);
+  }
+
+  updating_window_menu_ = false;
 }
 
 void MainWindow::loadRecentFiles() {
@@ -462,4 +661,19 @@ void MainWindow::onOpenRecentFile() {
   }
   this->openFile(filename);
   addToRecentFiles(filename);
+}
+
+void MainWindow::onSubWindowActivated(QMdiSubWindow* window) {
+  if (!window) {
+    // No active window, set active scene to nullptr
+    app_->SetActiveScene(nullptr);
+    // Check if all windows are closed and create a new one
+    //if (mdi_area_->subWindowList().isEmpty()) {
+    //  CreateMdiSubWindow(tr("Scene %1").arg(1));
+    //}
+    return;
+  }
+  SceneMdiSubWindow* scene_window = qobject_cast<SceneMdiSubWindow*>(window);
+  assert(scene_window != nullptr);
+  app_->SetActiveScene(scene_window->GetScene());
 }

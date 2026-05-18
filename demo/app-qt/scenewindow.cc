@@ -6,12 +6,39 @@
 #include "qvulkaninstance.h"
 
 #include "numgeom/application.h"
+#include "numgeom/scene.h"
 #include "numgeom/userinputcontroller.h"
 #include "numgeom/vkscenerenderer.h"
 
 SceneWindow::SceneWindow(Application* app) {
-  renderer_ = app->GetRenderer();
-  user_input_controller_ = new UserInputController(app);
+  app_ = app;
+}
+
+bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance,
+                             const QString& scene_name) {
+  this->setSurfaceType(QSurface::VulkanSurface);
+  scene_ = app_->AddScene(scene_name.toStdString());
+  user_input_controller_ = new UserInputController(scene_, app_->GetRenderer());
+
+  // Устанавливаем функцию размера viewport'а (уже установлена в SceneMdiSubWindow,
+  // но можно обновить, если нужно)
+  scene_->SetViewportSizeFunction([this]() {
+    QSize sz = this->size();
+    qreal r = this->devicePixelRatio();
+    uint32_t width = static_cast<uint32_t>(sz.width() * r);
+    uint32_t height = static_cast<uint32_t>(sz.height() * r);
+    return std::make_tuple(width, height);
+  });
+
+  if (!vulkan_instance->isValid())
+    return false;
+
+  this->setVulkanInstance(vulkan_instance);
+  VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(this);
+  assert(surface != VK_NULL_HANDLE);
+  app_->GetRenderer()->Initialize(scene_, surface);
+
+  return true;
 }
 
 SceneWindow::~SceneWindow() {
@@ -79,7 +106,7 @@ void SceneWindow::resizeEvent(QResizeEvent* event) {}
 
 void SceneWindow::exposeEvent(QExposeEvent* event) {
   if (this->isExposed()) {
-    renderer_->Update();
+    app_->GetRenderer()->Update(scene_);
   } else {
     // renderer_->finalize();
   }
@@ -89,13 +116,15 @@ bool SceneWindow::event(QEvent* e) {
   switch (e->type()) {
     case QEvent::Paint:
     case QEvent::UpdateRequest:
-      renderer_->Update();
+      app_->GetRenderer()->Update(scene_);
       break;
     case QEvent::PlatformSurface: {
       auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
       if (pse->surfaceEventType() ==
           QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-        renderer_->Finalize();
+        app_->GetRenderer()->Finalize(scene_);
+        app_->RemoveScene(scene_);
+        scene_ = nullptr;
       }
       break;
     }

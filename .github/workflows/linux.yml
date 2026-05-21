@@ -49,7 +49,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          working_directory: bld/linux-system-release
+          working_directory: build/linux-system-release
           files: '*.deb'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -111,7 +111,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          working_directory: bld/linux-vcpkg-release/examples/app-qt
+          working_directory: build/linux-vcpkg-release/examples/app-qt
           files: 'numgeom-*.AppImage'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

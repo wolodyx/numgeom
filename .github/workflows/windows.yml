@@ -98,7 +98,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          working_directory: bld/windows-vcpkg
+          working_directory: build/windows-vcpkg
           files: |
             numgeom-*-win64.exe
             numgeom-*.msi

@@ -10,9 +10,9 @@ Scene::Inner::Inner(State* impl) {
 
 Scene::Inner::~Inner() {}
 
-bool Scene::Inner::HasLogo() const { return !!impl_->logo; }
+bool Scene::Inner::HasFgImage() const { return !!impl_->fg_image_; }
 
-const Logo& Scene::Inner::GetLogo() const { return impl_->logo; }
+const ForegroundImage& Scene::Inner::GetFgImage() const { return impl_->fg_image_; }
 
 bool Scene::Inner::HasScreenTexts() const {
   return !impl_->screen_text_objects_.empty();

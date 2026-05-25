@@ -25,7 +25,7 @@ class MainWindow : public QMainWindow {
   void createActions();
   void createFileMenu();
   void createViewMenu();
-  void createWidgetMenu();
+  void createSceneMenu();
   void createWindowMenu();
   void updateRecentFilesMenu();
   void loadRecentFiles();
@@ -42,6 +42,7 @@ class MainWindow : public QMainWindow {
   void onOpenRecentFile();
   void onQuit();
   void onFitScene();
+  void onAddFgImage();
   void onAddAxisIndicator();
   void updateWindowMenu(); //!< Обновляет список окон в меню Window.
 

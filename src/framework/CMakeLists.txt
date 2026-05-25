@@ -26,7 +26,7 @@ set(SOURCE_FILES
   drawable_cone.cc
   drawable_cylinder.cc
   drawable_sphere.cc
-  logo.cc                   logo.h
+  foregroundimage.cc        foregroundimage.h
   scene.cc
   sceneinner.cc             sceneinner.h
   sceneiterators.cc         sceneiterators.h
@@ -47,8 +47,8 @@ set(SOURCE_FILES
 set(SHADER_FILES
   app.vert
   app.frag
-  logo.vert
-  logo.frag
+  fgimage.vert
+  fgimage.frag
   text.vert
   text.frag
 )

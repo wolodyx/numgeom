@@ -1,11 +1,11 @@
-#include "logo.h"
+#include "foregroundimage.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-Logo::Logo() : width(0), height(0) {}
+ForegroundImage::ForegroundImage() : width(0), height(0) {}
 
-Logo::Logo(const std::filesystem::path& image_path,
+ForegroundImage::ForegroundImage(const std::filesystem::path& image_path,
            const glm::ivec2& screen_position) {
   int channels;
   unsigned char* pixels = stbi_load(image_path.string().c_str(), &this->width,
@@ -18,7 +18,7 @@ Logo::Logo(const std::filesystem::path& image_path,
   this->position = screen_position;
 }
 
-Logo::Logo(const unsigned char* image_data,
+ForegroundImage::ForegroundImage(const unsigned char* image_data,
            size_t image_data_size,
            const glm::ivec2& screen_position) {
   int width, height, channels;
@@ -35,4 +35,4 @@ Logo::Logo(const unsigned char* image_data,
   this->position = screen_position;
 }
 
-bool Logo::operator!() const { return pixels.empty(); }
+bool ForegroundImage::operator!() const { return pixels.empty(); }

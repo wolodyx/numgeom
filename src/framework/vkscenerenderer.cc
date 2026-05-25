@@ -32,7 +32,7 @@
 #include "numgeom/screentext.h"
 
 #include "applicationinner.h"
-#include "logo.h"
+#include "foregroundimage.h"
 #include "sceneinner.h"
 #include "sceneiterators.h"
 #include "screentextds.h"
@@ -122,12 +122,30 @@ struct VulkanState {
   VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipeline text_pipeline = VK_NULL_HANDLE;
-  VkPipeline logo_pipeline = VK_NULL_HANDLE;
-  VkPipeline fg_pipeline = VK_NULL_HANDLE;
+  VkPipeline fgimage_pipeline = VK_NULL_HANDLE;
 
   VkCommandPool cmd_pool = VK_NULL_HANDLE;
   VkDescriptorSetLayout desc_layout = VK_NULL_HANDLE;
   VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+};
+
+//! Ресурсы Vulkan для отрисовки изображения на переднем плане сцены.
+struct FgImageObjects {
+  VkBuffer buffer_logo_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_logo_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_index = VK_NULL_HANDLE;
+  uint32_t logo_index_count = 0;
+  VkImage logo_image = VK_NULL_HANDLE;
+  VmaAllocation alloc_logo_image = VK_NULL_HANDLE;
+  VkImageView logo_image_view = VK_NULL_HANDLE;
+  VkSampler logo_sampler = VK_NULL_HANDLE;
+
+  bool operator!() const { return logo_image == VK_NULL_HANDLE; }
+  void Release(VulkanState*);
+  void Render(VkCommandBuffer cmd_buf,VkPipeline image_pipeline) const;
+  bool Initialize(const VulkanState*, const ForegroundImage&);
+  bool InitQuad(VulkanState*, const ForegroundImage&, const VkExtent2D&);
 };
 
 struct VulkanObjects {
@@ -169,19 +187,6 @@ struct VulkanObjects {
 
   uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
 
-  //! Ресурсы для отображения дополнительной сцены на переднем плане основной сцены.
-  //! \{
-  VkBuffer buffer_fg_vertex = VK_NULL_HANDLE;
-  VmaAllocation alloc_fg_vertex = VK_NULL_HANDLE;
-  VkBuffer buffer_fg_normal = VK_NULL_HANDLE;
-  VmaAllocation alloc_fg_normal = VK_NULL_HANDLE;
-  VkBuffer buffer_fg_color = VK_NULL_HANDLE;
-  VmaAllocation alloc_fg_color = VK_NULL_HANDLE;
-  VkBuffer buffer_fg_index = VK_NULL_HANDLE;
-  VmaAllocation alloc_fg_index = VK_NULL_HANDLE;
-  uint32_t fg_index_count = 0;
-  //! \}
-
   //! Ресурсы для отображения текста на переднем плане сцены.
   //! \{
   VkBuffer buffer_text_vertex = VK_NULL_HANDLE;
@@ -197,18 +202,7 @@ struct VulkanObjects {
   VmaAllocation alloc_text_color = VK_NULL_HANDLE;
   //! \}
 
-  //! Ресурсы для отрисовки изображений из файла на переднем плане сцены.
-  //! \{
-  VkBuffer buffer_logo_vertex = VK_NULL_HANDLE;
-  VmaAllocation alloc_logo_vertex = VK_NULL_HANDLE;
-  VkBuffer buffer_logo_index = VK_NULL_HANDLE;
-  VmaAllocation alloc_logo_index = VK_NULL_HANDLE;
-  uint32_t logo_index_count = 0;
-  VkImage logo_image = VK_NULL_HANDLE;
-  VmaAllocation alloc_logo_image = VK_NULL_HANDLE;
-  VkImageView logo_image_view = VK_NULL_HANDLE;
-  VkSampler logo_sampler = VK_NULL_HANDLE;
-  //! \}
+  FgImageObjects fg_image_objects;
 };
 
 //! Prototypes
@@ -245,13 +239,9 @@ namespace
 void Finalize(VulkanState* state) {
   vkDestroyPipeline(state->device, state->pipeline, nullptr);
   state->pipeline = VK_NULL_HANDLE;
-  if (state->logo_pipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(state->device, state->logo_pipeline, nullptr);
-    state->logo_pipeline = VK_NULL_HANDLE;
-  }
-  if (state->fg_pipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(state->device, state->fg_pipeline, nullptr);
-    state->fg_pipeline = VK_NULL_HANDLE;
+  if (state->fgimage_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->fgimage_pipeline, nullptr);
+    state->fgimage_pipeline = VK_NULL_HANDLE;
   }
 
   vkDestroyPipelineLayout(state->device,state->pipeline_layout,nullptr);
@@ -645,12 +635,12 @@ bool CreateGraphicsPipeline(VulkanState* state) {
   return true;
 }
 
-bool CreateLogoPipeline(VulkanState* state) {
+bool CreateFgImagePipeline(VulkanState* state) {
   VkResult r;
 
   // Подготавливаем шейдерные модули для логотипа.
   static uint32_t vs_spirv_source[] = {
-#include "logo.vert.spv.h"
+#include "fgimage.vert.spv.h"
   };
   VkShaderModuleCreateInfo ci_vs_module{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -661,12 +651,12 @@ bool CreateLogoPipeline(VulkanState* state) {
   r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Logo vertex shader creation error ({}).", VkResultToString(r));
+        "Foreground image vertex shader creation error ({}).", VkResultToString(r));
     return false;
   }
 
   static uint32_t fs_spirv_source[] = {
-#include "logo.frag.spv.h"
+#include "fgimage.frag.spv.h"
   };
   VkShaderModuleCreateInfo ci_fs_module{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -677,7 +667,7 @@ bool CreateLogoPipeline(VulkanState* state) {
   r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Logo fragment shader creation error ({}).", VkResultToString(r));
+        "Foreground image fragment shader creation error ({}).", VkResultToString(r));
     vkDestroyShaderModule(state->device, vs_module, nullptr);
     return false;
   }
@@ -697,7 +687,7 @@ bool CreateLogoPipeline(VulkanState* state) {
       },
   };
 
-  // Vertex input for logo quad: position (vec2) and uv (vec2)
+  // Vertex input for image quad: position (vec2) and uv (vec2)
   std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
       VkVertexInputBindingDescription{
         .binding = 0,
@@ -811,25 +801,22 @@ bool CreateLogoPipeline(VulkanState* state) {
                                 nullptr, pipelines);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Logo graphics pipeline creation error ({}).", VkResultToString(r));
+        "Foreground image graphics pipeline creation error ({}).", VkResultToString(r));
     vkDestroyShaderModule(state->device, vs_module, nullptr);
     vkDestroyShaderModule(state->device, fs_module, nullptr);
     return false;
   }
-  state->logo_pipeline = pipelines[0];
-
-  if (state->logo_pipeline == VK_NULL_HANDLE) {
-    BOOST_LOG_TRIVIAL(trace) << "Logo graphics pipeline creation error.";
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) << std::format("Logo graphics pipeline {} is created.",
-                                          static_cast<void*>(state->logo_pipeline));
+  state->fgimage_pipeline = pipelines[0];
 
   vkDestroyShaderModule(state->device, vs_module, nullptr);
   vkDestroyShaderModule(state->device, fs_module, nullptr);
 
+  if (state->fgimage_pipeline == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Foreground image graphics pipeline creation error.";
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format("Foreground image graphics pipeline {} is created.",
+                                          static_cast<void*>(state->fgimage_pipeline));
   return true;
 }
 
@@ -885,7 +872,7 @@ bool CreateTextPipeline(VulkanState* state) {
       },
   };
 
-  // Vertex input for text quad: position (vec2) and uv (vec2) - same as logo
+  // Vertex input for text quad: position (vec2) and uv (vec2).
   std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
       VkVertexInputBindingDescription{
         .binding = 0,
@@ -949,7 +936,7 @@ bool CreateTextPipeline(VulkanState* state) {
       .depthCompareOp = VK_COMPARE_OP_ALWAYS,
   };
 
-  // Alpha blending for text (same as logo)
+  // Alpha blending for text.
   VkPipelineColorBlendAttachmentState attachment_state = {
       .blendEnable = VK_TRUE,
       .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
@@ -1014,204 +1001,6 @@ bool CreateTextPipeline(VulkanState* state) {
   }
   BOOST_LOG_TRIVIAL(trace) << std::format("Text graphics pipeline {} is created.",
                                           static_cast<void*>(state->text_pipeline));
-
-  vkDestroyShaderModule(state->device, vs_module, nullptr);
-  vkDestroyShaderModule(state->device, fs_module, nullptr);
-
-  return true;
-}
-
-bool CreateForegroundPipeline(VulkanState* state) {
-  VkResult r;
-
-  // Подготавливаем шейдерные модули для foreground сцены (те же, что и для основной сцены).
-  static uint32_t vs_spirv_source[] = {
-#include "app.vert.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_vs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(vs_spirv_source),
-      .pCode = (uint32_t*)vs_spirv_source,
-  };
-  VkShaderModule vs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground vertex shader creation error ({}).", VkResultToString(r));
-    return false;
-  }
-
-  static uint32_t fs_spirv_source[] = {
-#include "app.frag.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_fs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(fs_spirv_source),
-      .pCode = (uint32_t*)fs_spirv_source,
-  };
-  VkShaderModule fs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground fragment shader creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    return false;
-  }
-
-  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = vs_module,
-          .pName = "main",
-      },
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = fs_module,
-          .pName = "main",
-      },
-  };
-
-  // Vertex input for scene (same as main pipeline)
-  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
-      VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = 3 * sizeof(float), // position
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-      VkVertexInputBindingDescription{
-        .binding = 1,
-        .stride = 3 * sizeof(float), // normal
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-      VkVertexInputBindingDescription{
-        .binding = 2,
-        .stride = 3 * sizeof(float), // color
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-  };
-  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
-      VkVertexInputAttributeDescription{
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 1,
-        .binding = 1,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 2,
-        .binding = 2,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-  };
-  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
-      .pVertexBindingDescriptions = vertex_binding_descs.data(),
-      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
-      .pVertexAttributeDescriptions = vertex_attr_descs.data()
-  };
-
-  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = false,
-  };
-
-  VkPipelineViewportStateCreateInfo ci_viewport_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
-  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .rasterizerDiscardEnable = false,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .lineWidth = 1.0f,
-  };
-
-  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = state->sample_count,
-  };
-
-  // Disable depth test for foreground objects (to appear on top)
-  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_FALSE,
-      .depthWriteEnable = VK_FALSE,
-      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
-  };
-
-  // No alpha blending (unless foreground objects need transparency)
-  VkPipelineColorBlendAttachmentState attachment_state = {
-      .blendEnable = VK_FALSE,
-      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
-                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
-  };
-  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .attachmentCount = 1,
-      .pAttachments = &attachment_state,
-  };
-
-  VkDynamicState dynamic_states[] = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = 2,
-      .pDynamicStates = dynamic_states,
-  };
-
-  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = static_cast<uint32_t>(ci_stages.size()),
-      .pStages = ci_stages.data(),
-      .pVertexInputState = &ci_vertex_input_state,
-      .pInputAssemblyState = &ci_input_assembly_state,
-      .pViewportState = &ci_viewport_state,
-      .pRasterizationState = &ci_rasterization_state,
-      .pMultisampleState = &ci_multisample_state,
-      .pDepthStencilState = &ci_depth_stencil_state,
-      .pColorBlendState = &ci_color_blend_state,
-      .pDynamicState = &ci_pipeline_dynamic_state,
-      .layout = state->pipeline_layout,
-      .renderPass = state->renderpass,
-      .subpass = 0,
-  }};
-  VkPipeline pipelines[] = {VK_NULL_HANDLE};
-  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
-                                nullptr, pipelines);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground graphics pipeline creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  state->fg_pipeline = pipelines[0];
-
-  if (state->fg_pipeline == VK_NULL_HANDLE) {
-    BOOST_LOG_TRIVIAL(trace) << "Foreground graphics pipeline creation error.";
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) << std::format("Foreground graphics pipeline {} is created.",
-                                          static_cast<void*>(state->fg_pipeline));
 
   vkDestroyShaderModule(state->device, vs_module, nullptr);
   vkDestroyShaderModule(state->device, fs_module, nullptr);
@@ -1541,7 +1330,11 @@ bool RecreateSwapchain(VulkanObjects* vk_objects, VkExtent2D extent) {
   VkResult r;
 
   r = vkDeviceWaitIdle(state->device);
-  assert(r == VK_SUCCESS);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(fatal) << std::format("vkDeviceWaitIdle returned {}",
+                                            VkResultToString(r));
+    std::abort();
+  }
 
   VkSurfaceCapabilitiesKHR surfaceCaps;
   r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state->physical_device,
@@ -1640,6 +1433,21 @@ bool RecreateSwapchain(VulkanObjects* vk_objects, VkExtent2D extent) {
   return true;
 }
 
+void FgImageObjects::Render(VkCommandBuffer cmd_buf,
+                            VkPipeline image_pipeline) const {
+  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, image_pipeline);
+  // Descriptor set already bound (same as scene)
+  // Bind logo vertex buffer (binding 0)
+  VkBuffer logoVertexBuffer = buffer_logo_vertex;
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(cmd_buf, 0, 1, &logoVertexBuffer, offsets);
+  // Bind logo index buffer
+  vkCmdBindIndexBuffer(cmd_buf, buffer_logo_index, 0,
+                       VK_INDEX_TYPE_UINT16);
+  // Viewport and scissor already set (same as scene)
+  vkCmdDrawIndexed(cmd_buf, logo_index_count, 1, 0, 0, 0);
+}
+
 void Render(VulkanObjects* vk_objects, ImageResources& image, FrameResources& frame) {
   VulkanState* state = vk_objects->vk_state;
 
@@ -1718,64 +1526,9 @@ void Render(VulkanObjects* vk_objects, ImageResources& image, FrameResources& fr
     vkCmdDrawIndexed(frame.cmd_buf, vk_objects->index_count, 1, 0, 0, 0);
   }
 
-  // Draw foreground scene if available (depth test disabled)
-  if (state->fg_pipeline != VK_NULL_HANDLE &&
-      vk_objects->buffer_fg_vertex != VK_NULL_HANDLE &&
-      vk_objects->buffer_fg_index != VK_NULL_HANDLE &&
-      vk_objects->fg_index_count > 0) {
-    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      state->fg_pipeline);
-    // Bind descriptor set (same as main scene)
-    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            state->pipeline_layout, 0, 1, &frame.desc_set, 0,
-                            nullptr);
-    // Bind foreground vertex buffers (bindings 0,1,2)
-    std::vector<VkBuffer> fg_buffers = {
-        vk_objects->buffer_fg_vertex,
-        vk_objects->buffer_fg_normal,
-        vk_objects->buffer_fg_color
-    };
-    VkDeviceSize offsets[] = {0, 0, 0};
-    vkCmdBindVertexBuffers(frame.cmd_buf, 0, fg_buffers.size(), fg_buffers.data(), offsets);
-    // Bind foreground index buffer
-    vkCmdBindIndexBuffer(frame.cmd_buf, vk_objects->buffer_fg_index, 0,
-                         VK_INDEX_TYPE_UINT32);
-    // Set viewport and scissor (in case main scene wasn't drawn)
-    const VkViewport viewport = {
-        .x = 0,
-        .y = 0,
-        .width = static_cast<float>(vk_objects->image_extent.width),
-        .height = static_cast<float>(vk_objects->image_extent.height),
-        .minDepth = 0,
-        .maxDepth = 1,
-    };
-    vkCmdSetViewport(frame.cmd_buf, 0, 1, &viewport);
-    const VkRect2D scissor = {
-        .offset = {0, 0},
-        .extent = vk_objects->image_extent,
-    };
-    vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
-    vkCmdDrawIndexed(frame.cmd_buf, vk_objects->fg_index_count, 1, 0, 0, 0);
-  }
-
-  // Draw logo overlay if available
-  if (state->logo_pipeline != VK_NULL_HANDLE &&
-      vk_objects->buffer_logo_vertex != VK_NULL_HANDLE &&
-      vk_objects->buffer_logo_index != VK_NULL_HANDLE &&
-      vk_objects->logo_index_count > 0) {
-    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      state->logo_pipeline);
-    // Descriptor set already bound (same as scene)
-    // Bind logo vertex buffer (binding 0)
-    VkBuffer logoVertexBuffer = vk_objects->buffer_logo_vertex;
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(frame.cmd_buf, 0, 1, &logoVertexBuffer, offsets);
-    // Bind logo index buffer
-    vkCmdBindIndexBuffer(frame.cmd_buf, vk_objects->buffer_logo_index, 0,
-                         VK_INDEX_TYPE_UINT16);
-    // Viewport and scissor already set (same as scene)
-    vkCmdDrawIndexed(frame.cmd_buf, vk_objects->logo_index_count, 1, 0, 0, 0);
-  }
+  // Draw foreground image if available
+  if (!!vk_objects->fg_image_objects)
+    vk_objects->fg_image_objects.Render(frame.cmd_buf, state->fgimage_pipeline);
 
   // Draw text overlay if available
   if (state->text_pipeline != VK_NULL_HANDLE &&
@@ -2276,10 +2029,13 @@ bool ChooseSwapchainSettings(VulkanState* state, VkSurfaceKHR surface) {
   return true;
 }
 
-bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
+bool FgImageObjects::Initialize(const VulkanState* state,
+                                const ForegroundImage& fg_image) {
   BOOST_LOG_TRIVIAL(trace) << "Creating logo resources...";
-  VulkanState* state = vk_objects->vk_state;
-  assert(!logo.IsEmpty());
+  if (fg_image.IsEmpty()) {
+    BOOST_LOG_TRIVIAL(error) << "Foreground image is empty";
+    return false;
+  }
 
   VkResult r = VK_SUCCESS;
 
@@ -2288,7 +2044,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
   VmaAllocation staging_allocation = VK_NULL_HANDLE;
   VkBufferCreateInfo bufferInfo = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = static_cast<VkDeviceSize>(logo.pixels.size()),
+      .size = static_cast<VkDeviceSize>(fg_image.pixels.size()),
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
   };
   VmaAllocationCreateInfo alloc_ci = {
@@ -2306,7 +2062,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
   // Copy pixel data
   void* mapped_data = nullptr;
   vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
-  memcpy(mapped_data, logo.pixels.data(), logo.pixels.size());
+  memcpy(mapped_data, fg_image.pixels.data(), fg_image.pixels.size());
   vmaUnmapMemory(state->allocator, staging_allocation);
 
   // Create image
@@ -2314,8 +2070,8 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = VK_FORMAT_R8G8B8A8_UNORM,
-      .extent = {static_cast<uint32_t>(logo.width),
-                 static_cast<uint32_t>(logo.height), 1},
+      .extent = {static_cast<uint32_t>(fg_image.width),
+                 static_cast<uint32_t>(fg_image.height), 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -2329,8 +2085,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
       .usage = VMA_MEMORY_USAGE_GPU_ONLY,
   };
   r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
-                     &vk_objects->logo_image, &vk_objects->alloc_logo_image,
-                     nullptr);
+                     &logo_image, &alloc_logo_image, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo image: "
                              << VkResultToString(r);
@@ -2349,7 +2104,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for logo: "
                              << VkResultToString(r);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2366,7 +2121,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
     BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for logo: "
                              << VkResultToString(r);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2387,7 +2142,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = vk_objects->logo_image,
+      .image = logo_image,
       .subresourceRange = {
           .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
           .baseMipLevel = 0,
@@ -2416,10 +2171,10 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
           .layerCount = 1,
       },
       .imageOffset = {0, 0, 0},
-      .imageExtent = {static_cast<uint32_t>(logo.width),
-                      static_cast<uint32_t>(logo.height), 1},
+      .imageExtent = {static_cast<uint32_t>(fg_image.width),
+                      static_cast<uint32_t>(fg_image.height), 1},
   };
-  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, vk_objects->logo_image,
+  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, logo_image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   // Transition image layout to shader read-only optimal
@@ -2449,7 +2204,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2461,7 +2216,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2474,7 +2229,7 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
   // Create image view
   VkImageViewCreateInfo view_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = vk_objects->logo_image,
+      .image = logo_image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
       .format = VK_FORMAT_R8G8B8A8_UNORM,
       .components = {
@@ -2491,11 +2246,11 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
           .layerCount = 1,
       },
   };
-  r = vkCreateImageView(state->device, &view_info, nullptr, &vk_objects->logo_image_view);
+  r = vkCreateImageView(state->device, &view_info, nullptr, &logo_image_view);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo image view: "
                              << VkResultToString(r);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     return false;
   }
 
@@ -2518,12 +2273,12 @@ bool CreateLogoResources(VulkanObjects* vk_objects, const Logo& logo) {
       .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
       .unnormalizedCoordinates = VK_FALSE,
   };
-  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &vk_objects->logo_sampler);
+  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &logo_sampler);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo sampler: "
                              << VkResultToString(r);
-    vkDestroyImageView(state->device, vk_objects->logo_image_view, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
+    vkDestroyImageView(state->device, logo_image_view, nullptr);
+    vmaDestroyImage(state->allocator, logo_image, alloc_logo_image);
     return false;
   }
 
@@ -2808,22 +2563,20 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
   return true;
 }
 
-bool CreateLogoQuadBuffers(VulkanObjects* vk_objects, const Logo& logo) {
+bool FgImageObjects::InitQuad(VulkanState* state,
+                              const ForegroundImage& fg_image,
+                              const VkExtent2D& image_extent) {
   BOOST_LOG_TRIVIAL(trace) << "Creating logo quad buffers...";
-  VulkanState* state = vk_objects->vk_state;
 
-  if (vk_objects->image_extent.width == 0 || vk_objects->image_extent.height == 0) {
-    BOOST_LOG_TRIVIAL(warning) << "Invalid image extent, skipping quad buffer creation";
-    return false;
-  }
+  assert(image_extent.width != 0 && image_extent.height != 0);
 
   // Convert screen coordinates to NDC
-  float x = static_cast<float>(logo.position.x);
-  float y = static_cast<float>(logo.position.y);
-  float w = static_cast<float>(logo.width);
-  float h = static_cast<float>(logo.height);
-  float screen_width = static_cast<float>(vk_objects->image_extent.width);
-  float screen_height = static_cast<float>(vk_objects->image_extent.height);
+  float x = static_cast<float>(fg_image.position.x);
+  float y = static_cast<float>(fg_image.position.y);
+  float w = static_cast<float>(fg_image.width);
+  float h = static_cast<float>(fg_image.height);
+  float screen_width = static_cast<float>(image_extent.width);
+  float screen_height = static_cast<float>(image_extent.height);
 
   // NDC coordinates: `x=[-1,+1]` (from left to right),
   //                  `y=[-1,+1]` (from top to bottom).
@@ -2849,13 +2602,13 @@ bool CreateLogoQuadBuffers(VulkanObjects* vk_objects, const Logo& logo) {
   std::array<uint16_t, 6> indices = {0, 1, 2, 0, 2, 3};
 
   // Destroy existing buffers if any
-  if (vk_objects->buffer_logo_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_logo_vertex, vk_objects->alloc_logo_vertex);
-    vk_objects->buffer_logo_vertex = VK_NULL_HANDLE;
+  if (buffer_logo_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_logo_vertex, alloc_logo_vertex);
+    buffer_logo_vertex = VK_NULL_HANDLE;
   }
-  if (vk_objects->buffer_logo_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_logo_index, vk_objects->alloc_logo_index);
-    vk_objects->buffer_logo_index = VK_NULL_HANDLE;
+  if (buffer_logo_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_logo_index, alloc_logo_index);
+    buffer_logo_index = VK_NULL_HANDLE;
   }
 
   // Create vertex buffer
@@ -2867,8 +2620,10 @@ bool CreateLogoQuadBuffers(VulkanObjects* vk_objects, const Logo& logo) {
   VmaAllocationCreateInfo vertexAllocInfo = {
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
   };
-  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo, &vertexAllocInfo,
-                               &vk_objects->buffer_logo_vertex, &vk_objects->alloc_logo_vertex, nullptr);
+  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo,
+                               &vertexAllocInfo,
+                               &buffer_logo_vertex,
+                               &alloc_logo_vertex, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo vertex buffer: "
                              << VkResultToString(r);
@@ -2877,9 +2632,9 @@ bool CreateLogoQuadBuffers(VulkanObjects* vk_objects, const Logo& logo) {
 
   // Copy vertex data
   void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, vk_objects->alloc_logo_vertex, &mapped_data);
+  vmaMapMemory(state->allocator, alloc_logo_vertex, &mapped_data);
   memcpy(mapped_data, vertices.data(), sizeof(vertices));
-  vmaUnmapMemory(state->allocator, vk_objects->alloc_logo_vertex);
+  vmaUnmapMemory(state->allocator, alloc_logo_vertex);
 
   // Create index buffer
   VkBufferCreateInfo indexBufferInfo = {
@@ -2891,22 +2646,24 @@ bool CreateLogoQuadBuffers(VulkanObjects* vk_objects, const Logo& logo) {
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
   };
   r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
-                      &vk_objects->buffer_logo_index, &vk_objects->alloc_logo_index, nullptr);
+                      &buffer_logo_index,
+                      &alloc_logo_index, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo index buffer: "
                              << VkResultToString(r);
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_logo_vertex, vk_objects->alloc_logo_vertex);
-    vk_objects->buffer_logo_vertex = VK_NULL_HANDLE;
+    vmaDestroyBuffer(state->allocator, buffer_logo_vertex, alloc_logo_vertex);
+    buffer_logo_vertex = VK_NULL_HANDLE;
     return false;
   }
 
   // Copy index data
-  vmaMapMemory(state->allocator, vk_objects->alloc_logo_index, &mapped_data);
+  vmaMapMemory(state->allocator, alloc_logo_index, &mapped_data);
   memcpy(mapped_data, indices.data(), sizeof(indices));
-  vmaUnmapMemory(state->allocator, vk_objects->alloc_logo_index);
+  vmaUnmapMemory(state->allocator, alloc_logo_index);
 
-  vk_objects->logo_index_count = static_cast<uint32_t>(indices.size());
-  BOOST_LOG_TRIVIAL(trace) << "Logo quad buffers created, index count = " << vk_objects->logo_index_count;
+  logo_index_count = static_cast<uint32_t>(indices.size());
+  BOOST_LOG_TRIVIAL(trace) << "Logo quad buffers created, index count = "
+                           << logo_index_count;
   return true;
 }
 
@@ -3061,12 +2818,13 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
   return true;
 }
 
-bool UpdateLogoBuffers(Scene* scene, VulkanObjects* vk_objects) {
+bool UpdateFgImageBuffers(Scene* scene, VulkanObjects* vk_objects) {
   auto scene_inner_if = scene->GetInnerInterface();
-  if (!scene_inner_if->HasLogo())
+  if (!scene_inner_if->HasFgImage())
     return true;
-  const Logo& logo = scene_inner_if->GetLogo();
-  return CreateLogoQuadBuffers(vk_objects, logo);
+  const ForegroundImage& image = scene_inner_if->GetFgImage();
+  return vk_objects->fg_image_objects.InitQuad(vk_objects->vk_state, image,
+                                               vk_objects->image_extent);
 }
 
 bool UpdateTextBuffers(Scene* scene, VulkanObjects* vk_objects) {
@@ -3111,10 +2869,7 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
   if (!CreateRenderPass(state)) return false;
 
   if (!CreateGraphicsPipeline(state)) return false;
-
-  if (!CreateForegroundPipeline(state)) {
-    BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground pipeline, foreground objects will not be rendered";
-  }
+  if (!CreateFgImagePipeline(state)) return false;
 
   VkCommandPoolCreateInfo ci_commandpool{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -3143,24 +2898,7 @@ VulkanObjects* InitializeVulkanObjects(VulkanState* vk_state,
     return nullptr;
 
   VkResult r;
-
-  // Create logo resources
   auto scene_inner_if = scene->GetInnerInterface();
-  if (scene_inner_if->HasLogo()) {
-    const Logo& logo = scene_inner_if->GetLogo();
-    if (!CreateLogoResources(&vk_objects,logo)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to create logo resources, continuing without logo";
-    } else {
-      // Create quad buffers for logo rendering
-      if (!CreateLogoQuadBuffers(&vk_objects,logo)) {
-        BOOST_LOG_TRIVIAL(warning) << "Failed to create logo quad buffers, logo will not be rendered";
-        // Cleanup logo resources? We'll keep them but skip rendering.
-      }
-    }
-    if (!CreateLogoPipeline(vk_state)) {
-      BOOST_LOG_TRIVIAL(fatal) << "Failed to create logo pipeline";
-    }
-  }
 
   // Create text resources
   if (scene_inner_if->HasScreenTexts()) {
@@ -3365,139 +3103,25 @@ void UpdateScene(VulkanObjects* vk_objects, const Scene* scene) {
   }
 
   vk_objects->index_count = 3 * n_cells;
-}
 
-void UpdateForegroundScene(VulkanObjects* vk_objects, const Scene* scene) {
-  VulkanState* state = vk_objects->vk_state;
-  if (vk_objects->buffer_fg_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_vertex, vk_objects->alloc_fg_vertex);
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_normal, vk_objects->alloc_fg_normal);
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_color, vk_objects->alloc_fg_color);
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_index, vk_objects->alloc_fg_index);
-    vk_objects->buffer_fg_vertex = VK_NULL_HANDLE;
-    vk_objects->buffer_fg_normal = VK_NULL_HANDLE;
-    vk_objects->buffer_fg_color = VK_NULL_HANDLE;
-    vk_objects->buffer_fg_index = VK_NULL_HANDLE;
-  }
-
-  size_t n_verts = 0, n_cells = 0;
-  GetElementsCount(scene, n_verts, n_cells);
-
-  VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
-  VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
-  VkDeviceSize color_buffer_size = Aligned(3 * n_verts * sizeof(float), 256);
-  VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
-
-  if(vertex_buffer_size == 0)
-    return;
-
-  {
-    // Выделяем память под буфер вершин.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = vertex_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    VkResult r = vmaCreateBuffer(state->allocator,
-                                 &ci_buffer, &ci_allocation,
-                                 &vk_objects->buffer_fg_vertex, &vk_objects->alloc_fg_vertex,
-                                 nullptr);
-    // Копируем вершины.
-    void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, vk_objects->alloc_fg_vertex, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 pt : GetVertexIterator(scene)) {
-      *data++ = pt.x;
-      *data++ = pt.y;
-      *data++ = pt.z;
+  // Create foreground image resources.
+  vk_objects->fg_image_objects.Release(state);
+  auto scene_inner_if = scene->GetInnerInterface();
+  if (scene_inner_if->HasFgImage()) {
+    const ForegroundImage& fg_image = scene_inner_if->GetFgImage();
+    if (!vk_objects->fg_image_objects.Initialize(state,fg_image)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image resources, continuing without image";
+    } else {
+      if (!vk_objects->fg_image_objects.InitQuad(state,fg_image,vk_objects->image_extent)) {
+        BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image quad buffers, image will not be rendered";
+        // Cleanup logo resources? We'll keep them but skip rendering.
+      }
     }
-    vmaUnmapMemory(state->allocator, vk_objects->alloc_fg_vertex);
   }
-
-  {
-    // Выделяем память под буфер с нормалями.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = normal_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(state->allocator,
-                    &ci_buffer, &ci_allocation, &vk_objects->buffer_fg_normal,
-                    &vk_objects->alloc_fg_normal, nullptr);
-    // Копируем нормали.
-    void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, vk_objects->alloc_fg_normal, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 n : GetNormalIterator(scene)) {
-      *data++ = n.x;
-      *data++ = n.y;
-      *data++ = n.z;
-    }
-    vmaUnmapMemory(state->allocator, vk_objects->alloc_fg_normal);
-  }
-
-  {
-    // Выделяем память под буфер с цветами.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = color_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(state->allocator,
-                    &ci_buffer, &ci_allocation, &vk_objects->buffer_fg_color,
-                    &vk_objects->alloc_fg_color, nullptr);
-    // Копируем цвета.
-    void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, vk_objects->alloc_fg_color, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 c : GetColorIterator(scene)) {
-      *data++ = c.x;
-      *data++ = c.y;
-      *data++ = c.z;
-    }
-    vmaUnmapMemory(state->allocator, vk_objects->alloc_fg_color);
-  }
-
-  {
-    // Выделяем память под индексный буфер.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = index_buffer_size,
-        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(state->allocator,
-                    &ci_buffer, &ci_allocation, &vk_objects->buffer_fg_index,
-                    &vk_objects->alloc_fg_index, nullptr);
-
-    // Копируем индексный буфер.
-    void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator,vk_objects->alloc_fg_index, &mapped_data);
-    uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
-    for (glm::u32vec3 tr : GetTriaIterator(scene)) {
-      *data++ = tr.x;
-      *data++ = tr.y;
-      *data++ = tr.z;
-    }
-    vmaUnmapMemory(state->allocator, vk_objects->alloc_fg_index);
-  }
-
-  vk_objects->fg_index_count = 3 * n_cells;
 }
 
 void UpdateDescriptorSets(Scene* scene, VulkanObjects* vk_objects) {
-  VulkanState* state = vk_objects->vk_state;
+  const VulkanState* state = vk_objects->vk_state;
   FrameResources& frame = vk_objects->frame_res[vk_objects->current_frame_index];
 
   glm::mat4 model_view_matrix = scene->GetViewMatrix();
@@ -3567,10 +3191,10 @@ void UpdateDescriptorSets(Scene* scene, VulkanObjects* vk_objects) {
       },
   };
   // Add combined image sampler for logo if available
-  if (vk_objects->logo_image_view != VK_NULL_HANDLE && vk_objects->logo_sampler != VK_NULL_HANDLE) {
+  if (vk_objects->fg_image_objects.logo_image_view != VK_NULL_HANDLE && vk_objects->fg_image_objects.logo_sampler != VK_NULL_HANDLE) {
     VkDescriptorImageInfo imageInfo{
-        .sampler = vk_objects->logo_sampler,
-        .imageView = vk_objects->logo_image_view,
+        .sampler = vk_objects->fg_image_objects.logo_sampler,
+        .imageView = vk_objects->fg_image_objects.logo_image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     descWrites.push_back(VkWriteDescriptorSet{
@@ -3638,27 +3262,13 @@ void UpdateDataForFrame(Application* app, Scene* scene, VulkanObjects* vk_object
       scene->ClearChanges();
       vk_objects->stop_rendering = false;
     }
-    Scene* foreground_scene = nullptr;
-    {
-      auto it = app->GetForegroundScenes(scene);
-      if (!it.isEnd())
-        foreground_scene = *it;
-    }
-    if (foreground_scene && foreground_scene->HasChanges()) {
-      vk_objects->stop_rendering = true;
-      vkQueueWaitIdle(state->queue);
-      UpdateForegroundScene(vk_objects, foreground_scene);
-      foreground_scene->ClearChanges();
-      vk_objects->stop_rendering = false;
-    }
   }
   UpdateDescriptorSets(scene, vk_objects);
 }
 }  // namespace
 
 bool VkSceneRenderer::Update(Scene* scene) {
-  if (!scene)
-    return false;
+  if (!scene) return false;
   auto it = impl_->scenes_vulkan_objects.find(scene);
   if (it == impl_->scenes_vulkan_objects.end())
     return false;
@@ -3674,7 +3284,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
       vk_objects->image_extent.height != currentExtent.height) {
     if (!RecreateSwapchain(vk_objects,currentExtent)) return false;
     // Update logo buffers for new window size
-    if (!UpdateLogoBuffers(scene,vk_objects)) {
+    if (!UpdateFgImageBuffers(scene,vk_objects)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
     }
     // Update text buffers for new window size
@@ -3706,7 +3316,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
       VkExtent2D extent(screen_size.x,screen_size.y);
       RecreateSwapchain(vk_objects, extent);
       // Update logo buffers for new window size
-      if (!UpdateLogoBuffers(scene,vk_objects)) {
+      if (!UpdateFgImageBuffers(scene,vk_objects)) {
         BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
       }
       // Update text buffers for new window size
@@ -3718,10 +3328,12 @@ bool VkSceneRenderer::Update(Scene* scene) {
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
     if (r != VK_SUCCESS) return false;
 
+    // Рендеринг основной сцены.
     assert(index <= MAX_NUM_IMAGES);
     ImageResources& image = vk_objects->image_res[index];
     Render(vk_objects, image, frame);
 
+    // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -3738,6 +3350,37 @@ bool VkSceneRenderer::Update(Scene* scene) {
 
   vk_objects->current_frame_index = (vk_objects->current_frame_index + 1) % MAX_NUM_FRAMES;
   return true;
+}
+
+namespace {
+void FgImageObjects::Release(VulkanState* state) {
+  if (buffer_logo_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_logo_vertex,
+                     alloc_logo_vertex);
+    buffer_logo_vertex = VK_NULL_HANDLE;
+  }
+  if (buffer_logo_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_logo_index,
+                     alloc_logo_index);
+    buffer_logo_index = VK_NULL_HANDLE;
+  }
+
+  // Cleanup logo resources
+  if (logo_sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(state->device, logo_sampler, nullptr);
+    logo_sampler = VK_NULL_HANDLE;
+  }
+  if (logo_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(state->device, logo_image_view, nullptr);
+    logo_image_view = VK_NULL_HANDLE;
+  }
+  if (logo_image != VK_NULL_HANDLE) {
+    vmaDestroyImage(state->allocator, logo_image,
+                    alloc_logo_image);
+    logo_image = VK_NULL_HANDLE;
+    alloc_logo_image = VK_NULL_HANDLE;
+  }
+}
 }
 
 void VkSceneRenderer::Finalize(Scene* scene) {
@@ -3766,48 +3409,8 @@ void VkSceneRenderer::Finalize(Scene* scene) {
   vmaDestroyBuffer(state->allocator, vk_objects->buffer_index, vk_objects->alloc_index);
   vmaDestroyBuffer(state->allocator, vk_objects->buffer_frame, vk_objects->alloc_frame);
 
-  // Cleanup foreground scene buffers
-  if (vk_objects->buffer_fg_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_vertex, vk_objects->alloc_fg_vertex);
-    vk_objects->buffer_fg_vertex = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_fg_normal != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_normal, vk_objects->alloc_fg_normal);
-    vk_objects->buffer_fg_normal = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_fg_color != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_color, vk_objects->alloc_fg_color);
-    vk_objects->buffer_fg_color = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_fg_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_fg_index, vk_objects->alloc_fg_index);
-    vk_objects->buffer_fg_index = VK_NULL_HANDLE;
-  }
-
-  // Cleanup logo quad buffers
-  if (vk_objects->buffer_logo_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_logo_vertex, vk_objects->alloc_logo_vertex);
-    vk_objects->buffer_logo_vertex = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_logo_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_logo_index, vk_objects->alloc_logo_index);
-    vk_objects->buffer_logo_index = VK_NULL_HANDLE;
-  }
-
-  // Cleanup logo resources
-  if (vk_objects->logo_sampler != VK_NULL_HANDLE) {
-    vkDestroySampler(state->device, vk_objects->logo_sampler, nullptr);
-    vk_objects->logo_sampler = VK_NULL_HANDLE;
-  }
-  if (vk_objects->logo_image_view != VK_NULL_HANDLE) {
-    vkDestroyImageView(state->device, vk_objects->logo_image_view, nullptr);
-    vk_objects->logo_image_view = VK_NULL_HANDLE;
-  }
-  if (vk_objects->logo_image != VK_NULL_HANDLE) {
-    vmaDestroyImage(state->allocator, vk_objects->logo_image, vk_objects->alloc_logo_image);
-    vk_objects->logo_image = VK_NULL_HANDLE;
-    vk_objects->alloc_logo_image = VK_NULL_HANDLE;
-  }
+  // Cleanup fgimage quad buffers
+  vk_objects->fg_image_objects.Release(state);
 
   // Cleanup text quad buffers
   if (vk_objects->buffer_text_vertex != VK_NULL_HANDLE) {

@@ -119,15 +119,25 @@ void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>(
   state_->camera_.SetViewportSizeFunction(func);
 }
 
-void Scene::SetLogo(const std::string& image_filename,
-                          const glm::ivec2& screen_position) {
-  state_->logo = Logo(image_filename, screen_position);
+bool Scene::AddFgImage(const std::string& image_filename,
+                       const glm::ivec2& screen_position) {
+  ForegroundImage fg(image_filename,screen_position);
+  if (fg.IsEmpty())
+    return false;
+  state_->fg_image_ = fg;
+  state_->has_changes_ = true;
+  return true;
 }
 
-void Scene::SetLogo(const unsigned char* image_data,
-                          size_t image_data_size,
-                          const glm::ivec2& screen_position) {
-  state_->logo = Logo(image_data, image_data_size, screen_position);
+bool Scene::AddFgImage(const unsigned char* image_data,
+                       size_t image_data_size,
+                       const glm::ivec2& screen_position) {
+  ForegroundImage fg(image_data,image_data_size,screen_position);
+  if (fg.IsEmpty())
+    return false;
+  state_->fg_image_ = fg;
+  state_->has_changes_ = true;
+  return true;
 }
 
 ScreenText* Scene::SetText(const std::string& text) {

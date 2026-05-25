@@ -54,6 +54,7 @@ SceneMdiSubWindow* MainWindow::CreateMdiSubWindow(const QString& scene_name) {
   updateWindowMenu();
   SceneWindow* scene_window = sub->GetSceneWindow();
   scene_window->Initialize(&vulkan_instance_, scene_name);
+  mdi_area_->setActiveSubWindow(sub);
   return sub;
 }
 
@@ -92,8 +93,9 @@ void MainWindow::initVulkan() {
   } else {
     QByteArray resource_data = resource_file.readAll();
     resource_file.close();
-    scene->SetLogo(reinterpret_cast<const unsigned char*>(resource_data.constData()),
-                      resource_data.size(), glm::ivec2(5,5));
+    scene->AddFgImage(
+        reinterpret_cast<const unsigned char*>(resource_data.constData()),
+        resource_data.size(), glm::ivec2(5,5));
   }
 
   auto sco = scene->SetText("Text rendering test");
@@ -106,7 +108,7 @@ void MainWindow::initVulkan() {
 void MainWindow::createActions() {
   this->createFileMenu();
   this->createViewMenu();
-  this->createWidgetMenu();
+  this->createSceneMenu();
   this->createWindowMenu();
 }
 
@@ -244,8 +246,8 @@ void MainWindow::createViewMenu() {
   }
 }
 
-void MainWindow::createWidgetMenu() {
-  QMenu* menu = menuBar()->addMenu(tr("&Widget"));
+void MainWindow::createSceneMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&Scene"));
 
   {
     QIcon icon;
@@ -253,6 +255,14 @@ void MainWindow::createWidgetMenu() {
                  QSize(), QIcon::Normal, QIcon::Off);
     QAction* act = new QAction(icon, tr("Add axis indicator"), this);
     connect(act, SIGNAL(triggered()), this, SLOT(onAddAxisIndicator()));
+    menu->addAction(act);
+  }
+  {
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-image-16.png"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Add foreground image"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onAddFgImage()));
     menu->addAction(act);
   }
 }
@@ -506,6 +516,26 @@ void MainWindow::onAddAxisIndicator() {
   scene->Clear();
   scene->AddObject<SceneWidget_AxisIndicator>();
   scene->FitScene();
+  app_->Update();
+}
+
+void MainWindow::onAddFgImage() {
+  // \warning Запрашиваем активное окно в начале. Если запросить после
+  // `QFileDialog::getOpenFileName`, то окно почему-то не инициализировано.
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  assert(active_sub != nullptr);
+  QString last_directory = settings_.value("MainWindow/lastForegroundImageDirectory",
+                                           QDir::homePath()).toString();
+  QString filename = QFileDialog::getOpenFileName(
+      this,
+      tr("Select foreground image file"),
+      last_directory);
+  if (filename.isEmpty()) return;
+  settings_.setValue("MainWindow/lastForegroundImageDirectory",
+                     QFileInfo(filename).absolutePath());
+  Scene* scene = active_sub->GetScene();
+  assert(scene != nullptr);
+  scene->AddFgImage(filename.toStdString(), glm::ivec2{5,5});
   app_->Update();
 }
 

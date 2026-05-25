@@ -4,7 +4,7 @@
 #include "numgeom/iterator.h"
 #include "numgeom/scene.h"
 
-class Logo;
+class ForegroundImage;
 class ScreenText;
 
 /** \class Scene::Inner
@@ -17,9 +17,9 @@ class Scene::Inner {
 
   ~Inner();
 
-  bool HasLogo() const;
+  bool HasFgImage() const;
 
-  const Logo& GetLogo() const;
+  const ForegroundImage& GetFgImage() const;
 
   bool HasScreenTexts() const;
 

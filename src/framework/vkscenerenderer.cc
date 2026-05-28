@@ -131,11 +131,6 @@ struct VulkanState {
 
 //! Ресурсы Vulkan для отрисовки изображения на переднем плане сцены.
 struct FgImageObjects {
-  VkBuffer buffer_logo_vertex = VK_NULL_HANDLE;
-  VmaAllocation alloc_logo_vertex = VK_NULL_HANDLE;
-  VkBuffer buffer_logo_index = VK_NULL_HANDLE;
-  VmaAllocation alloc_logo_index = VK_NULL_HANDLE;
-  uint32_t logo_index_count = 0;
   VkImage logo_image = VK_NULL_HANDLE;
   VmaAllocation alloc_logo_image = VK_NULL_HANDLE;
   VkImageView logo_image_view = VK_NULL_HANDLE;
@@ -143,9 +138,11 @@ struct FgImageObjects {
 
   bool operator!() const { return logo_image == VK_NULL_HANDLE; }
   void Release(VulkanState*);
-  void Render(VkCommandBuffer cmd_buf,VkPipeline image_pipeline) const;
+  void Render(VkCommandBuffer cmd_buf, VkPipeline image_pipeline,
+              VkPipelineLayout pipeline_layout,
+              const ForegroundImage& fg_image,
+              const VkExtent2D& image_extent) const;
   bool Initialize(const VulkanState*, const ForegroundImage&);
-  bool InitQuad(VulkanState*, const ForegroundImage&, const VkExtent2D&);
 };
 
 struct VulkanObjects {
@@ -437,10 +434,20 @@ bool CreateGraphicsPipeline(VulkanState* state) {
 
   // Создаем макет конвейера.
   std::array<VkDescriptorSetLayout, 1> descriptorSetLayouts{state->desc_layout};
+
+  // Push constant range for foreground image quad parameters
+  VkPushConstantRange push_constant_range{
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = 6 * sizeof(float),  // position (2) + size (2) + screenSize (2)
+  };
+
   VkPipelineLayoutCreateInfo ci_pipelineLayout{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
       .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
       .pSetLayouts = descriptorSetLayouts.data(),
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant_range,
   };
   r = vkCreatePipelineLayout(state->device, &ci_pipelineLayout, nullptr,
                              &state->pipeline_layout);
@@ -687,34 +694,9 @@ bool CreateFgImagePipeline(VulkanState* state) {
       },
   };
 
-  // Vertex input for image quad: position (vec2) and uv (vec2)
-  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
-      VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = 4 * sizeof(float), // position + uv
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-  };
-  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
-      VkVertexInputAttributeDescription{
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 1,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = 2 * sizeof(float)
-      },
-  };
-  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+  // No vertex buffers -- quad data is generated in the vertex shader
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state {
       .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
-      .pVertexBindingDescriptions = vertex_binding_descs.data(),
-      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
-      .pVertexAttributeDescriptions = vertex_attr_descs.data()
   };
 
   VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
@@ -1434,21 +1416,32 @@ bool RecreateSwapchain(VulkanObjects* vk_objects, VkExtent2D extent) {
 }
 
 void FgImageObjects::Render(VkCommandBuffer cmd_buf,
-                            VkPipeline image_pipeline) const {
+                            VkPipeline image_pipeline,
+                            VkPipelineLayout pipeline_layout,
+                            const ForegroundImage& fg_image,
+                            const VkExtent2D& image_extent) const {
   vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, image_pipeline);
-  // Descriptor set already bound (same as scene)
-  // Bind logo vertex buffer (binding 0)
-  VkBuffer logoVertexBuffer = buffer_logo_vertex;
-  VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(cmd_buf, 0, 1, &logoVertexBuffer, offsets);
-  // Bind logo index buffer
-  vkCmdBindIndexBuffer(cmd_buf, buffer_logo_index, 0,
-                       VK_INDEX_TYPE_UINT16);
-  // Viewport and scissor already set (same as scene)
-  vkCmdDrawIndexed(cmd_buf, logo_index_count, 1, 0, 0, 0);
+  struct PushConstants {
+    float pos_x, pos_y;
+    float size_x, size_y;
+    float screen_w, screen_h;
+  };
+  PushConstants pc = {
+      .pos_x = static_cast<float>(fg_image.position.x),
+      .pos_y = static_cast<float>(fg_image.position.y),
+      .size_x = static_cast<float>(fg_image.width),
+      .size_y = static_cast<float>(fg_image.height),
+      .screen_w = static_cast<float>(image_extent.width),
+      .screen_h = static_cast<float>(image_extent.height),
+  };
+  vkCmdPushConstants(cmd_buf, pipeline_layout,
+                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+  // Draw 6 vertices as 2 triangles.
+  vkCmdDraw(cmd_buf, 6, 1, 0, 0);
 }
 
-void Render(VulkanObjects* vk_objects, ImageResources& image, FrameResources& frame) {
+void Render(Scene* scene, VulkanObjects* vk_objects, ImageResources& image,
+            FrameResources& frame) {
   VulkanState* state = vk_objects->vk_state;
 
   // Пересоздаем командный буфер.
@@ -1527,8 +1520,13 @@ void Render(VulkanObjects* vk_objects, ImageResources& image, FrameResources& fr
   }
 
   // Draw foreground image if available
-  if (!!vk_objects->fg_image_objects)
-    vk_objects->fg_image_objects.Render(frame.cmd_buf, state->fgimage_pipeline);
+  if (!!vk_objects->fg_image_objects) {
+    auto scene_inner_if = scene->GetInnerInterface();
+    const ForegroundImage& fg_image = scene_inner_if->GetFgImage();
+    vk_objects->fg_image_objects.Render(frame.cmd_buf, state->fgimage_pipeline,
+                                        state->pipeline_layout, fg_image,
+                                        vk_objects->image_extent);
+  }
 
   // Draw text overlay if available
   if (state->text_pipeline != VK_NULL_HANDLE &&
@@ -2563,109 +2561,6 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
   return true;
 }
 
-bool FgImageObjects::InitQuad(VulkanState* state,
-                              const ForegroundImage& fg_image,
-                              const VkExtent2D& image_extent) {
-  BOOST_LOG_TRIVIAL(trace) << "Creating logo quad buffers...";
-
-  assert(image_extent.width != 0 && image_extent.height != 0);
-
-  // Convert screen coordinates to NDC
-  float x = static_cast<float>(fg_image.position.x);
-  float y = static_cast<float>(fg_image.position.y);
-  float w = static_cast<float>(fg_image.width);
-  float h = static_cast<float>(fg_image.height);
-  float screen_width = static_cast<float>(image_extent.width);
-  float screen_height = static_cast<float>(image_extent.height);
-
-  // NDC coordinates: `x=[-1,+1]` (from left to right),
-  //                  `y=[-1,+1]` (from top to bottom).
-  // Assuming logo position is top-left corner, Y down.
-  float left = (x * 2.0f / screen_width) - 1.0f;
-  float right = ((x + w) * 2.0f / screen_width) - 1.0f;
-  float top = (y * 2.0f / screen_height) - 1.0f;
-  float bottom = ((y + h) * 2.0f / screen_height) - 1.0f;
-
-  // Vertex data: position (x,y) and UV (u,v)
-  struct Vertex {
-    float x, y;
-    float u, v;
-  };
-  std::array<Vertex, 4> vertices = {{
-    {left,  top,    0.0f, 0.0f},
-    {right, top,    1.0f, 0.0f},
-    {right, bottom, 1.0f, 1.0f},
-    {left,  bottom, 0.0f, 1.0f},
-  }};
-
-  // Index data for two triangles
-  std::array<uint16_t, 6> indices = {0, 1, 2, 0, 2, 3};
-
-  // Destroy existing buffers if any
-  if (buffer_logo_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_logo_vertex, alloc_logo_vertex);
-    buffer_logo_vertex = VK_NULL_HANDLE;
-  }
-  if (buffer_logo_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_logo_index, alloc_logo_index);
-    buffer_logo_index = VK_NULL_HANDLE;
-  }
-
-  // Create vertex buffer
-  VkBufferCreateInfo vertexBufferInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(vertices),
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-  };
-  VmaAllocationCreateInfo vertexAllocInfo = {
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo,
-                               &vertexAllocInfo,
-                               &buffer_logo_vertex,
-                               &alloc_logo_vertex, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create logo vertex buffer: "
-                             << VkResultToString(r);
-    return false;
-  }
-
-  // Copy vertex data
-  void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, alloc_logo_vertex, &mapped_data);
-  memcpy(mapped_data, vertices.data(), sizeof(vertices));
-  vmaUnmapMemory(state->allocator, alloc_logo_vertex);
-
-  // Create index buffer
-  VkBufferCreateInfo indexBufferInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(indices),
-      .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-  };
-  VmaAllocationCreateInfo indexAllocInfo = {
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
-                      &buffer_logo_index,
-                      &alloc_logo_index, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create logo index buffer: "
-                             << VkResultToString(r);
-    vmaDestroyBuffer(state->allocator, buffer_logo_vertex, alloc_logo_vertex);
-    buffer_logo_vertex = VK_NULL_HANDLE;
-    return false;
-  }
-
-  // Copy index data
-  vmaMapMemory(state->allocator, alloc_logo_index, &mapped_data);
-  memcpy(mapped_data, indices.data(), sizeof(indices));
-  vmaUnmapMemory(state->allocator, alloc_logo_index);
-
-  logo_index_count = static_cast<uint32_t>(indices.size());
-  BOOST_LOG_TRIVIAL(trace) << "Logo quad buffers created, index count = "
-                           << logo_index_count;
-  return true;
-}
 
 bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
   BOOST_LOG_TRIVIAL(trace) << "Creating text quad buffers...";
@@ -2816,15 +2711,6 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
   vk_objects->text_index_count = static_cast<uint32_t>(indices.size());
   BOOST_LOG_TRIVIAL(trace) << "Text quad buffers created, index count = " << vk_objects->text_index_count;
   return true;
-}
-
-bool UpdateFgImageBuffers(Scene* scene, VulkanObjects* vk_objects) {
-  auto scene_inner_if = scene->GetInnerInterface();
-  if (!scene_inner_if->HasFgImage())
-    return true;
-  const ForegroundImage& image = scene_inner_if->GetFgImage();
-  return vk_objects->fg_image_objects.InitQuad(vk_objects->vk_state, image,
-                                               vk_objects->image_extent);
 }
 
 bool UpdateTextBuffers(Scene* scene, VulkanObjects* vk_objects) {
@@ -3111,11 +2997,6 @@ void UpdateScene(VulkanObjects* vk_objects, const Scene* scene) {
     const ForegroundImage& fg_image = scene_inner_if->GetFgImage();
     if (!vk_objects->fg_image_objects.Initialize(state,fg_image)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image resources, continuing without image";
-    } else {
-      if (!vk_objects->fg_image_objects.InitQuad(state,fg_image,vk_objects->image_extent)) {
-        BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image quad buffers, image will not be rendered";
-        // Cleanup logo resources? We'll keep them but skip rendering.
-      }
     }
   }
 }
@@ -3283,10 +3164,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
   if (vk_objects->image_extent.width != currentExtent.width ||
       vk_objects->image_extent.height != currentExtent.height) {
     if (!RecreateSwapchain(vk_objects,currentExtent)) return false;
-    // Update logo buffers for new window size
-    if (!UpdateFgImageBuffers(scene,vk_objects)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
-    }
     // Update text buffers for new window size
     if (!UpdateTextBuffers(scene,vk_objects)) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
@@ -3315,10 +3192,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
         return false;
       VkExtent2D extent(screen_size.x,screen_size.y);
       RecreateSwapchain(vk_objects, extent);
-      // Update logo buffers for new window size
-      if (!UpdateFgImageBuffers(scene,vk_objects)) {
-        BOOST_LOG_TRIVIAL(warning) << "Failed to update logo buffers after swapchain recreation";
-      }
       // Update text buffers for new window size
       if (!UpdateTextBuffers(scene,vk_objects)) {
         BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
@@ -3331,7 +3204,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
     // Рендеринг основной сцены.
     assert(index <= MAX_NUM_IMAGES);
     ImageResources& image = vk_objects->image_res[index];
-    Render(vk_objects, image, frame);
+    Render(scene, vk_objects, image, frame);
 
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
@@ -3354,17 +3227,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
 
 namespace {
 void FgImageObjects::Release(VulkanState* state) {
-  if (buffer_logo_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_logo_vertex,
-                     alloc_logo_vertex);
-    buffer_logo_vertex = VK_NULL_HANDLE;
-  }
-  if (buffer_logo_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_logo_index,
-                     alloc_logo_index);
-    buffer_logo_index = VK_NULL_HANDLE;
-  }
-
   // Cleanup logo resources
   if (logo_sampler != VK_NULL_HANDLE) {
     vkDestroySampler(state->device, logo_sampler, nullptr);

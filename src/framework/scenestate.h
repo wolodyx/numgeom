@@ -6,7 +6,7 @@
 #include "numgeom/scene.h"
 
 #include "camera.h"
-#include "foregroundimage.h"
+#include "fgimage.h"
 
 class ScreenText;
 
@@ -16,7 +16,7 @@ class Scene::State {
 
  public:
   std::string name_;
-  ForegroundImage fg_image_;
+  FgImage fg_image_;
   std::list<ScreenText*> screen_text_objects_;
   Camera camera_;
   std::list<SceneObject*> objects_;

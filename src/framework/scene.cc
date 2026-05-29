@@ -31,7 +31,7 @@ AlignedBoundBox Scene::GetBoundBox() const {
 }
 
 void Scene::Clear() {
-  if(state_->objects_.empty() && state_->screen_text_objects_.empty() && 
+  if(state_->objects_.empty() && state_->screen_text_objects_.empty() &&
      state_->fg_image_.IsEmpty())
     return;
   state_->has_changes_ = true;
@@ -41,7 +41,7 @@ void Scene::Clear() {
   for (ScreenText* o : state_->screen_text_objects_)
     delete o;
   state_->screen_text_objects_.clear();
-  state_->fg_image_ = ForegroundImage();
+  state_->fg_image_ = FgImage();
 }
 
 bool Scene::HasChanges() const {
@@ -123,25 +123,25 @@ void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>(
   state_->camera_.SetViewportSizeFunction(func);
 }
 
-bool Scene::AddFgImage(const std::string& image_filename,
-                       const glm::ivec2& screen_position) {
-  ForegroundImage fg(image_filename,screen_position);
+FgImage* Scene::AddFgImage(const std::string& image_filename,
+                           const glm::ivec2& screen_position) {
+  FgImage fg(image_filename,screen_position);
   if (fg.IsEmpty())
-    return false;
+    return nullptr;
   state_->fg_image_ = fg;
   state_->has_changes_ = true;
-  return true;
+  return &state_->fg_image_;
 }
 
-bool Scene::AddFgImage(const unsigned char* image_data,
-                       size_t image_data_size,
-                       const glm::ivec2& screen_position) {
-  ForegroundImage fg(image_data,image_data_size,screen_position);
+FgImage* Scene::AddFgImage(const unsigned char* image_data,
+                           size_t image_data_size,
+                           const glm::ivec2& screen_position) {
+  FgImage fg(image_data,image_data_size,screen_position);
   if (fg.IsEmpty())
-    return false;
+    return nullptr;
   state_->fg_image_ = fg;
   state_->has_changes_ = true;
-  return true;
+  return &state_->fg_image_;
 }
 
 ScreenText* Scene::AddFgText(const std::string& text) {

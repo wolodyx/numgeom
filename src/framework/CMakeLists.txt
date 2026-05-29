@@ -26,7 +26,7 @@ set(SOURCE_FILES
   drawable_cone.cc
   drawable_cylinder.cc
   drawable_sphere.cc
-  foregroundimage.cc        foregroundimage.h
+  fgimage.cc                fgimage.h
   scene.cc
   sceneinner.cc             sceneinner.h
   sceneiterators.cc         sceneiterators.h

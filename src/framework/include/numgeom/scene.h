@@ -11,6 +11,7 @@
 #include "numgeom/iterator.h"
 #include "numgeom/orthobasis.h"
 
+class FgImage;
 class SceneObject;
 class ScreenText;
 
@@ -58,17 +59,17 @@ class FRAMEWORK_EXPORT Scene {
   \param image_filename Имя файла с изображением.
   \param screen_position Позиция левого верхнего угла изображения на экране.
   */
-  bool AddFgImage(const std::string& image_filename,
-                  const glm::ivec2& screen_position);
+  FgImage* AddFgImage(const std::string& image_filename,
+                      const glm::ivec2& screen_position);
 
   /** \brief Наложение поверх сцены изображения.
   \param image_data Данные изображения (загруженного с файла).
   \param image_data_size Размер данных изображения.
   \param screen_position Позиция левого верхнего угла изображения на экране.
   */
-  bool AddFgImage(const unsigned char* image_data,
-                  size_t image_data_size,
-                  const glm::ivec2& screen_position);
+  FgImage* AddFgImage(const unsigned char* image_data,
+                      size_t image_data_size,
+                      const glm::ivec2& screen_position);
 
   //! Добавление текста на передний план сцены.
   ScreenText* AddFgText(const std::string& text);

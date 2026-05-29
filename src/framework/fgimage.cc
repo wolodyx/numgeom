@@ -1,12 +1,12 @@
-#include "foregroundimage.h"
+#include "fgimage.h"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-ForegroundImage::ForegroundImage() : width(0), height(0) {}
+FgImage::FgImage() : width(0), height(0) {}
 
-ForegroundImage::ForegroundImage(const std::filesystem::path& image_path,
-           const glm::ivec2& screen_position) {
+FgImage::FgImage(const std::filesystem::path& image_path,
+                 const glm::ivec2& screen_position) {
   int channels;
   unsigned char* pixels = stbi_load(image_path.string().c_str(), &this->width,
                                     &this->height, &channels, 4);
@@ -18,9 +18,8 @@ ForegroundImage::ForegroundImage(const std::filesystem::path& image_path,
   this->position = screen_position;
 }
 
-ForegroundImage::ForegroundImage(const unsigned char* image_data,
-           size_t image_data_size,
-           const glm::ivec2& screen_position) {
+FgImage::FgImage(const unsigned char* image_data, size_t image_data_size,
+                 const glm::ivec2& screen_position) {
   int width, height, channels;
   unsigned char* pixels = stbi_load_from_memory(
       image_data, static_cast<int>(image_data_size), &width, &height, &channels,
@@ -35,4 +34,4 @@ ForegroundImage::ForegroundImage(const unsigned char* image_data,
   this->position = screen_position;
 }
 
-bool ForegroundImage::operator!() const { return pixels.empty(); }
+bool FgImage::operator!() const { return pixels.empty(); }

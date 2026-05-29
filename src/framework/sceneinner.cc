@@ -12,7 +12,7 @@ Scene::Inner::~Inner() {}
 
 bool Scene::Inner::HasFgImage() const { return !!impl_->fg_image_; }
 
-const ForegroundImage& Scene::Inner::GetFgImage() const { return impl_->fg_image_; }
+const FgImage& Scene::Inner::GetFgImage() const { return impl_->fg_image_; }
 
 bool Scene::Inner::HasScreenTexts() const {
   return !impl_->screen_text_objects_.empty();

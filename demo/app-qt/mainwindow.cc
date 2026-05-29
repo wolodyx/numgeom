@@ -524,14 +524,14 @@ void MainWindow::onAddFgImage() {
   // `QFileDialog::getOpenFileName`, то окно почему-то не инициализировано.
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   assert(active_sub != nullptr);
-  QString last_directory = settings_.value("MainWindow/lastForegroundImageDirectory",
+  QString last_directory = settings_.value("MainWindow/lastFgImageDirectory",
                                            QDir::homePath()).toString();
   QString filename = QFileDialog::getOpenFileName(
       this,
       tr("Select foreground image file"),
       last_directory);
   if (filename.isEmpty()) return;
-  settings_.setValue("MainWindow/lastForegroundImageDirectory",
+  settings_.setValue("MainWindow/lastFgImageDirectory",
                      QFileInfo(filename).absolutePath());
   Scene* scene = active_sub->GetScene();
   assert(scene != nullptr);

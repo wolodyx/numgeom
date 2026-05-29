@@ -98,7 +98,7 @@ void MainWindow::initVulkan() {
         resource_data.size(), glm::ivec2(5,5));
   }
 
-  auto sco = scene->SetText("Text rendering test");
+  auto sco = scene->AddFgText("Text rendering test");
   sco->SetPosition(glm::ivec2(5,100));
 
   scene->FitScene();

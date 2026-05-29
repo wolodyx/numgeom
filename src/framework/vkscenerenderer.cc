@@ -145,6 +145,27 @@ struct FgImageObjects {
   bool Initialize(const VulkanState*, const ForegroundImage&);
 };
 
+//! Ресурсы для отображения текста на переднем плане сцены.
+struct FgTextObjects {
+  VkBuffer buffer_text_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_text_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_index = VK_NULL_HANDLE;
+  uint32_t text_index_count = 0;
+  VkImage text_image = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_image = VK_NULL_HANDLE;
+  VkImageView text_image_view = VK_NULL_HANDLE;
+  VkSampler text_sampler = VK_NULL_HANDLE;
+  VkBuffer buffer_text_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_text_color = VK_NULL_HANDLE;
+
+  bool operator!() const { return buffer_text_vertex == VK_NULL_HANDLE; }
+  bool Initialize(VulkanState*, const ScreenText*);
+  void Release(VulkanState*);
+  void Render(VkCommandBuffer cmd_buf, VkPipeline pipeline) const;
+  bool InitQuad(VulkanState*, const VkExtent2D&, const ScreenText*);
+};
+
 struct VulkanObjects {
   VulkanObjects(VulkanState* s) {
     vk_state = s;
@@ -184,22 +205,9 @@ struct VulkanObjects {
 
   uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
 
-  //! Ресурсы для отображения текста на переднем плане сцены.
-  //! \{
-  VkBuffer buffer_text_vertex = VK_NULL_HANDLE;
-  VmaAllocation alloc_text_vertex = VK_NULL_HANDLE;
-  VkBuffer buffer_text_index = VK_NULL_HANDLE;
-  VmaAllocation alloc_text_index = VK_NULL_HANDLE;
-  uint32_t text_index_count = 0;
-  VkImage text_image = VK_NULL_HANDLE;
-  VmaAllocation alloc_text_image = VK_NULL_HANDLE;
-  VkImageView text_image_view = VK_NULL_HANDLE;
-  VkSampler text_sampler = VK_NULL_HANDLE;
-  VkBuffer buffer_text_color = VK_NULL_HANDLE;
-  VmaAllocation alloc_text_color = VK_NULL_HANDLE;
-  //! \}
-
   FgImageObjects fg_image_objects;
+  const ScreenText* screen_text = nullptr;
+  FgTextObjects fg_text_objects;
 };
 
 //! Prototypes
@@ -1412,6 +1420,10 @@ bool RecreateSwapchain(VulkanObjects* vk_objects, VkExtent2D extent) {
     InitImage(vk_objects, &resources);
   }
 
+  if (vk_objects->screen_text) {
+    vk_objects->fg_text_objects.InitQuad(state, extent, vk_objects->screen_text);
+  }
+
   return true;
 }
 
@@ -1529,22 +1541,8 @@ void Render(Scene* scene, VulkanObjects* vk_objects, ImageResources& image,
   }
 
   // Draw text overlay if available
-  if (state->text_pipeline != VK_NULL_HANDLE &&
-      vk_objects->buffer_text_vertex != VK_NULL_HANDLE &&
-      vk_objects->buffer_text_index != VK_NULL_HANDLE &&
-      vk_objects->text_index_count > 0) {
-    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      state->text_pipeline);
-    // Descriptor set already bound (same as scene, includes text texture and color)
-    // Bind text vertex buffer (binding 0)
-    VkBuffer textVertexBuffer = vk_objects->buffer_text_vertex;
-    VkDeviceSize offsets[] = {0};
-    vkCmdBindVertexBuffers(frame.cmd_buf, 0, 1, &textVertexBuffer, offsets);
-    // Bind text index buffer
-    vkCmdBindIndexBuffer(frame.cmd_buf, vk_objects->buffer_text_index, 0,
-                         VK_INDEX_TYPE_UINT16);
-    // Viewport and scissor already set (same as scene)
-    vkCmdDrawIndexed(frame.cmd_buf, vk_objects->text_index_count, 1, 0, 0, 0);
+  if (!!vk_objects->fg_text_objects) {
+    vk_objects->fg_text_objects.Render(frame.cmd_buf, state->text_pipeline);
   }
 
   vkCmdEndRenderPass(frame.cmd_buf);
@@ -2284,9 +2282,8 @@ bool FgImageObjects::Initialize(const VulkanState* state,
   return true;
 }
 
-bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
+bool FgTextObjects::Initialize(VulkanState* state, const ScreenText* text) {
   BOOST_LOG_TRIVIAL(trace) << "Creating text resources...";
-  VulkanState* state = vk_objects->vk_state;
   assert(text != nullptr);
   auto text_internal_if = text->GetInnerInterface();
 
@@ -2340,7 +2337,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
       .usage = VMA_MEMORY_USAGE_GPU_ONLY,
   };
   r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
-                     &vk_objects->text_image, &vk_objects->alloc_text_image, nullptr);
+                     &text_image, &alloc_text_image, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text image: "
                              << VkResultToString(r);
@@ -2359,7 +2356,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for text: "
                              << VkResultToString(r);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2376,7 +2373,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
     BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for text: "
                              << VkResultToString(r);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2397,7 +2394,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
       .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
       .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
       .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = vk_objects->text_image,
+      .image = text_image,
       .subresourceRange = {
           .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
           .baseMipLevel = 0,
@@ -2425,7 +2422,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
       .imageExtent = {static_cast<uint32_t>(atlas_size.x),
                       static_cast<uint32_t>(atlas_size.y), 1},
   };
-  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, vk_objects->text_image,
+  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, text_image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
 
   // Transition image layout for shader reading
@@ -2451,7 +2448,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2463,7 +2460,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
   }
@@ -2476,7 +2473,7 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
   // Create image view
   VkImageViewCreateInfo view_info = {
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = vk_objects->text_image,
+      .image = text_image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
       .format = VK_FORMAT_R8_UNORM,
       .components = {
@@ -2493,11 +2490,11 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
           .layerCount = 1,
       },
   };
-  r = vkCreateImageView(state->device, &view_info, nullptr, &vk_objects->text_image_view);
+  r = vkCreateImageView(state->device, &view_info, nullptr, &text_image_view);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text image view: "
                              << VkResultToString(r);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     return false;
   }
 
@@ -2520,12 +2517,12 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
       .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
       .unnormalizedCoordinates = VK_FALSE,
   };
-  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &vk_objects->text_sampler);
+  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &text_sampler);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text sampler: "
                              << VkResultToString(r);
-    vkDestroyImageView(state->device, vk_objects->text_image_view, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vkDestroyImageView(state->device, text_image_view, nullptr);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     return false;
   }
 
@@ -2540,33 +2537,45 @@ bool CreateTextResources(VulkanObjects* vk_objects, const ScreenText* text) {
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
   };
   r = vmaCreateBuffer(state->allocator, &color_buffer_ci, &color_alloc_ci,
-                      &vk_objects->buffer_text_color, &vk_objects->alloc_text_color, nullptr);
+                      &buffer_text_color, &alloc_text_color, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text color uniform buffer: "
                              << VkResultToString(r);
-    vkDestroySampler(state->device, vk_objects->text_sampler, nullptr);
-    vkDestroyImageView(state->device, vk_objects->text_image_view, nullptr);
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
+    vkDestroySampler(state->device, text_sampler, nullptr);
+    vkDestroyImageView(state->device, text_image_view, nullptr);
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
     return false;
   }
 
   // Update color buffer with initial color
   void* color_mapped = nullptr;
-  vmaMapMemory(state->allocator, vk_objects->alloc_text_color, &color_mapped);
+  vmaMapMemory(state->allocator, alloc_text_color, &color_mapped);
   glm::vec4 color = text_internal_if->GetColor();
   memcpy(color_mapped, &color, sizeof(glm::vec4));
-  vmaUnmapMemory(state->allocator, vk_objects->alloc_text_color);
+  vmaUnmapMemory(state->allocator, alloc_text_color);
 
   BOOST_LOG_TRIVIAL(trace) << "Text resources created successfully";
   return true;
 }
 
+void FgTextObjects::Render(VkCommandBuffer cmd_buf, VkPipeline pipeline) const {
+  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+  // Descriptor set already bound (same as scene, includes text texture and color)
+  // Bind text vertex buffer (binding 0)
+  VkDeviceSize offsets[] = {0};
+  vkCmdBindVertexBuffers(cmd_buf, 0, 1, &buffer_text_vertex, offsets);
+  // Bind text index buffer
+  vkCmdBindIndexBuffer(cmd_buf, buffer_text_index, 0,
+                        VK_INDEX_TYPE_UINT16);
+  // Viewport and scissor already set (same as scene)
+  vkCmdDrawIndexed(cmd_buf, text_index_count, 1, 0, 0, 0);
+}
 
-bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
+bool FgTextObjects::InitQuad(VulkanState* state, const VkExtent2D& image_extent,
+                             const ScreenText* text) {
   BOOST_LOG_TRIVIAL(trace) << "Creating text quad buffers...";
-  VulkanState* state = vk_objects->vk_state;
 
-  if (vk_objects->image_extent.width == 0 || vk_objects->image_extent.height == 0) {
+  if (image_extent.width == 0 || image_extent.height == 0) {
     BOOST_LOG_TRIVIAL(warning) << "Invalid image extent, skipping text quad buffer creation";
     return false;
   }
@@ -2578,8 +2587,8 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
   auto text_inner_if = text->GetInnerInterface();
 
   // Convert screen coordinates to NDC
-  float screen_width = static_cast<float>(vk_objects->image_extent.width);
-  float screen_height = static_cast<float>(vk_objects->image_extent.height);
+  float screen_width = static_cast<float>(image_extent.width);
+  float screen_height = static_cast<float>(image_extent.height);
 
   // Vertex data: position (x,y) and UV (u,v)
   struct Vertex {
@@ -2652,13 +2661,13 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
   }
 
   // Destroy existing buffers if any
-  if (vk_objects->buffer_text_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_vertex, vk_objects->alloc_text_vertex);
-    vk_objects->buffer_text_vertex = VK_NULL_HANDLE;
+  if (buffer_text_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_text_vertex, alloc_text_vertex);
+    buffer_text_vertex = VK_NULL_HANDLE;
   }
-  if (vk_objects->buffer_text_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_index, vk_objects->alloc_text_index);
-    vk_objects->buffer_text_index = VK_NULL_HANDLE;
+  if (buffer_text_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_text_index, alloc_text_index);
+    buffer_text_index = VK_NULL_HANDLE;
   }
 
   // Create vertex buffer
@@ -2671,7 +2680,7 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
   };
   VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo, &vertexAllocInfo,
-                               &vk_objects->buffer_text_vertex, &vk_objects->alloc_text_vertex, nullptr);
+                               &buffer_text_vertex, &alloc_text_vertex, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text vertex buffer: "
                              << VkResultToString(r);
@@ -2680,9 +2689,9 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
 
   // Copy vertex data
   void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, vk_objects->alloc_text_vertex, &mapped_data);
+  vmaMapMemory(state->allocator, alloc_text_vertex, &mapped_data);
   memcpy(mapped_data, vertices.data(), vertices.size() * sizeof(Vertex));
-  vmaUnmapMemory(state->allocator, vk_objects->alloc_text_vertex);
+  vmaUnmapMemory(state->allocator, alloc_text_vertex);
 
   // Create index buffer
   VkBufferCreateInfo indexBufferInfo = {
@@ -2694,31 +2703,53 @@ bool CreateTextQuadBuffers(VulkanObjects* vk_objects, const ScreenText* text) {
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
   };
   r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
-                      &vk_objects->buffer_text_index, &vk_objects->alloc_text_index, nullptr);
+                      &buffer_text_index, &alloc_text_index, nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create text index buffer: "
                              << VkResultToString(r);
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_vertex, vk_objects->alloc_text_vertex);
-    vk_objects->buffer_text_vertex = VK_NULL_HANDLE;
+    vmaDestroyBuffer(state->allocator, buffer_text_vertex, alloc_text_vertex);
+    buffer_text_vertex = VK_NULL_HANDLE;
     return false;
   }
 
   // Copy index data
-  vmaMapMemory(state->allocator, vk_objects->alloc_text_index, &mapped_data);
+  vmaMapMemory(state->allocator, alloc_text_index, &mapped_data);
   memcpy(mapped_data, indices.data(), indices.size() * sizeof(uint16_t));
-  vmaUnmapMemory(state->allocator, vk_objects->alloc_text_index);
+  vmaUnmapMemory(state->allocator, alloc_text_index);
 
-  vk_objects->text_index_count = static_cast<uint32_t>(indices.size());
-  BOOST_LOG_TRIVIAL(trace) << "Text quad buffers created, index count = " << vk_objects->text_index_count;
+  text_index_count = static_cast<uint32_t>(indices.size());
+  BOOST_LOG_TRIVIAL(trace) << "Text quad buffers created, index count = " << text_index_count;
   return true;
 }
 
-bool UpdateTextBuffers(Scene* scene, VulkanObjects* vk_objects) {
-  auto scene_inner_if = scene->GetInnerInterface();
-  if (!scene_inner_if->HasScreenTexts())
-    return true;
-  const ScreenText* text = *scene_inner_if->GetScreenTextObjects();
-  return CreateTextQuadBuffers(vk_objects, text);
+void FgTextObjects::Release(VulkanState* state) {
+  if (buffer_text_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_text_vertex, alloc_text_vertex);
+    buffer_text_vertex = VK_NULL_HANDLE;
+  }
+  if (buffer_text_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_text_index, alloc_text_index);
+    buffer_text_index = VK_NULL_HANDLE;
+  }
+
+  // Cleanup text resources
+  if (text_sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(state->device, text_sampler, nullptr);
+    text_sampler = VK_NULL_HANDLE;
+  }
+  if (text_image_view != VK_NULL_HANDLE) {
+    vkDestroyImageView(state->device, text_image_view, nullptr);
+    text_image_view = VK_NULL_HANDLE;
+  }
+  if (text_image != VK_NULL_HANDLE) {
+    vmaDestroyImage(state->allocator, text_image, alloc_text_image);
+    text_image = VK_NULL_HANDLE;
+    alloc_text_image = VK_NULL_HANDLE;
+  }
+  if (buffer_text_color != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(state->allocator, buffer_text_color, alloc_text_color);
+    buffer_text_color = VK_NULL_HANDLE;
+  }
 }
 
 bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
@@ -2756,6 +2787,7 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
 
   if (!CreateGraphicsPipeline(state)) return false;
   if (!CreateFgImagePipeline(state)) return false;
+  if (!CreateTextPipeline(state)) return false;
 
   VkCommandPoolCreateInfo ci_commandpool{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2784,24 +2816,6 @@ VulkanObjects* InitializeVulkanObjects(VulkanState* vk_state,
     return nullptr;
 
   VkResult r;
-  auto scene_inner_if = scene->GetInnerInterface();
-
-  // Create text resources
-  if (scene_inner_if->HasScreenTexts()) {
-    const ScreenText* text = *scene_inner_if->GetScreenTextObjects();
-    if (!CreateTextResources(&vk_objects,text)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to create text resources, continuing without text";
-    } else {
-      // Create quad buffers for text rendering
-      if (!CreateTextQuadBuffers(&vk_objects,text)) {
-        BOOST_LOG_TRIVIAL(warning) << "Failed to create text quad buffers, text will not be rendered";
-        // Cleanup text resources? We'll keep them but skip rendering.
-      }
-    }
-    if (!CreateTextPipeline(vk_state)) {
-      BOOST_LOG_TRIVIAL(fatal) << "Failed to create text pipeline";
-    }
-  }
 
   // Создаем объект пула дескрипторов.
   // Need descriptors for:
@@ -2999,6 +3013,16 @@ void UpdateScene(VulkanObjects* vk_objects, const Scene* scene) {
       BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image resources, continuing without image";
     }
   }
+
+  vk_objects->fg_text_objects.Release(state);
+  vk_objects->screen_text = nullptr;
+  if (scene_inner_if->HasScreenTexts()) {
+    const ScreenText* text = *(scene_inner_if->GetScreenTextObjects());
+    vk_objects->screen_text = text;
+    if (!vk_objects->fg_text_objects.Initialize(state,text)) {
+      BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground text resources, continuing without text";
+    }
+  }
 }
 
 void UpdateDescriptorSets(Scene* scene, VulkanObjects* vk_objects) {
@@ -3089,10 +3113,10 @@ void UpdateDescriptorSets(Scene* scene, VulkanObjects* vk_objects) {
   }
 
   // Add combined image sampler for text if available
-  if (vk_objects->text_image_view != VK_NULL_HANDLE && vk_objects->text_sampler != VK_NULL_HANDLE) {
+  if (vk_objects->fg_text_objects.text_image_view != VK_NULL_HANDLE && vk_objects->fg_text_objects.text_sampler != VK_NULL_HANDLE) {
     VkDescriptorImageInfo imageInfo{
-        .sampler = vk_objects->text_sampler,
-        .imageView = vk_objects->text_image_view,
+        .sampler = vk_objects->fg_text_objects.text_sampler,
+        .imageView = vk_objects->fg_text_objects.text_image_view,
         .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
     };
     descWrites.push_back(VkWriteDescriptorSet{
@@ -3106,9 +3130,9 @@ void UpdateDescriptorSets(Scene* scene, VulkanObjects* vk_objects) {
   }
 
   // Add uniform buffer for text color if available
-  if (vk_objects->buffer_text_color != VK_NULL_HANDLE) {
+  if (vk_objects->fg_text_objects.buffer_text_color != VK_NULL_HANDLE) {
     VkDescriptorBufferInfo bufferInfo{
-        .buffer = vk_objects->buffer_text_color,
+        .buffer = vk_objects->fg_text_objects.buffer_text_color,
         .offset = 0,
         .range = sizeof(glm::vec4),
     };
@@ -3164,10 +3188,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
   if (vk_objects->image_extent.width != currentExtent.width ||
       vk_objects->image_extent.height != currentExtent.height) {
     if (!RecreateSwapchain(vk_objects,currentExtent)) return false;
-    // Update text buffers for new window size
-    if (!UpdateTextBuffers(scene,vk_objects)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
-    }
   }
 
   FrameResources& frame = vk_objects->frame_res[vk_objects->current_frame_index];
@@ -3192,10 +3212,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
         return false;
       VkExtent2D extent(screen_size.x,screen_size.y);
       RecreateSwapchain(vk_objects, extent);
-      // Update text buffers for new window size
-      if (!UpdateTextBuffers(scene,vk_objects)) {
-        BOOST_LOG_TRIVIAL(warning) << "Failed to update text buffers after swapchain recreation";
-      }
       continue;
     }
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
@@ -3273,35 +3289,7 @@ void VkSceneRenderer::Finalize(Scene* scene) {
 
   // Cleanup fgimage quad buffers
   vk_objects->fg_image_objects.Release(state);
-
-  // Cleanup text quad buffers
-  if (vk_objects->buffer_text_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_vertex, vk_objects->alloc_text_vertex);
-    vk_objects->buffer_text_vertex = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_text_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_index, vk_objects->alloc_text_index);
-    vk_objects->buffer_text_index = VK_NULL_HANDLE;
-  }
-
-  // Cleanup text resources
-  if (vk_objects->text_sampler != VK_NULL_HANDLE) {
-    vkDestroySampler(state->device, vk_objects->text_sampler, nullptr);
-    vk_objects->text_sampler = VK_NULL_HANDLE;
-  }
-  if (vk_objects->text_image_view != VK_NULL_HANDLE) {
-    vkDestroyImageView(state->device, vk_objects->text_image_view, nullptr);
-    vk_objects->text_image_view = VK_NULL_HANDLE;
-  }
-  if (vk_objects->text_image != VK_NULL_HANDLE) {
-    vmaDestroyImage(state->allocator, vk_objects->text_image, vk_objects->alloc_text_image);
-    vk_objects->text_image = VK_NULL_HANDLE;
-    vk_objects->alloc_text_image = VK_NULL_HANDLE;
-  }
-  if (vk_objects->buffer_text_color != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, vk_objects->buffer_text_color, vk_objects->alloc_text_color);
-    vk_objects->buffer_text_color = VK_NULL_HANDLE;
-  }
+  vk_objects->fg_text_objects.Release(state);
 
   if (!vk_objects->is_external_surface)
     vkDestroySurfaceKHR(state->instance, vk_objects->surface, nullptr);

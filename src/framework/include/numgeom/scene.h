@@ -71,8 +71,12 @@ class FRAMEWORK_EXPORT Scene {
                   const glm::ivec2& screen_position);
 
   //! Добавление текста на передний план сцены.
-  ScreenText* SetText(const std::string& text);
+  ScreenText* AddFgText(const std::string& text);
 
+  //! Удаляем текст на переднем плане со сцены.
+  bool Remove(const ScreenText*);
+
+  //! Очищаем сцену от всех рисуемых объектов.
   void Clear();
 
   //! Добавление в сцену объекта по заданному типу и аргументам конструирования.

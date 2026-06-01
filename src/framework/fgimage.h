@@ -7,13 +7,9 @@
 
 class FgImage {
  public:
-  FgImage();
+  FgImage(const std::filesystem::path& image_path);
 
-  FgImage(const std::filesystem::path& image_path,
-          const glm::ivec2& screen_position = glm::ivec2(0,0));
-
-  FgImage(const unsigned char* image_data, size_t image_data_size,
-          const glm::ivec2& screen_position = glm::ivec2(0,0));
+  FgImage(const unsigned char* image_data, size_t image_data_size);
 
   bool operator!() const;
   bool IsEmpty() const { return this->operator!(); }
@@ -22,7 +18,6 @@ class FgImage {
   std::vector<unsigned char> pixels;
   int width = 0;
   int height = 0;
-  glm::ivec2 position{0, 0};
 };
 
 #endif // !NUMGEOM_FRAMEWORK_FGIMAGE_H

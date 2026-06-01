@@ -51,6 +51,29 @@ private:
   map_const_iterator m_it, m_itEnd;
 };
 
+template<typename KeyType, typename ValueType>
+class IteratorImpl_StdMapKey : public IteratorImpl<KeyType>
+{
+public:
+  typedef typename std::map<KeyType,ValueType>::const_iterator map_const_iterator;
+  typedef KeyType value_type;
+
+public:
+  IteratorImpl_StdMapKey(
+      const map_const_iterator& itBeg,
+      const map_const_iterator& itEnd);
+  virtual ~IteratorImpl_StdMapKey();
+  void advance() override;
+  value_type current() const override;
+  IteratorImpl<value_type>* clone() const override;
+  IteratorImpl<value_type>* last() const override;
+  bool end() const override;
+  bool equals(const IteratorImpl<value_type>& other) const override;
+
+private:
+  map_const_iterator m_it, m_itEnd;
+};
+
 template<typename T>
 struct NonTransformFunctor {
   typedef T out_value_type;

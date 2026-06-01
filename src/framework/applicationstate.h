@@ -1,6 +1,7 @@
 #ifndef NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H
 #define NUMGEOM_FRAMEWORK_APPLICATIONSTATE_H
 
+#include <list>
 #include <map>
 
 #include "numgeom/application.h"
@@ -18,6 +19,8 @@ class Application::State {
   std::map<std::string,Scene*> scenes_;
   std::map<Scene*,Scene*> foreground2background_;
   Scene* active_scene_ = nullptr;
+  std::list<FgImage*> fg_images_;
+  std::list<ScreenText*> screen_texts_;
   VkSceneRenderer* renderer_ = nullptr;
   Inner* inner_interface_ = nullptr;
 };

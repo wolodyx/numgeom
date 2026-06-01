@@ -52,7 +52,7 @@
 
 namespace {
 ;
-struct ImageResources {
+struct ImageState {
   //! Изображение для показа.
   VkImage image = VK_NULL_HANDLE;
 
@@ -69,11 +69,14 @@ struct ImageResources {
   //! Фреймбуфер.
   VkFramebuffer frame_buffer = VK_NULL_HANDLE;
 
+  //! Фреймбуфер для композитинга (только цветовой аттачмент, без MSAA/depth).
+  VkFramebuffer composite_frame_buffer = VK_NULL_HANDLE;
+
   //! https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
   VkSemaphore submit_semaphore = VK_NULL_HANDLE;
 };
 
-struct FrameResources {
+struct FrameState {
   VkDescriptorSet desc_set = VK_NULL_HANDLE;
   VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
   VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
@@ -118,11 +121,12 @@ struct VulkanState {
   uint32_t frame_count = MAX_NUM_FRAMES;
 
   VkRenderPass renderpass = VK_NULL_HANDLE;
+  VkRenderPass composite_renderpass = VK_NULL_HANDLE;
 
   VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
   VkPipeline pipeline = VK_NULL_HANDLE;
   VkPipeline text_pipeline = VK_NULL_HANDLE;
-  VkPipeline fgimage_pipeline = VK_NULL_HANDLE;
+  VkPipeline composite_pipeline = VK_NULL_HANDLE;
 
   VkCommandPool cmd_pool = VK_NULL_HANDLE;
   VkDescriptorSetLayout desc_layout = VK_NULL_HANDLE;
@@ -138,11 +142,11 @@ struct FgImageResources {
 
   bool operator!() const { return image == VK_NULL_HANDLE; }
   void Release(VulkanState*);
-  void Render(VkCommandBuffer cmd_buf, VkPipeline image_pipeline,
-              VkPipelineLayout pipeline_layout,
-              const FgImage& fg_image,
-              const VkExtent2D& image_extent) const;
-  bool Initialize(const VulkanState*, const FgImage&);
+  //void Render(VkCommandBuffer cmd_buf, VkPipeline image_pipeline,
+  //            VkPipelineLayout pipeline_layout,
+  //            const FgImage* fg_image,
+  //            const VkExtent2D& image_extent) const;
+  bool Initialize(const VulkanState*, const FgImage*);
 };
 
 //! Ресурсы для отображения текста на переднем плане сцены.
@@ -176,14 +180,14 @@ struct SceneResources {
   VkSurfaceKHR surface = VK_NULL_HANDLE;
   bool is_external_surface = false;
 
-  std::array<FrameResources, MAX_NUM_FRAMES> frame_res;
+  std::array<FrameState, MAX_NUM_FRAMES> frames_state;
   size_t current_frame_index = 0;
   bool stop_rendering = true; //!< Признак остановки рендеринга.
 
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   uint32_t image_count = 0;
   VkExtent2D image_extent;
-  std::array<ImageResources, MAX_NUM_IMAGES> image_res;
+  std::array<ImageState, MAX_NUM_IMAGES> images_state;
   VkImage depth_stencil_image = VK_NULL_HANDLE;
   VkDeviceMemory depth_stencil_mem = VK_NULL_HANDLE;
   VkImageView depth_stencil_view = VK_NULL_HANDLE;
@@ -225,8 +229,10 @@ struct VkSceneRenderer::Impl {
   };
   Xcb xcb;
 #endif
-  VulkanState vulkanState;
+  VulkanState vk_global_state;
   std::map<Scene*, SceneResources*> scenes_vulkan_objects;
+  std::map<const FgImage*, FgImageResources*> fg_images_resources;
+  std::map<const ScreenText*, FgTextResources*> fg_texts_resources;
 };
 
 VkSceneRenderer::VkSceneRenderer(Application* app) {
@@ -236,7 +242,7 @@ VkSceneRenderer::VkSceneRenderer(Application* app) {
       .app = app,
   };
 
-  if (!InitInstance(&impl_->vulkanState)) return;
+  if (!InitInstance(&impl_->vk_global_state)) return;
 }
 
 namespace
@@ -244,9 +250,9 @@ namespace
 void Finalize(VulkanState* state) {
   vkDestroyPipeline(state->device, state->pipeline, nullptr);
   state->pipeline = VK_NULL_HANDLE;
-  if (state->fgimage_pipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(state->device, state->fgimage_pipeline, nullptr);
-    state->fgimage_pipeline = VK_NULL_HANDLE;
+  if (state->composite_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->composite_pipeline, nullptr);
+    state->composite_pipeline = VK_NULL_HANDLE;
   }
 
   vkDestroyPipelineLayout(state->device,state->pipeline_layout,nullptr);
@@ -255,6 +261,11 @@ void Finalize(VulkanState* state) {
 
   vkDestroyRenderPass(state->device,state->renderpass,nullptr);
   state->renderpass = VK_NULL_HANDLE;
+
+  if (state->composite_renderpass != VK_NULL_HANDLE) {
+    vkDestroyRenderPass(state->device, state->composite_renderpass, nullptr);
+    state->composite_renderpass = VK_NULL_HANDLE;
+  }
 
   vkDestroyCommandPool(state->device,state->cmd_pool,nullptr);
   state->cmd_pool = VK_NULL_HANDLE;
@@ -275,7 +286,7 @@ void Finalize(VulkanState* state) {
 }
 
 VkSceneRenderer::~VkSceneRenderer() {
-  ::Finalize(&impl_->vulkanState);
+  ::Finalize(&impl_->vk_global_state);
   delete impl_;
 }
 
@@ -387,6 +398,218 @@ bool CreateRenderPass(VulkanState* state) {
   }
   BOOST_LOG_TRIVIAL(trace) << std::format(
       "Renderpass {} is created.", static_cast<void*>(state->renderpass));
+  return true;
+}
+
+bool CreateCompositeRenderPass(VulkanState* state) {
+  // Single color attachment, no depth/stencil, no multisampling.
+  // LoadOp = LOAD to preserve the already-rendered scene.
+  VkAttachmentDescription color_attachment = {
+      .format = state->image_format,
+      .samples = VK_SAMPLE_COUNT_1_BIT,
+      .loadOp = VK_ATTACHMENT_LOAD_OP_LOAD,
+      .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+      .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+      .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+      .initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+      .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+  };
+
+  VkAttachmentReference color_attachment_ref = {
+      .attachment = 0,
+      .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+  };
+
+  VkSubpassDescription subpass = {
+      .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
+      .colorAttachmentCount = 1,
+      .pColorAttachments = &color_attachment_ref,
+  };
+
+  VkRenderPassCreateInfo ci_renderpass = {
+      .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+      .attachmentCount = 1,
+      .pAttachments = &color_attachment,
+      .subpassCount = 1,
+      .pSubpasses = &subpass,
+  };
+
+  VkResult r = vkCreateRenderPass(state->device, &ci_renderpass, nullptr,
+                                  &state->composite_renderpass);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Composite render pass creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  if (state->composite_renderpass == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Composite render pass creation error.";
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format(
+      "Composite render pass {} is created.",
+      static_cast<void*>(state->composite_renderpass));
+  return true;
+}
+
+bool CreateCompositePipeline(VulkanState* state) {
+  VkResult r;
+
+  // Shader modules are the same as fgimage pipeline.
+  static uint32_t vs_spirv_source[] = {
+#include "fgimage.vert.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_vs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(vs_spirv_source),
+      .pCode = (uint32_t*)vs_spirv_source,
+  };
+  VkShaderModule vs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Composite vertex shader creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  static uint32_t fs_spirv_source[] = {
+#include "fgimage.frag.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_fs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(fs_spirv_source),
+      .pCode = (uint32_t*)fs_spirv_source,
+  };
+  VkShaderModule fs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Composite fragment shader creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    return false;
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT,
+          .module = vs_module,
+          .pName = "main",
+      },
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .module = fs_module,
+          .pName = "main",
+      },
+  };
+
+  // No vertex buffers -- quad data is generated in the vertex shader
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+      .primitiveRestartEnable = false,
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_NONE,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  // Composite pipeline always uses VK_SAMPLE_COUNT_1_BIT
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
+  };
+
+  // Disable depth test for overlay
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_FALSE,
+      .depthWriteEnable = VK_FALSE,
+      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
+  };
+
+  // Alpha blending
+  VkPipelineColorBlendAttachmentState attachment_state = {
+      .blendEnable = VK_TRUE,
+      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
+      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
+      .colorBlendOp = VK_BLEND_OP_ADD,
+      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
+      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+      .alphaBlendOp = VK_BLEND_OP_ADD,
+      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+  };
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = 1,
+      .pAttachments = &attachment_state,
+  };
+
+  VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(ci_stages.size()),
+      .pStages = ci_stages.data(),
+      .pVertexInputState = &ci_vertex_input_state,
+      .pInputAssemblyState = &ci_input_assembly_state,
+      .pViewportState = &ci_viewport_state,
+      .pRasterizationState = &ci_rasterization_state,
+      .pMultisampleState = &ci_multisample_state,
+      .pDepthStencilState = &ci_depth_stencil_state,
+      .pColorBlendState = &ci_color_blend_state,
+      .pDynamicState = &ci_pipeline_dynamic_state,
+      .layout = state->pipeline_layout,
+      .renderPass = state->composite_renderpass,
+      .subpass = 0,
+  }};
+  VkPipeline pipelines[] = {VK_NULL_HANDLE};
+  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                nullptr, pipelines);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Composite graphics pipeline creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    return false;
+  }
+  state->composite_pipeline = pipelines[0];
+
+  vkDestroyShaderModule(state->device, vs_module, nullptr);
+  vkDestroyShaderModule(state->device, fs_module, nullptr);
+
+  if (state->composite_pipeline == VK_NULL_HANDLE) {
+    BOOST_LOG_TRIVIAL(trace) << "Composite graphics pipeline creation error.";
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format("Composite graphics pipeline {} is created.",
+                                          static_cast<void*>(state->composite_pipeline));
   return true;
 }
 
@@ -650,166 +873,6 @@ bool CreateGraphicsPipeline(VulkanState* state) {
   return true;
 }
 
-bool CreateFgImagePipeline(VulkanState* state) {
-  VkResult r;
-
-  // Подготавливаем шейдерные модули для логотипа.
-  static uint32_t vs_spirv_source[] = {
-#include "fgimage.vert.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_vs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(vs_spirv_source),
-      .pCode = (uint32_t*)vs_spirv_source,
-  };
-  VkShaderModule vs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground image vertex shader creation error ({}).", VkResultToString(r));
-    return false;
-  }
-
-  static uint32_t fs_spirv_source[] = {
-#include "fgimage.frag.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_fs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(fs_spirv_source),
-      .pCode = (uint32_t*)fs_spirv_source,
-  };
-  VkShaderModule fs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground image fragment shader creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    return false;
-  }
-
-  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = vs_module,
-          .pName = "main",
-      },
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = fs_module,
-          .pName = "main",
-      },
-  };
-
-  // No vertex buffers -- quad data is generated in the vertex shader
-  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-  };
-
-  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = false,
-  };
-
-  VkPipelineViewportStateCreateInfo ci_viewport_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
-  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .rasterizerDiscardEnable = false,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_NONE, // no culling for 2D quad
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .lineWidth = 1.0f,
-  };
-
-  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = state->sample_count,
-  };
-
-  // Disable depth test for overlay
-  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_FALSE,
-      .depthWriteEnable = VK_FALSE,
-      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
-  };
-
-  // Alpha blending
-  VkPipelineColorBlendAttachmentState attachment_state = {
-      .blendEnable = VK_TRUE,
-      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-      .colorBlendOp = VK_BLEND_OP_ADD,
-      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-      .alphaBlendOp = VK_BLEND_OP_ADD,
-      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
-                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
-  };
-  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .attachmentCount = 1,
-      .pAttachments = &attachment_state,
-  };
-
-  VkDynamicState dynamic_states[] = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = 2,
-      .pDynamicStates = dynamic_states,
-  };
-
-  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = static_cast<uint32_t>(ci_stages.size()),
-      .pStages = ci_stages.data(),
-      .pVertexInputState = &ci_vertex_input_state,
-      .pInputAssemblyState = &ci_input_assembly_state,
-      .pViewportState = &ci_viewport_state,
-      .pRasterizationState = &ci_rasterization_state,
-      .pMultisampleState = &ci_multisample_state,
-      .pDepthStencilState = &ci_depth_stencil_state,
-      .pColorBlendState = &ci_color_blend_state,
-      .pDynamicState = &ci_pipeline_dynamic_state,
-      .layout = state->pipeline_layout,
-      .renderPass = state->renderpass,
-      .subpass = 0,
-  }};
-  VkPipeline pipelines[] = {VK_NULL_HANDLE};
-  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
-                                nullptr, pipelines);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Foreground image graphics pipeline creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  state->fgimage_pipeline = pipelines[0];
-
-  vkDestroyShaderModule(state->device, vs_module, nullptr);
-  vkDestroyShaderModule(state->device, fs_module, nullptr);
-
-  if (state->fgimage_pipeline == VK_NULL_HANDLE) {
-    BOOST_LOG_TRIVIAL(trace) << "Foreground image graphics pipeline creation error.";
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) << std::format("Foreground image graphics pipeline {} is created.",
-                                          static_cast<void*>(state->fgimage_pipeline));
-  return true;
-}
-
 bool CreateTextPipeline(VulkanState* state) {
   VkResult r;
 
@@ -998,7 +1061,7 @@ bool CreateTextPipeline(VulkanState* state) {
   return true;
 }
 
-bool InitImage(SceneResources* scene_resources, ImageResources* resources) {
+bool InitImage(SceneResources* scene_resources, ImageState* image_state) {
   BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
 
   VulkanState* state = scene_resources->vk_state;
@@ -1007,7 +1070,7 @@ bool InitImage(SceneResources* scene_resources, ImageResources* resources) {
 
   VkImageViewCreateInfo ci_imageView{
       .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = resources->image,
+      .image = image_state->image,
       .viewType = VK_IMAGE_VIEW_TYPE_2D,
       .format = state->image_format,
       .components =
@@ -1027,15 +1090,15 @@ bool InitImage(SceneResources* scene_resources, ImageResources* resources) {
           },
   };
   r = vkCreateImageView(state->device, &ci_imageView, nullptr,
-                        &resources->image_view);
+                        &image_state->image_view);
   assert(r == VK_SUCCESS);
 
   bool msaa = (state->sample_count != VK_SAMPLE_COUNT_1_BIT);
 
   VkImageView attachments[3];
-  attachments[0] = resources->image_view;
+  attachments[0] = image_state->image_view;
   attachments[1] = scene_resources->depth_stencil_view;
-  attachments[2] = resources->msaa_image_view;
+  attachments[2] = image_state->msaa_image_view;
 
   VkFramebufferCreateInfo ci_framebuffer{
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -1046,20 +1109,36 @@ bool InitImage(SceneResources* scene_resources, ImageResources* resources) {
       .height = scene_resources->image_extent.height,
       .layers = 1};
   r = vkCreateFramebuffer(state->device, &ci_framebuffer, nullptr,
-                          &resources->frame_buffer);
+                          &image_state->frame_buffer);
+  assert(r == VK_SUCCESS);
+
+  // Create a separate framebuffer for compositing with only the color attachment.
+  // This framebuffer is created with composite_renderpass for compatibility.
+  VkImageView composite_attachment = image_state->image_view;
+  VkFramebufferCreateInfo ci_composite_framebuffer{
+      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+      .renderPass = state->composite_renderpass,
+      .attachmentCount = 1,
+      .pAttachments = &composite_attachment,
+      .width = scene_resources->image_extent.width,
+      .height = scene_resources->image_extent.height,
+      .layers = 1
+  };
+  r = vkCreateFramebuffer(state->device, &ci_composite_framebuffer, nullptr,
+                          &image_state->composite_frame_buffer);
   assert(r == VK_SUCCESS);
 
   VkSemaphoreCreateInfo semaphoreCreateInfo{
       .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
   };
   r = vkCreateSemaphore(state->device, &semaphoreCreateInfo, nullptr,
-                        &resources->submit_semaphore);
+                        &image_state->submit_semaphore);
   assert(r == VK_SUCCESS);
 
   return true;
 }
 
-bool InitFrame(VulkanState* state, FrameResources* resources) {
+bool InitFrame(VulkanState* state, FrameState* resources) {
   BOOST_LOG_TRIVIAL(trace) << "Create frame resources ...";
 
   VkResult r;
@@ -1099,26 +1178,32 @@ bool InitFrame(VulkanState* state, FrameResources* resources) {
   return true;
 }
 
-void Finalize(VulkanState* state, ImageResources* resources) {
+void Finalize(VulkanState* state, ImageState* image_state) {
   BOOST_LOG_TRIVIAL(trace) << "Finalize image resources ...";
 
-  vkDestroyFramebuffer(state->device, resources->frame_buffer, nullptr);
-  resources->frame_buffer = VK_NULL_HANDLE;
+  if (image_state->composite_frame_buffer != VK_NULL_HANDLE) {
+    vkDestroyFramebuffer(state->device, image_state->composite_frame_buffer,
+                         nullptr);
+    image_state->composite_frame_buffer = VK_NULL_HANDLE;
+  }
 
-  vkDestroyImageView(state->device, resources->image_view, nullptr);
-  resources->image_view = VK_NULL_HANDLE;
+  vkDestroyFramebuffer(state->device, image_state->frame_buffer, nullptr);
+  image_state->frame_buffer = VK_NULL_HANDLE;
 
-  vkDestroyImageView(state->device, resources->msaa_image_view, nullptr);
-  resources->msaa_image_view = VK_NULL_HANDLE;
+  vkDestroyImageView(state->device, image_state->image_view, nullptr);
+  image_state->image_view = VK_NULL_HANDLE;
 
-  vkDestroyImage(state->device, resources->msaa_image, nullptr);
-  resources->msaa_image = VK_NULL_HANDLE;
+  vkDestroyImageView(state->device, image_state->msaa_image_view, nullptr);
+  image_state->msaa_image_view = VK_NULL_HANDLE;
 
-  vkDestroySemaphore(state->device, resources->submit_semaphore, nullptr);
-  resources->submit_semaphore = VK_NULL_HANDLE;
+  vkDestroyImage(state->device, image_state->msaa_image, nullptr);
+  image_state->msaa_image = VK_NULL_HANDLE;
+
+  vkDestroySemaphore(state->device, image_state->submit_semaphore, nullptr);
+  image_state->submit_semaphore = VK_NULL_HANDLE;
 }
 
-void Finalize(VulkanState* state, FrameResources* frame) {
+void Finalize(VulkanState* state, FrameState* frame) {
   BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
 
   vkFreeCommandBuffers(state->device, state->cmd_pool, 1, &frame->cmd_buf);
@@ -1295,10 +1380,8 @@ void ReleaseSwapchain(SceneResources* scene_resources) {
   VulkanState* state = scene_resources->vk_state;
   vkDestroySwapchainKHR(state->device,scene_resources->swapchain, nullptr);
 
-  for (int i = 0; i < scene_resources->image_count; ++i) {
-    ImageResources* image = &scene_resources->image_res[i];
-    Finalize(state, image);
-  }
+  for (int i = 0; i < scene_resources->image_count; ++i)
+    Finalize(state, &scene_resources->images_state[i]);
 
   vkFreeMemory(state->device,scene_resources->msaa_image_mem, nullptr);
 
@@ -1414,11 +1497,11 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
         msaaViews.data(),scene_resources->image_count);
   }
   for (size_t i = 0; i < scene_resources->image_count; ++i) {
-    ImageResources& resources = scene_resources->image_res[i];
-    resources.image = swapchainImages[i];
-    resources.msaa_image = msaaImages[i];
-    resources.msaa_image_view = msaaViews[i];
-    InitImage(scene_resources, &resources);
+    ImageState& image_state = scene_resources->images_state[i];
+    image_state.image = swapchainImages[i];
+    image_state.msaa_image = msaaImages[i];
+    image_state.msaa_image_view = msaaViews[i];
+    InitImage(scene_resources, &image_state);
   }
 
   if (scene_resources->screen_text) {
@@ -1428,33 +1511,35 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
   return true;
 }
 
-void FgImageResources::Render(VkCommandBuffer cmd_buf,
-                              VkPipeline image_pipeline,
-                              VkPipelineLayout pipeline_layout,
-                              const FgImage& fg_image,
-                              const VkExtent2D& image_extent) const {
-  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, image_pipeline);
-  struct PushConstants {
-    float pos_x, pos_y;
-    float size_x, size_y;
-    float screen_w, screen_h;
-  };
-  PushConstants pc = {
-      .pos_x = static_cast<float>(fg_image.position.x),
-      .pos_y = static_cast<float>(fg_image.position.y),
-      .size_x = static_cast<float>(fg_image.width),
-      .size_y = static_cast<float>(fg_image.height),
-      .screen_w = static_cast<float>(image_extent.width),
-      .screen_h = static_cast<float>(image_extent.height),
-  };
-  vkCmdPushConstants(cmd_buf, pipeline_layout,
-                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-  // Draw 6 vertices as 2 triangles.
-  vkCmdDraw(cmd_buf, 6, 1, 0, 0);
-}
+//void FgImageResources::Render(VkCommandBuffer cmd_buf,
+//                              VkPipeline image_pipeline,
+//                              VkPipelineLayout pipeline_layout,
+//                              const FgImage* fg_image,
+//                              const VkExtent2D& image_extent) const {
+//  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, image_pipeline);
+//  struct PushConstants {
+//    float pos_x, pos_y;
+//    float size_x, size_y;
+//    float screen_w, screen_h;
+//  };
+//  PushConstants pc = {
+//      .pos_x = static_cast<float>(fg_image->position.x),
+//      .pos_y = static_cast<float>(fg_image->position.y),
+//      .size_x = static_cast<float>(fg_image->width),
+//      .size_y = static_cast<float>(fg_image->height),
+//      .screen_w = static_cast<float>(image_extent.width),
+//      .screen_h = static_cast<float>(image_extent.height),
+//  };
+//  vkCmdPushConstants(cmd_buf, pipeline_layout,
+//                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+//  // Draw 6 vertices as 2 triangles.
+//  vkCmdDraw(cmd_buf, 6, 1, 0, 0);
+//}
 
-void Render(Scene* scene, SceneResources* scene_resources, ImageResources& image,
-            FrameResources& frame) {
+void Render(Scene* scene, SceneResources* scene_resources,
+            ImageState& image_state, FrameState& frame,
+            const std::map<const FgImage*, FgImageResources*>&
+                fg_images_resources) {
   VulkanState* state = scene_resources->vk_state;
 
   // Пересоздаем командный буфер.
@@ -1484,7 +1569,7 @@ void Render(Scene* scene, SceneResources* scene_resources, ImageResources& image
   VkRenderPassBeginInfo bi_renderpass{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = state->renderpass,
-      .framebuffer = image.frame_buffer,
+      .framebuffer = image_state.frame_buffer,
       .renderArea = {.offset = {0, 0}, .extent = scene_resources->image_extent},
       .clearValueCount = 3,
       .pClearValues = clearValues};
@@ -1532,36 +1617,117 @@ void Render(Scene* scene, SceneResources* scene_resources, ImageResources& image
     vkCmdDrawIndexed(frame.cmd_buf, scene_resources->index_count, 1, 0, 0, 0);
   }
 
-  // Draw foreground image if available
-  if (!!scene_resources->fg_image_resources) {
-    auto scene_inner_if = scene->GetInnerInterface();
-    const FgImage& fg_image = scene_inner_if->GetFgImage();
-    scene_resources->fg_image_resources.Render(frame.cmd_buf,
-                                          state->fgimage_pipeline,
-                                          state->pipeline_layout, fg_image,
-                                          scene_resources->image_extent);
-  }
-
-  // Draw text overlay if available
-  if (!!scene_resources->fg_text_resources) {
-    scene_resources->fg_text_resources.Render(frame.cmd_buf, state->text_pipeline);
-  }
-
   vkCmdEndRenderPass(frame.cmd_buf);
+
+  // --- Composite foreground images onto the swapchain image ---
+  const auto* scene_inner_if = scene->GetInnerInterface();
+  if (scene_inner_if->HasFgImages()) {
+    // Transition swapchain image from PRESENT_SRC_KHR to COLOR_ATTACHMENT_OPTIMAL.
+    VkImageMemoryBarrier composite_barrier {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
+        .srcAccessMask = 0,
+        .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT,
+        .oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
+        .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
+        .image = image_state.image,
+        .subresourceRange = {
+            .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+            .baseMipLevel = 0,
+            .levelCount = 1,
+            .baseArrayLayer = 0,
+            .layerCount = 1,
+        },
+    };
+    vkCmdPipelineBarrier(frame.cmd_buf,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+                         0, 0, nullptr, 0, nullptr, 1, &composite_barrier);
+
+    // Begin composite render pass.
+    VkRenderPassBeginInfo bi_composite {
+        .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+        .renderPass = state->composite_renderpass,
+        .framebuffer = image_state.composite_frame_buffer,
+        .renderArea = {
+            .offset = {0, 0},
+            .extent = scene_resources->image_extent
+        },
+        .clearValueCount = 0,
+        .pClearValues = nullptr,
+    };
+    vkCmdBeginRenderPass(frame.cmd_buf, &bi_composite,
+                         VK_SUBPASS_CONTENTS_INLINE);
+
+    // Set viewport and scissor.
+    VkViewport composite_viewport{
+        .x = 0,
+        .y = 0,
+        .width = static_cast<float>(scene_resources->image_extent.width),
+        .height = static_cast<float>(scene_resources->image_extent.height),
+        .minDepth = 0,
+        .maxDepth = 1,
+    };
+    vkCmdSetViewport(frame.cmd_buf, 0, 1, &composite_viewport);
+
+    VkRect2D composite_scissor{
+        .offset = {0, 0},
+        .extent = scene_resources->image_extent,
+    };
+    vkCmdSetScissor(frame.cmd_buf, 0, 1, &composite_scissor);
+
+    // Bind the composite pipeline and descriptor set.
+    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->composite_pipeline);
+
+    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            state->pipeline_layout, 0, 1, &frame.desc_set, 0,
+                            nullptr);
+
+    // Draw each foreground image.
+    for (auto* fg_image : scene_inner_if->GetFgImages()) {
+      FgImageResources* fg_image_resources = fg_images_resources.at(fg_image);
+      glm::ivec2 screen_pos = scene_inner_if->GetScreenPosition(fg_image);
+
+      struct PushConstants {
+        glm::vec2 position;
+        glm::vec2 size;
+        glm::vec2 screenSize;
+      };
+      PushConstants pc{
+          .position = glm::vec2(screen_pos),
+          .size = glm::vec2(static_cast<float>(fg_image->width),
+                            static_cast<float>(fg_image->height)),
+          .screenSize = glm::vec2(
+              static_cast<float>(scene_resources->image_extent.width),
+              static_cast<float>(scene_resources->image_extent.height)),
+      };
+      vkCmdPushConstants(frame.cmd_buf, state->pipeline_layout,
+                         VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
+
+      // Draw 6 vertices (two triangles forming a quad).
+      vkCmdDraw(frame.cmd_buf, 6, 1, 0, 0);
+    }
+
+    vkCmdEndRenderPass(frame.cmd_buf);
+  }
 
   vkEndCommandBuffer(frame.cmd_buf);
 
   VkPipelineStageFlags waitDstStageMask[] = {
       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
   };
-  VkSubmitInfo submitInfo{.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                          .waitSemaphoreCount = static_cast<uint32_t>(1),
-                          .pWaitSemaphores = &frame.acquire_semaphore,
-                          .pWaitDstStageMask = waitDstStageMask,
-                          .commandBufferCount = 1,
-                          .pCommandBuffers = &frame.cmd_buf,
-                          .signalSemaphoreCount = static_cast<uint32_t>(1),
-                          .pSignalSemaphores = &image.submit_semaphore};
+  VkSubmitInfo submitInfo {
+      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+      .waitSemaphoreCount = static_cast<uint32_t>(1),
+      .pWaitSemaphores = &frame.acquire_semaphore,
+      .pWaitDstStageMask = waitDstStageMask,
+      .commandBufferCount = 1,
+      .pCommandBuffers = &frame.cmd_buf,
+      .signalSemaphoreCount = static_cast<uint32_t>(1),
+      .pSignalSemaphores = &image_state.submit_semaphore
+  };
   assert(!frame.cmd_fence_waitable);
   vkQueueSubmit(state->queue, 1, &submitInfo, frame.cmd_fence);
   frame.cmd_fence_waitable = true;
@@ -2028,12 +2194,9 @@ bool ChooseSwapchainSettings(VulkanState* state, VkSurfaceKHR surface) {
 }
 
 bool FgImageResources::Initialize(const VulkanState* state,
-                                  const FgImage& fg_image) {
+                                  const FgImage* fg_image) {
   BOOST_LOG_TRIVIAL(trace) << "Creating logo resources...";
-  if (fg_image.IsEmpty()) {
-    BOOST_LOG_TRIVIAL(error) << "Foreground image is empty";
-    return false;
-  }
+  assert(fg_image != nullptr);
 
   VkResult r = VK_SUCCESS;
 
@@ -2042,7 +2205,7 @@ bool FgImageResources::Initialize(const VulkanState* state,
   VmaAllocation staging_allocation = VK_NULL_HANDLE;
   VkBufferCreateInfo bufferInfo = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = static_cast<VkDeviceSize>(fg_image.pixels.size()),
+      .size = static_cast<VkDeviceSize>(fg_image->pixels.size()),
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
   };
   VmaAllocationCreateInfo alloc_ci = {
@@ -2060,7 +2223,7 @@ bool FgImageResources::Initialize(const VulkanState* state,
   // Copy pixel data
   void* mapped_data = nullptr;
   vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
-  memcpy(mapped_data, fg_image.pixels.data(), fg_image.pixels.size());
+  memcpy(mapped_data, fg_image->pixels.data(), fg_image->pixels.size());
   vmaUnmapMemory(state->allocator, staging_allocation);
 
   // Create image
@@ -2068,8 +2231,8 @@ bool FgImageResources::Initialize(const VulkanState* state,
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = VK_FORMAT_R8G8B8A8_UNORM,
-      .extent = {static_cast<uint32_t>(fg_image.width),
-                 static_cast<uint32_t>(fg_image.height), 1},
+      .extent = {static_cast<uint32_t>(fg_image->width),
+                 static_cast<uint32_t>(fg_image->height), 1},
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -2169,8 +2332,8 @@ bool FgImageResources::Initialize(const VulkanState* state,
           .layerCount = 1,
       },
       .imageOffset = {0, 0, 0},
-      .imageExtent = {static_cast<uint32_t>(fg_image.width),
-                      static_cast<uint32_t>(fg_image.height), 1},
+      .imageExtent = {static_cast<uint32_t>(fg_image->width),
+                      static_cast<uint32_t>(fg_image->height), 1},
   };
   vkCmdCopyBufferToImage(cmd_buf, staging_buffer, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
@@ -2789,8 +2952,9 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
   if (!CreateRenderPass(state)) return false;
 
   if (!CreateGraphicsPipeline(state)) return false;
-  if (!CreateFgImagePipeline(state)) return false;
   if (!CreateTextPipeline(state)) return false;
+  if (!CreateCompositeRenderPass(state)) return false;
+  if (!CreateCompositePipeline(state)) return false;
 
   VkCommandPoolCreateInfo ci_commandpool{
       .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
@@ -2841,7 +3005,7 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
                              &vk_state->descriptor_pool);
 
   for (uint32_t i = 0; i < vk_state->frame_count; ++i)
-    InitFrame(vk_state, &scene_resources.frame_res[i]);
+    InitFrame(vk_state, &scene_resources.frames_state[i]);
 
   // Память под данные фреймов.
   VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
@@ -2867,12 +3031,12 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
 }  // namespace
 
 VkInstance VkSceneRenderer::GetInstance() const {
-  return impl_->vulkanState.instance;
+  return impl_->vk_global_state.instance;
 }
 
 bool VkSceneRenderer::Initialize(Scene* scene, VkSurfaceKHR surface) {
   SceneResources* scene_resources =
-      InitializeSceneResources(&impl_->vulkanState, surface, scene);
+      InitializeSceneResources(&impl_->vk_global_state, surface, scene);
   if (!scene_resources)
     return false;
   impl_->scenes_vulkan_objects.insert(std::make_pair(scene,scene_resources));
@@ -2880,7 +3044,9 @@ bool VkSceneRenderer::Initialize(Scene* scene, VkSurfaceKHR surface) {
 }
 
 namespace {
-void UpdateScene(SceneResources* scene_resources, const Scene* scene) {
+void UpdateScene(
+    SceneResources* scene_resources, const Scene* scene,
+    std::map<const FgImage*, FgImageResources*>& fg_images_resources) {
   VulkanState* state = scene_resources->vk_state;
   if (scene_resources->buffer_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(state->allocator,scene_resources->buffer_vertex,scene_resources->alloc_vertex);
@@ -3008,13 +3174,38 @@ void UpdateScene(SceneResources* scene_resources, const Scene* scene) {
 
   scene_resources->index_count = 3 * n_cells;
 
-  // Create foreground image resources.
-  scene_resources->fg_image_resources.Release(state);
+  // Create foreground image resources for each FgImage.
   auto scene_inner_if = scene->GetInnerInterface();
-  if (scene_inner_if->HasFgImage()) {
-    const FgImage& fg_image = scene_inner_if->GetFgImage();
-    if (!scene_resources->fg_image_resources.Initialize(state,fg_image)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground image resources, continuing without image";
+  // Release resources for images that are no longer in the scene.
+  for (auto it = fg_images_resources.begin(); it != fg_images_resources.end();) {
+    bool still_in_scene = false;
+    for (auto* fg_image : scene_inner_if->GetFgImages()) {
+      if (fg_image == it->first) {
+        still_in_scene = true;
+        break;
+      }
+    }
+    if (!still_in_scene) {
+      it->second->Release(state);
+      delete it->second;
+      it = fg_images_resources.erase(it);
+    } else {
+      ++it;
+    }
+  }
+  // Create or update resources for current foreground images.
+  for (auto* fg_image : scene_inner_if->GetFgImages()) {
+    auto it = fg_images_resources.find(fg_image);
+    if (it == fg_images_resources.end()) {
+      auto* resources = new FgImageResources();
+      if (!resources->Initialize(state, fg_image)) {
+        BOOST_LOG_TRIVIAL(warning)
+            << "Failed to create foreground image resources, "
+            << "continuing without image";
+        delete resources;
+        continue;
+      }
+      fg_images_resources[fg_image] = resources;
     }
   }
 
@@ -3029,9 +3220,11 @@ void UpdateScene(SceneResources* scene_resources, const Scene* scene) {
   }
 }
 
-void UpdateDescriptorSets(Scene* scene, SceneResources* scene_resources) {
+void UpdateDescriptorSets(
+    Scene* scene, SceneResources* scene_resources,
+    const std::map<const FgImage*, FgImageResources*>& fg_images_resources) {
   const VulkanState* state = scene_resources->vk_state;
-  FrameResources& frame = scene_resources->frame_res[scene_resources->current_frame_index];
+  FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
 
   glm::mat4 model_view_matrix = scene->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
@@ -3099,22 +3292,25 @@ void UpdateDescriptorSets(Scene* scene, SceneResources* scene_resources) {
         .pBufferInfo = &bufferInfo[1],
       },
   };
-  // Add combined image sampler for logo if available
-  if (scene_resources->fg_image_resources.image_view != VK_NULL_HANDLE &&
-      scene_resources->fg_image_resources.sampler != VK_NULL_HANDLE) {
-    VkDescriptorImageInfo imageInfo{
-        .sampler = scene_resources->fg_image_resources.sampler,
-        .imageView = scene_resources->fg_image_resources.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    descWrites.push_back(VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = frame.desc_set,
-        .dstBinding = 2,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &imageInfo,
-    });
+  // Add combined image sampler for the first foreground image if available.
+  if (!fg_images_resources.empty()) {
+    const FgImageResources* fg_res = fg_images_resources.begin()->second;
+    if (fg_res->image_view != VK_NULL_HANDLE &&
+        fg_res->sampler != VK_NULL_HANDLE) {
+      VkDescriptorImageInfo imageInfo{
+          .sampler = fg_res->sampler,
+          .imageView = fg_res->image_view,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      descWrites.push_back(VkWriteDescriptorSet{
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = frame.desc_set,
+          .dstBinding = 2,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .pImageInfo = &imageInfo,
+      });
+    }
   }
 
   // Add combined image sampler for text if available
@@ -3156,15 +3352,16 @@ void UpdateDescriptorSets(Scene* scene, SceneResources* scene_resources) {
                          static_cast<uint32_t>(descWrites.size()),
                          descWrites.data(), 0, nullptr);
 }
+
 }  // namespace
 
 bool VkSceneRenderer::Update(Scene* scene) {
   if (!scene) return false;
+
   auto it = impl_->scenes_vulkan_objects.find(scene);
   if (it == impl_->scenes_vulkan_objects.end())
     return false;
   SceneResources* scene_resources = it->second;
-  VulkanState* state = scene_resources->vk_state;
   if (scene_resources->stop_rendering) return false;
 
   auto screen_size = scene->GetScreenSize();
@@ -3176,7 +3373,8 @@ bool VkSceneRenderer::Update(Scene* scene) {
     if (!RecreateSwapchain(scene_resources,current_extent)) return false;
   }
 
-  FrameResources& frame = scene_resources->frame_res[scene_resources->current_frame_index];
+  VulkanState* state = scene_resources->vk_state;
+  FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
 
   // Ожидаем освобождения последнего фрейма.
   if (frame.cmd_fence_waitable) {
@@ -3193,12 +3391,12 @@ bool VkSceneRenderer::Update(Scene* scene) {
     if (scene->HasChanges()) {
       scene_resources->stop_rendering = true;
       vkQueueWaitIdle(state->queue);
-      UpdateScene(scene_resources, scene);
+      UpdateScene(scene_resources, scene, impl_->fg_images_resources);
       scene->ClearChanges();
       scene_resources->stop_rendering = false;
     }
   }
-  UpdateDescriptorSets(scene, scene_resources);
+  UpdateDescriptorSets(scene, scene_resources, impl_->fg_images_resources);
 
   while (true) {
     uint32_t index;
@@ -3217,16 +3415,17 @@ bool VkSceneRenderer::Update(Scene* scene) {
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
     if (r != VK_SUCCESS) return false;
 
-    // Рендеринг основной сцены.
+    // Рендеринг основной сцены и наложение текстур переднего плана.
     assert(index <= MAX_NUM_IMAGES);
-    ImageResources& image = scene_resources->image_res[index];
-    Render(scene, scene_resources, image, frame);
+    ImageState& image_state = scene_resources->images_state[index];
+    Render(scene, scene_resources, image_state, frame,
+           impl_->fg_images_resources);
 
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &image.submit_semaphore,
+        .pWaitSemaphores = &image_state.submit_semaphore,
         .swapchainCount = 1,
         .pSwapchains = &scene_resources->swapchain,
         .pImageIndices = &index,
@@ -3277,7 +3476,7 @@ void VkSceneRenderer::Finalize(Scene* scene) {
   ReleaseSwapchain(scene_resources);
 
   for (int i = 0; i < state->frame_count; ++i) {
-    FrameResources* frame = &scene_resources->frame_res[i];
+    FrameState* frame = &scene_resources->frames_state[i];
     ::Finalize(state, frame);
   }
 
@@ -3290,6 +3489,13 @@ void VkSceneRenderer::Finalize(Scene* scene) {
   // Cleanup fgimage quad buffers
   scene_resources->fg_image_resources.Release(state);
   scene_resources->fg_text_resources.Release(state);
+
+  // Cleanup per-image foreground resources.
+  for (auto& [fg_image, resources] : impl_->fg_images_resources) {
+    resources->Release(state);
+    delete resources;
+  }
+  impl_->fg_images_resources.clear();
 
   if (!scene_resources->is_external_surface)
     vkDestroySurfaceKHR(state->instance, scene_resources->surface, nullptr);

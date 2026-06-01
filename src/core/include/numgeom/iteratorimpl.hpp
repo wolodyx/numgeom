@@ -101,6 +101,55 @@ bool IteratorImpl_StdMapValue<KeyType,ValueType>::equals(
   return m_it == pOther->m_it;
 }
 
+template<typename KeyType, typename ValueType>
+IteratorImpl_StdMapKey<KeyType,ValueType>::IteratorImpl_StdMapKey(
+    const IteratorImpl_StdMapKey<KeyType,ValueType>::map_const_iterator& itBeg,
+    const IteratorImpl_StdMapKey<KeyType,ValueType>::map_const_iterator& itEnd)
+    : m_it(itBeg), m_itEnd(itEnd) {
+}
+
+template<typename KeyType, typename ValueType>
+IteratorImpl_StdMapKey<KeyType,ValueType>::~IteratorImpl_StdMapKey() {
+}
+
+template<typename KeyType, typename ValueType>
+void IteratorImpl_StdMapKey<KeyType,ValueType>::advance() {
+  assert(m_it != m_itEnd);
+  ++m_it;
+}
+
+template<typename KeyType, typename ValueType>
+IteratorImpl_StdMapKey<KeyType,ValueType>::value_type
+IteratorImpl_StdMapKey<KeyType,ValueType>::current() const {
+  return m_it->first;
+}
+
+template<typename KeyType, typename ValueType>
+IteratorImpl<typename IteratorImpl_StdMapKey<KeyType,ValueType>::value_type>*
+IteratorImpl_StdMapKey<KeyType,ValueType>::clone() const {
+  return new IteratorImpl_StdMapKey(m_it, m_itEnd);
+}
+
+template<typename KeyType, typename ValueType>
+IteratorImpl<typename IteratorImpl_StdMapKey<KeyType,ValueType>::value_type>*
+IteratorImpl_StdMapKey<KeyType,ValueType>::last() const {
+  return new IteratorImpl_StdMapKey(m_itEnd, m_itEnd);
+}
+
+template<typename KeyType, typename ValueType>
+bool IteratorImpl_StdMapKey<KeyType,ValueType>::end() const {
+  return m_it == m_itEnd;
+}
+
+template<typename KeyType, typename ValueType>
+bool IteratorImpl_StdMapKey<KeyType,ValueType>::equals(
+    const IteratorImpl<value_type>& other) const {
+  auto pOther = dynamic_cast<const IteratorImpl_StdMapKey*>(&other);
+  if(!pOther)
+    return false;
+  return m_it == pOther->m_it;
+}
+
 template<typename BaseItValueType, typename Filter, typename Transform>
 IteratorImpl_Filter<BaseItValueType,Filter,Transform>::IteratorImpl_Filter(
     BaseIteratorType* baseIt) : m_baseIt(baseIt) {

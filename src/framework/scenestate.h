@@ -2,6 +2,7 @@
 #define NUMGEOM_FRAMEWORK_SCENESTATE_H
 
 #include <list>
+#include <map>
 
 #include "numgeom/scene.h"
 
@@ -16,8 +17,8 @@ class Scene::State {
 
  public:
   std::string name_;
-  FgImage fg_image_;
-  std::list<ScreenText*> screen_text_objects_;
+  std::map<const FgImage*,glm::ivec2> fg_image_positions;
+  std::map<const ScreenText*,glm::ivec2> screen_text_positions;
   Camera camera_;
   std::list<SceneObject*> objects_;
   bool has_changes_ = true;

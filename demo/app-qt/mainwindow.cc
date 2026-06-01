@@ -93,13 +93,14 @@ void MainWindow::initVulkan() {
   } else {
     QByteArray resource_data = resource_file.readAll();
     resource_file.close();
-    scene->AddFgImage(
+    FgImage* fg_image = app_->AddFgImage(
         reinterpret_cast<const unsigned char*>(resource_data.constData()),
-        resource_data.size(), glm::ivec2(5,5));
+        resource_data.size());
+    app_->AddFgImage(scene, fg_image, glm::ivec2(5,5));
   }
 
-  auto sco = scene->AddFgText("Text rendering test");
-  sco->SetPosition(glm::ivec2(5,100));
+  ScreenText* screen_text = app_->AddScreenText("Text rendering test");
+  app_->AddScreenText(scene, screen_text, glm::ivec2(5,100));
 
   scene->FitScene();
   //app_->Update();
@@ -535,7 +536,8 @@ void MainWindow::onAddFgImage() {
                      QFileInfo(filename).absolutePath());
   Scene* scene = active_sub->GetScene();
   assert(scene != nullptr);
-  scene->AddFgImage(filename.toStdString(), glm::ivec2{5,5});
+  FgImage* fg_image = app_->AddFgImage(filename.toStdString());
+  app_->AddFgImage(scene,fg_image, glm::ivec2{5,5});
   app_->Update();
 }
 

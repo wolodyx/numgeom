@@ -17,13 +17,14 @@ class Scene::Inner {
 
   ~Inner();
 
-  bool HasFgImage() const;
-
-  const FgImage& GetFgImage() const;
+  bool HasFgImages() const;
+  Iterator<const FgImage*> GetFgImages() const;
+  glm::ivec2 GetScreenPosition(const FgImage*) const;
+  void AddFgImage(const FgImage*, const glm::ivec2&);
 
   bool HasScreenTexts() const;
-
   Iterator<const ScreenText*> GetScreenTextObjects() const;
+  glm::ivec2 GetScreenPosition(const ScreenText*) const;
 
  private:
   State* impl_;

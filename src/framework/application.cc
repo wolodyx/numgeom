@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "numgeom/alignedboundbox.h"
+#include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/trimesh.h"
@@ -11,6 +12,8 @@
 
 #include "applicationinner.h"
 #include "applicationstate.h"
+#include "fgimage.h"
+#include "sceneinner.h"
 
 namespace {
 AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
@@ -214,4 +217,48 @@ Scene* Application::GetBackgroundScene(Scene* foreground_scene) {
   if (it == impl_->foreground2background_.end())
     return nullptr;
   return it->second;
+}
+
+FgImage* Application::AddFgImage(const std::string& image_filename) {
+  FgImage fg(image_filename);
+  if (fg.IsEmpty())
+    return nullptr;
+  impl_->fg_images_.push_back(new FgImage(fg));
+  return impl_->fg_images_.back();
+}
+
+FgImage* Application::AddFgImage(const unsigned char* image_data,
+                                 size_t image_data_size) {
+  FgImage fg(image_data, image_data_size);
+  if (fg.IsEmpty())
+    return nullptr;
+  impl_->fg_images_.push_back(new FgImage(fg));
+  return impl_->fg_images_.back();
+}
+
+ScreenText* Application::AddScreenText(const std::string& text) {
+  return nullptr;
+}
+
+bool Application::AddFgImage(Scene* scene, FgImage* fg_image,
+                             const glm::ivec2& screen_position) {
+  if (scene == nullptr || fg_image == nullptr ||
+      screen_position.x < 0 || screen_position.y < 0)
+    return false;
+
+  scene->GetInnerInterface()->AddFgImage(fg_image, screen_position);
+  return false;
+}
+
+bool Application::AddScreenText(Scene*, ScreenText*,
+                                const glm::ivec2& screen_position) {
+  return false;
+}
+
+bool Application::Remove(Scene*, const ScreenText*) {
+  return false;
+}
+
+bool Application::Remove(Scene*, const FgImage*) {
+  return false;
 }

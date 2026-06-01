@@ -31,17 +31,15 @@ AlignedBoundBox Scene::GetBoundBox() const {
 }
 
 void Scene::Clear() {
-  if(state_->objects_.empty() && state_->screen_text_objects_.empty() &&
-     state_->fg_image_.IsEmpty())
+  if(state_->objects_.empty() && state_->screen_text_positions.empty() &&
+     state_->fg_image_positions.empty())
     return;
   state_->has_changes_ = true;
   for (SceneObject* o : state_->objects_)
     delete o;
   state_->objects_.clear();
-  for (ScreenText* o : state_->screen_text_objects_)
-    delete o;
-  state_->screen_text_objects_.clear();
-  state_->fg_image_ = FgImage();
+  state_->screen_text_positions.clear();
+  state_->screen_text_positions.clear();
 }
 
 bool Scene::HasChanges() const {
@@ -123,47 +121,47 @@ void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>(
   state_->camera_.SetViewportSizeFunction(func);
 }
 
-FgImage* Scene::AddFgImage(const std::string& image_filename,
-                           const glm::ivec2& screen_position) {
-  FgImage fg(image_filename,screen_position);
-  if (fg.IsEmpty())
-    return nullptr;
-  state_->fg_image_ = fg;
-  state_->has_changes_ = true;
-  return &state_->fg_image_;
-}
+// FgImage* Scene::AddFgImage(const std::string& image_filename,
+//                            const glm::ivec2& screen_position) {
+//   FgImage fg(image_filename,screen_position);
+//   if (fg.IsEmpty())
+//     return nullptr;
+//   state_->fg_image_ = fg;
+//   state_->has_changes_ = true;
+//   return &state_->fg_image_;
+// }
 
-FgImage* Scene::AddFgImage(const unsigned char* image_data,
-                           size_t image_data_size,
-                           const glm::ivec2& screen_position) {
-  FgImage fg(image_data,image_data_size,screen_position);
-  if (fg.IsEmpty())
-    return nullptr;
-  state_->fg_image_ = fg;
-  state_->has_changes_ = true;
-  return &state_->fg_image_;
-}
+// FgImage* Scene::AddFgImage(const unsigned char* image_data,
+//                            size_t image_data_size,
+//                            const glm::ivec2& screen_position) {
+//   FgImage fg(image_data,image_data_size,screen_position);
+//   if (fg.IsEmpty())
+//     return nullptr;
+//   state_->fg_image_ = fg;
+//   state_->has_changes_ = true;
+//   return &state_->fg_image_;
+// }
 
-ScreenText* Scene::AddFgText(const std::string& text) {
-  auto o = new ScreenText(text, glm::ivec2(0,0));
-  state_->screen_text_objects_.push_back(o);
-  state_->has_changes_ = true;
-  return o;
-}
+// ScreenText* Scene::AddFgText(const std::string& text) {
+//   auto o = new ScreenText(text, glm::ivec2(0,0));
+//   state_->screen_text_objects_.push_back(o);
+//   state_->has_changes_ = true;
+//   return o;
+// }
 
-bool Scene::Remove(const ScreenText* text_object) {
-  if (!text_object)
-    return false;
-  auto it = std::find(state_->screen_text_objects_.begin(),
-                      state_->screen_text_objects_.end(),
-                      text_object);
-  if (it == state_->screen_text_objects_.end())
-    return false;
-  state_->screen_text_objects_.erase(it);
-  delete text_object;
-  state_->has_changes_ = true;
-  return true;
-}
+// bool Scene::Remove(const ScreenText* text_object) {
+//   if (!text_object)
+//     return false;
+//   auto it = std::find(state_->screen_text_objects_.begin(),
+//                       state_->screen_text_objects_.end(),
+//                       text_object);
+//   if (it == state_->screen_text_objects_.end())
+//     return false;
+//   state_->screen_text_objects_.erase(it);
+//   delete text_object;
+//   state_->has_changes_ = true;
+//   return true;
+// }
 
 Scene::Inner* Scene::GetInnerInterface() {
   if (state_->inner_interface_ == nullptr)

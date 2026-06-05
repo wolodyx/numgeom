@@ -2,6 +2,7 @@
 
 #include <format>
 #include <iostream>
+#include <map>
 
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/scene.h"
@@ -10,10 +11,24 @@
 #include "numgeom/trimesh.h"
 #include "numgeom/vkscenerenderer.h"
 
-#include "applicationinner.h"
-#include "applicationstate.h"
 #include "fgimage.h"
-#include "sceneinner.h"
+#include "trackedobjectlist.h"
+#include "trackedobjectdict.h"
+
+class ApplicationImpl {
+ public:
+  ~ApplicationImpl() {
+    delete renderer_;
+  }
+
+ public:
+  TrackedObjectDict scenes_;
+  std::map<Scene*,Scene*> foreground2background_;
+  Scene* active_scene_ = nullptr;
+  TrackedObjectList fg_images_;
+  TrackedObjectList screen_texts_;
+  VkSceneRenderer* renderer_ = nullptr;
+};
 
 namespace {
 AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
@@ -43,7 +58,7 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 }  // namespace
 
 Application::Application(int argc, char* argv[]) {
-  impl_ = new Application::State();
+  impl_ = new ApplicationImpl();
   impl_->renderer_ = new VkSceneRenderer(this);
 }
 
@@ -58,18 +73,6 @@ VkSceneRenderer* Application::GetRenderer() { return impl_->renderer_; }
 const Scene* Application::GetActiveScene() const { return impl_->active_scene_; }
 
 Scene* Application::GetActiveScene() { return impl_->active_scene_; }
-
-Application::Inner* Application::GetInnerInterface() {
-  if (impl_->inner_interface_ == nullptr)
-    impl_->inner_interface_ = new Inner(impl_);
-  return impl_->inner_interface_;
-}
-
-const Application::Inner* Application::GetInnerInterface() const {
-  if (impl_->inner_interface_ == nullptr)
-    impl_->inner_interface_ = new Inner(impl_);
-  return impl_->inner_interface_;
-}
 
 Scene* Application::AddAxisIndicator() {
   if (!impl_->active_scene_)
@@ -86,16 +89,15 @@ Scene* Application::AddScene(const std::string& new_scene_name,
   // Check input arguments.
   if (new_scene_name.empty())
     return nullptr;
-  auto it = impl_->scenes_.find(new_scene_name);
-  if (it != impl_->scenes_.end())
+  if (impl_->scenes_.Contains(new_scene_name))
     return nullptr;
-  if (background_scene && !impl_->scenes_.contains(background_scene->GetName()))
+  if (background_scene && !impl_->scenes_.Contains(background_scene->GetName()))
     return nullptr;
   if (impl_->foreground2background_.contains(background_scene))
     return nullptr;
 
   Scene* new_scene = new Scene(new_scene_name);
-  impl_->scenes_.insert(std::make_pair(new_scene_name,new_scene));
+  impl_->scenes_.Insert(new_scene_name, new_scene);
   if (background_scene != nullptr)
     impl_->foreground2background_.insert(std::make_pair(new_scene,background_scene));
   if (!impl_->active_scene_)
@@ -106,10 +108,7 @@ Scene* Application::AddScene(const std::string& new_scene_name,
 bool Application::RemoveScene(Scene* scene) {
   if (!scene)
     return false;
-  auto it = impl_->scenes_.find(scene->GetName());
-  if (it == impl_->scenes_.end())
-    return false;
-  if (it->second != scene)
+  if (impl_->scenes_.Get(scene->GetName()) != scene)
     return false;
 
   bool is_background =
@@ -126,23 +125,15 @@ bool Application::RemoveScene(Scene* scene) {
   } else {
     impl_->foreground2background_.erase(scene);
   }
-  delete it->second;
-  impl_->scenes_.erase(it);
-  return true;
+  return impl_->scenes_.Remove(scene);
 }
 
 Scene* Application::GetScene(const std::string& name) {
-  auto it = impl_->scenes_.find(name);
-  if (it == impl_->scenes_.end())
-    return nullptr;
-  return it->second;
+  return dynamic_cast<Scene*>(impl_->scenes_.Get(name));
 }
 
 const Scene* Application::GetScene(const std::string& name) const {
-  auto it = impl_->scenes_.find(name);
-  if (it == impl_->scenes_.end())
-    return nullptr;
-  return it->second;
+  return dynamic_cast<Scene*>(impl_->scenes_.Get(name));
 }
 
 bool Application::SetActiveScene(Scene* scene) {
@@ -223,8 +214,9 @@ FgImage* Application::AddFgImage(const std::string& image_filename) {
   FgImage fg(image_filename);
   if (fg.IsEmpty())
     return nullptr;
-  impl_->fg_images_.push_back(new FgImage(fg));
-  return impl_->fg_images_.back();
+  auto fg_image = new FgImage(fg);
+  impl_->fg_images_.Insert(fg_image);
+  return fg_image;
 }
 
 FgImage* Application::AddFgImage(const unsigned char* image_data,
@@ -232,8 +224,9 @@ FgImage* Application::AddFgImage(const unsigned char* image_data,
   FgImage fg(image_data, image_data_size);
   if (fg.IsEmpty())
     return nullptr;
-  impl_->fg_images_.push_back(new FgImage(fg));
-  return impl_->fg_images_.back();
+  auto fg_image = new FgImage(fg);
+  impl_->fg_images_.Insert(fg_image);
+  return fg_image;
 }
 
 ScreenText* Application::AddScreenText(const std::string& text) {
@@ -246,7 +239,7 @@ bool Application::AddFgImage(Scene* scene, FgImage* fg_image,
       screen_position.x < 0 || screen_position.y < 0)
     return false;
 
-  scene->GetInnerInterface()->AddFgImage(fg_image, screen_position);
+  scene->AddFgImage(fg_image, screen_position);
   return false;
 }
 
@@ -261,4 +254,10 @@ bool Application::Remove(Scene*, const ScreenText*) {
 
 bool Application::Remove(Scene*, const FgImage*) {
   return false;
+}
+
+void Application::Synch() {
+  impl_->scenes_.Synch();
+  impl_->fg_images_.Synch();
+  impl_->screen_texts_.Synch();
 }

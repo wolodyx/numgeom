@@ -129,6 +129,8 @@ class Iterator {
     return Iterator(impl_->last());
   }
 
+  IteratorImpl<T>* Reset() { return std::exchange(impl_, nullptr); }
+
  private:
   IteratorImpl<T>* impl_;
 };

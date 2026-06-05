@@ -5,7 +5,9 @@
 
 #include "glm/glm.hpp"
 
-class FgImage {
+#include "numgeom/trackedobject.h"
+
+class FgImage : public TrackedObject {
  public:
   FgImage(const std::filesystem::path& image_path);
 

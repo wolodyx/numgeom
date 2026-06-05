@@ -7,13 +7,15 @@
 
 #include "glm/glm.hpp"
 
+#include "numgeom/trackedobject.h"
+
 /** \class ScreenText
 \brief Экранный текст -- текст, отрисовываемый на переднем плане сцены.
 
 С экранным текстом связаны атрибуты: шрифт, размер, позиция на экране, цвет,
 прозрачность.
 */
-class ScreenText {
+class ScreenText : public TrackedObject {
  public:
   ScreenText(const std::string& text, const glm::ivec2& position);
   ~ScreenText();

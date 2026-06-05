@@ -6,15 +6,17 @@
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
+#include "numgeom/trackedobject.h"
 
 class Drawable;
 class Scene;
+class SceneObjectImpl;
 
 /**
 \class SceneObject
 \brief Объект сцены, составленный из списка `Drawable`-объектов.
 */
-class FRAMEWORK_EXPORT SceneObject {
+class FRAMEWORK_EXPORT SceneObject : public TrackedObject {
  public:
   SceneObject(Scene*);
   virtual ~SceneObject();
@@ -25,23 +27,22 @@ class FRAMEWORK_EXPORT SceneObject {
 
   Iterator<Drawable*> Drawables() const;
 
-  bool HasChanges() const;
-  void ClearChanges();
-
  protected:
   template<typename DrawableType, class... _Types>
   DrawableType* AddDrawable(_Types&&... _Args) {
     auto item = new DrawableType(this, _Args...);
-    drawables_.push_back(item);
-    has_changes_ = true;
+    this->Insert(item);
     return item;
   }
 
+  void Insert(Drawable*);
   bool Remove(Drawable*);
 
  private:
-  Scene* scene_;
-  std::vector<Drawable*> drawables_;
-  bool has_changes_ = false;
+  SceneObject(const SceneObject&) = delete;
+  SceneObject& operator=(const SceneObject&) = delete;
+
+ private:
+  SceneObjectImpl* impl_;
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENEOBJECT_H

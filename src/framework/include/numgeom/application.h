@@ -10,6 +10,7 @@
 
 class QWindow;
 
+class ApplicationImpl;
 class FgImage;
 class Scene;
 class SceneObject;
@@ -72,16 +73,13 @@ class FRAMEWORK_EXPORT Application {
 
   VkSceneRenderer* GetRenderer();
 
-  class Inner;
-  Inner* GetInnerInterface();
-  const Inner* GetInnerInterface() const;
+  void Synch();
 
  private:
   Application(const Application&) = delete;
   Application& operator=(const Application&) = delete;
 
  private:
-  class State;
-  State* impl_;
+  ApplicationImpl* impl_;
 };
 #endif // !NUMGEOM_FRAMEWORK_APPLICATION_H

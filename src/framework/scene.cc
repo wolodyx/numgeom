@@ -4,102 +4,92 @@
 #include "numgeom/sceneobject.h"
 #include "numgeom/screentext.h"
 
-#include "sceneinner.h"
-#include "scenestate.h"
+#include "trackedobjectlist.h"
+
+#include "camera.h"
+
+class SceneImpl {
+ public:
+  std::string name_;
+  std::map<FgImage*,glm::ivec2> fg_image_positions;
+  std::map<ScreenText*,glm::ivec2> screen_text_positions;
+  Camera camera_;
+  TrackedObjectList objects_;
+  uint64_t vulkan_surface_ = 0;
+};
 
 Scene::Scene(const std::string& name) {
-  state_ = new State();
-  state_->name_ = name;
-  state_->camera_.SetBoundBoxFunction(
+  impl_ = new SceneImpl {
+    .name_ = name
+  };
+  this->AddSubObjects(&impl_->objects_);
+  impl_->camera_.SetBoundBoxFunction(
     [this](){ return this->GetBoundBox(); });
 }
 
 Scene::~Scene() {
-  delete state_;
+  delete impl_;
 }
 
 std::string Scene::GetName() const {
-  return state_->name_;
+  return impl_->name_;
 }
 
 AlignedBoundBox Scene::GetBoundBox() const {
   AlignedBoundBox box;
-  for (SceneObject* o : state_->objects_) {
+  for (SceneObject* o : GetObjects<SceneObject>(impl_->objects_)) {
     box.Expand(o->GetBoundBox());
   }
   return box;
 }
 
 void Scene::Clear() {
-  if(state_->objects_.empty() && state_->screen_text_positions.empty() &&
-     state_->fg_image_positions.empty())
+  if(impl_->objects_.IsEmpty() && impl_->screen_text_positions.empty() &&
+     impl_->fg_image_positions.empty())
     return;
-  state_->has_changes_ = true;
-  for (SceneObject* o : state_->objects_)
-    delete o;
-  state_->objects_.clear();
-  state_->screen_text_positions.clear();
-  state_->screen_text_positions.clear();
-}
-
-bool Scene::HasChanges() const {
-  if (state_->has_changes_)
-    return true;
-  for (SceneObject* o : state_->objects_) {
-    if (o->HasChanges())
-      return true;
-  }
-  return false;
-}
-
-void Scene::ClearChanges() {
-  for (SceneObject* o : state_->objects_)
-    o->ClearChanges();
-  state_->has_changes_ = false;
+  this->SetDirty();
+  impl_->objects_.Clear();
+  impl_->screen_text_positions.clear();
+  impl_->screen_text_positions.clear();
 }
 
 Iterator<SceneObject*> Scene::Objects() const {
-  typedef std::list<SceneObject*>::const_iterator StdIterType;
-  auto it_impl = new IteratorImpl_StdIterator<StdIterType>(
-      state_->objects_.begin(),
-      state_->objects_.end());
-  return Iterator<SceneObject*>(it_impl);
+  return GetObjects<SceneObject>(impl_->objects_);
 }
 
 void Scene::AddObject(SceneObject* object) {
-  state_->objects_.push_back(object);
-  state_->has_changes_ = true;
+  impl_->objects_.Insert(object);
 }
 
 glm::mat4 Scene::GetViewMatrix() const {
-  return state_->camera_.GetViewMatrix();
+  return impl_->camera_.GetViewMatrix();
 }
 
 glm::mat4 Scene::GetProjectionMatrix() const {
-  return state_->camera_.GetProjectionMatrix(this->GetBoundBox());
+  return impl_->camera_.GetProjectionMatrix(this->GetBoundBox());
 }
 
 glm::uvec2 Scene::GetScreenSize() const {
-  return state_->camera_.GetScreenSize();
+  return impl_->camera_.GetScreenSize();
 }
 
 void Scene::FitScene() {
   AlignedBoundBox box = this->GetBoundBox();
   box.Scale(1.3);
-  state_->camera_.FitBox(box);
+  impl_->camera_.FitBox(box);
 }
 
 void Scene::ZoomCamera(float k) {
-  state_->camera_.Zoom(k);
+  impl_->camera_.Zoom(k);
 }
 
 glm::vec3 Scene::CameraPosition() const {
-  return state_->camera_.GetPosition();
+  return impl_->camera_.GetPosition();
 }
 
 void Scene::TranslateCamera(int x, int y, int dx, int dy) {
   if (dx == 0 && dy == 0) return;
-  state_->camera_.Translate(glm::ivec2{dx,dy});
+  impl_->camera_.Translate(glm::ivec2{dx,dy});
 }
 
 void Scene::RotateCamera(int x, int y, int dx, int dy) {
@@ -107,70 +97,66 @@ void Scene::RotateCamera(int x, int y, int dx, int dy) {
   AlignedBoundBox box = this->GetBoundBox();
   if (box.IsEmpty())
     return;
-  state_->camera_.SetPivotPoint(box.GetCenter());
+  impl_->camera_.SetPivotPoint(box.GetCenter());
   glm::vec2 screen_offset(static_cast<float>(dx), static_cast<float>(dy));
-  state_->camera_.RotateAroundPivot(screen_offset);
+  impl_->camera_.RotateAroundPivot(screen_offset);
 }
 
 void Scene::OrientCamera(const OrthoBasis<float>& ortho_basis) {
-  state_->camera_.Orient(ortho_basis);
+  impl_->camera_.Orient(ortho_basis);
   this->FitScene();
 }
 
 void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
-  state_->camera_.SetViewportSizeFunction(func);
+  impl_->camera_.SetViewportSizeFunction(func);
 }
 
-// FgImage* Scene::AddFgImage(const std::string& image_filename,
-//                            const glm::ivec2& screen_position) {
-//   FgImage fg(image_filename,screen_position);
-//   if (fg.IsEmpty())
-//     return nullptr;
-//   state_->fg_image_ = fg;
-//   state_->has_changes_ = true;
-//   return &state_->fg_image_;
-// }
-
-// FgImage* Scene::AddFgImage(const unsigned char* image_data,
-//                            size_t image_data_size,
-//                            const glm::ivec2& screen_position) {
-//   FgImage fg(image_data,image_data_size,screen_position);
-//   if (fg.IsEmpty())
-//     return nullptr;
-//   state_->fg_image_ = fg;
-//   state_->has_changes_ = true;
-//   return &state_->fg_image_;
-// }
-
-// ScreenText* Scene::AddFgText(const std::string& text) {
-//   auto o = new ScreenText(text, glm::ivec2(0,0));
-//   state_->screen_text_objects_.push_back(o);
-//   state_->has_changes_ = true;
-//   return o;
-// }
-
-// bool Scene::Remove(const ScreenText* text_object) {
-//   if (!text_object)
-//     return false;
-//   auto it = std::find(state_->screen_text_objects_.begin(),
-//                       state_->screen_text_objects_.end(),
-//                       text_object);
-//   if (it == state_->screen_text_objects_.end())
-//     return false;
-//   state_->screen_text_objects_.erase(it);
-//   delete text_object;
-//   state_->has_changes_ = true;
-//   return true;
-// }
-
-Scene::Inner* Scene::GetInnerInterface() {
-  if (state_->inner_interface_ == nullptr)
-    state_->inner_interface_ = new Inner(state_);
-  return state_->inner_interface_;
+bool Scene::HasFgImages() const {
+  return !impl_->fg_image_positions.empty();
 }
 
-const Scene::Inner* Scene::GetInnerInterface() const {
-  if (state_->inner_interface_ == nullptr)
-    state_->inner_interface_ = new Inner(state_);
-  return state_->inner_interface_;
+Iterator<FgImage*> Scene::GetFgImages() const {
+  auto it = new IteratorImpl_StdMapKey<FgImage*,glm::ivec2>(
+      impl_->fg_image_positions.begin(),
+      impl_->fg_image_positions.end());
+  return Iterator<FgImage*>(it);
+}
+
+bool Scene::HasScreenTexts() const {
+  return !impl_->screen_text_positions.empty();
+}
+
+Iterator<ScreenText*> Scene::GetScreenTextObjects() const {
+  auto it = new IteratorImpl_StdMapKey<ScreenText*,glm::ivec2>(
+      impl_->screen_text_positions.begin(),
+      impl_->screen_text_positions.end());
+  return Iterator<ScreenText*>(it);
+}
+
+glm::ivec2 Scene::GetScreenPosition(const FgImage* fg_image) const {
+  auto it = impl_->fg_image_positions.find(const_cast<FgImage*>(fg_image));
+  if (it == impl_->fg_image_positions.end())
+    return glm::ivec2{};
+  return it->second;
+}
+
+glm::ivec2 Scene::GetScreenPosition(const ScreenText* screen_text) const {
+  auto it = impl_->screen_text_positions.find(const_cast<ScreenText*>(screen_text));
+  if (it == impl_->screen_text_positions.end())
+    return glm::ivec2{};
+  return it->second;
+}
+
+void Scene::AddFgImage(FgImage* fg_image,
+                       const glm::ivec2& screen_position) {
+  impl_->fg_image_positions[fg_image] = screen_position;
+  this->SetDirty();
+}
+
+void Scene::SetVulkanSurface(uint64_t surface) {
+  impl_->vulkan_surface_ = surface;
+}
+
+uint64_t Scene::GetVulkanSurface() const {
+  return impl_->vulkan_surface_;
 }

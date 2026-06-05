@@ -10,8 +10,10 @@
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
 #include "numgeom/orthobasis.h"
+#include "numgeom/trackedobject.h"
 
 class FgImage;
+class SceneImpl;
 class SceneObject;
 class ScreenText;
 
@@ -21,7 +23,7 @@ class ScreenText;
 
 Сцена состоит из так называемых 'объектов' типа `SceneObject`.
 */
-class FRAMEWORK_EXPORT Scene {
+class FRAMEWORK_EXPORT Scene : public TrackedObject {
  public:
   Scene(const std::string& name);
   ~Scene();
@@ -66,14 +68,18 @@ class FRAMEWORK_EXPORT Scene {
     return item;
   }
 
-  bool HasChanges() const;
-  void ClearChanges();
-
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
-  class Inner;
-  Inner* GetInnerInterface();
-  const Inner* GetInnerInterface() const;
+  bool HasFgImages() const;
+  Iterator<FgImage*> GetFgImages() const;
+  glm::ivec2 GetScreenPosition(const FgImage*) const;
+  void AddFgImage(FgImage*, const glm::ivec2&);
+  bool HasScreenTexts() const;
+  Iterator<ScreenText*> GetScreenTextObjects() const;
+  glm::ivec2 GetScreenPosition(const ScreenText*) const;
+
+  void SetVulkanSurface(uint64_t);
+  uint64_t GetVulkanSurface() const;
 
  private:
   Scene(const Scene&) = delete;
@@ -81,7 +87,6 @@ class FRAMEWORK_EXPORT Scene {
   void AddObject(SceneObject* _Object);
 
  private:
-  class State;
-  State* state_;
+  SceneImpl* impl_;
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENE_H

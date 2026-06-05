@@ -5,12 +5,24 @@
 #include "numgeom/drawable.h"
 #include "numgeom/iteratorimpl.hpp"
 
+#include "trackedobjectlist.h"
+
+class SceneObjectImpl {
+ public:
+  Scene* scene;
+  TrackedObjectList drawables;
+};
+
 SceneObject::SceneObject(Scene* scene) {
   assert(scene != nullptr);
-  scene_ = scene;
+  impl_ = new SceneObjectImpl {
+    .scene = scene
+  };
+  this->AddSubObjects(&impl_->drawables);
 }
 
 SceneObject::~SceneObject() {
+  delete impl_;
 }
 
 AlignedBoundBox SceneObject::GetBoundBox() const {
@@ -22,34 +34,17 @@ AlignedBoundBox SceneObject::GetBoundBox() const {
 }
 
 size_t SceneObject::DrawablesCount() const {
-  return drawables_.size();
+  return impl_->drawables.GetObjectsCount();
 }
 
 Iterator<Drawable*> SceneObject::Drawables() const {
-  typedef std::vector<Drawable*>::const_iterator StdIterType;
-  auto it_pimpl = new IteratorImpl_StdIterator<StdIterType>(drawables_.begin(),
-                                                            drawables_.end());
-  return Iterator<Drawable*>(it_pimpl);
+  return GetObjects<Drawable>(impl_->drawables);
+}
+
+void SceneObject::Insert(Drawable* drawable) {
+  impl_->drawables.Insert(drawable);
 }
 
 bool SceneObject::Remove(Drawable* drawable) {
-  for (auto it = drawables_.begin(); it != drawables_.end(); ++it) {
-    Drawable* d = (*it);
-    if (d != drawable) continue;
-    delete drawable;
-    drawables_.erase(it);
-    has_changes_ = true;
-    return true;
-  }
-  return false;
-}
-
-bool SceneObject::HasChanges() const {
-  return has_changes_;
-}
-
-void SceneObject::ClearChanges() {
-  for (auto* d : drawables_)
-    d->ClearChanges();
-  has_changes_ = false;
+  return impl_->drawables.Remove(drawable);
 }

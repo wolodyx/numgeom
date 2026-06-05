@@ -31,9 +31,7 @@
 #include "numgeom/sceneobject.h"
 #include "numgeom/screentext.h"
 
-#include "applicationinner.h"
 #include "fgimage.h"
-#include "sceneinner.h"
 #include "sceneiterators.h"
 #include "screentextds.h"
 #include "screentextinner.h"
@@ -130,7 +128,6 @@ struct VulkanState {
 
   VkCommandPool cmd_pool = VK_NULL_HANDLE;
   VkDescriptorSetLayout desc_layout = VK_NULL_HANDLE;
-  VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
 };
 
 //! Ресурсы Vulkan для отрисовки изображения на переднем плане сцены.
@@ -142,10 +139,6 @@ struct FgImageResources {
 
   bool operator!() const { return image == VK_NULL_HANDLE; }
   void Release(VulkanState*);
-  //void Render(VkCommandBuffer cmd_buf, VkPipeline image_pipeline,
-  //            VkPipelineLayout pipeline_layout,
-  //            const FgImage* fg_image,
-  //            const VkExtent2D& image_extent) const;
   bool Initialize(const VulkanState*, const FgImage*);
 };
 
@@ -180,6 +173,8 @@ struct SceneResources {
   VkSurfaceKHR surface = VK_NULL_HANDLE;
   bool is_external_surface = false;
 
+  VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
+
   std::array<FrameState, MAX_NUM_FRAMES> frames_state;
   size_t current_frame_index = 0;
   bool stop_rendering = true; //!< Признак остановки рендеринга.
@@ -209,9 +204,9 @@ struct SceneResources {
 
   uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
 
-  FgImageResources fg_image_resources;
-  const ScreenText* screen_text = nullptr;
-  FgTextResources fg_text_resources;
+  void Release();
+  void InitFrames();
+  void ReleaseFrames();
 };
 
 //! Prototypes
@@ -230,7 +225,7 @@ struct VkSceneRenderer::Impl {
   Xcb xcb;
 #endif
   VulkanState vk_global_state;
-  std::map<Scene*, SceneResources*> scenes_vulkan_objects;
+  std::map<Scene*, SceneResources*> scenes_resources;
   std::map<const FgImage*, FgImageResources*> fg_images_resources;
   std::map<const ScreenText*, FgTextResources*> fg_texts_resources;
 };
@@ -257,7 +252,6 @@ void Finalize(VulkanState* state) {
 
   vkDestroyPipelineLayout(state->device,state->pipeline_layout,nullptr);
   vkDestroyDescriptorSetLayout(state->device,state->desc_layout,nullptr);
-  vkDestroyDescriptorPool(state->device,state->descriptor_pool,nullptr);
 
   vkDestroyRenderPass(state->device,state->renderpass,nullptr);
   state->renderpass = VK_NULL_HANDLE;
@@ -286,6 +280,18 @@ void Finalize(VulkanState* state) {
 }
 
 VkSceneRenderer::~VkSceneRenderer() {
+  for (const auto [fg_image, resources] : impl_->fg_images_resources) {
+    resources->Release(&impl_->vk_global_state);
+    delete resources;
+  }
+  for (const auto [fg_text, resources] : impl_->fg_texts_resources) {
+    resources->Release(&impl_->vk_global_state);
+    delete resources;
+  }
+  for (const auto [scene, scene_resources] : impl_->scenes_resources) {
+    scene_resources->Release();
+    delete scene_resources;
+  }
   ::Finalize(&impl_->vk_global_state);
   delete impl_;
 }
@@ -1138,44 +1144,46 @@ bool InitImage(SceneResources* scene_resources, ImageState* image_state) {
   return true;
 }
 
-bool InitFrame(VulkanState* state, FrameState* resources) {
+void SceneResources::InitFrames(/*VulkanState* state, FrameState* resources*/) {
   BOOST_LOG_TRIVIAL(trace) << "Create frame resources ...";
 
   VkResult r;
 
-  VkFenceCreateInfo ci_fence{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                             .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-  r = vkCreateFence(state->device, &ci_fence, nullptr, &resources->cmd_fence);
-  assert(r == VK_SUCCESS);
-  resources->cmd_fence_waitable = true;
+  for (uint32_t i = 0; i < vk_state->frame_count; ++i) {
+    FrameState& frame = frames_state[i];
+    VkFenceCreateInfo ci_fence{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                               .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+    r = vkCreateFence(vk_state->device, &ci_fence, nullptr, &frame.cmd_fence);
+    assert(r == VK_SUCCESS);
+    frame.cmd_fence_waitable = true;
 
-  VkCommandBufferAllocateInfo commandBufferAllocateInfo{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = state->cmd_pool,
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = 1,
-  };
-  r = vkAllocateCommandBuffers(state->device, &commandBufferAllocateInfo,
-                               &resources->cmd_buf);
-  assert(r == VK_SUCCESS);
+    VkCommandBufferAllocateInfo commandBufferAllocateInfo{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+        .commandPool = vk_state->cmd_pool,
+        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+        .commandBufferCount = 1,
+    };
+    r = vkAllocateCommandBuffers(vk_state->device, &commandBufferAllocateInfo,
+                                 &frame.cmd_buf);
+    assert(r == VK_SUCCESS);
 
-  VkSemaphoreCreateInfo semaphoreCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-  };
-  r = vkCreateSemaphore(state->device, &semaphoreCreateInfo, nullptr,
-                        &resources->acquire_semaphore);
-  assert(r == VK_SUCCESS);
+    VkSemaphoreCreateInfo semaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    r = vkCreateSemaphore(vk_state->device, &semaphoreCreateInfo, nullptr,
+                          &frame.acquire_semaphore);
+    assert(r == VK_SUCCESS);
 
-  VkDescriptorSetAllocateInfo descSetAllocInfo{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-      .descriptorPool = state->descriptor_pool,
-      .descriptorSetCount = 1,
-      .pSetLayouts = &state->desc_layout};
-  r = vkAllocateDescriptorSets(state->device, &descSetAllocInfo,
-                               &resources->desc_set);
-  assert(r == VK_SUCCESS);
-
-  return true;
+    VkDescriptorSetAllocateInfo descSetAllocInfo{
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+        .descriptorPool = descriptor_pool,
+        .descriptorSetCount = 1,
+        .pSetLayouts = &vk_state->desc_layout};
+    r = vkAllocateDescriptorSets(vk_state->device, &descSetAllocInfo,
+                                 &frame.desc_set);
+    assert(r == VK_SUCCESS);
+    BOOST_LOG_TRIVIAL(trace) << std::format("DescriptorSet = {}", reinterpret_cast<void*>(frame.desc_set));
+  }
 }
 
 void Finalize(VulkanState* state, ImageState* image_state) {
@@ -1203,17 +1211,23 @@ void Finalize(VulkanState* state, ImageState* image_state) {
   image_state->submit_semaphore = VK_NULL_HANDLE;
 }
 
-void Finalize(VulkanState* state, FrameState* frame) {
-  BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
+void SceneResources::ReleaseFrames() {
+  for (int i = 0; i < vk_state->frame_count; ++i) {
+    FrameState* frame = &frames_state[i];
+    BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
 
-  vkFreeCommandBuffers(state->device, state->cmd_pool, 1, &frame->cmd_buf);
+    vkFreeCommandBuffers(vk_state->device, vk_state->cmd_pool, 1, &frame->cmd_buf);
 
-  vkDestroyFence(state->device, frame->cmd_fence, nullptr);
-  frame->cmd_fence = VK_NULL_HANDLE;
-  frame->cmd_fence_waitable = false;
+    vkDestroyFence(vk_state->device, frame->cmd_fence, nullptr);
+    frame->cmd_fence = VK_NULL_HANDLE;
+    frame->cmd_fence_waitable = false;
 
-  vkDestroySemaphore(state->device, frame->acquire_semaphore, nullptr);
-  frame->acquire_semaphore = VK_NULL_HANDLE;
+    vkDestroySemaphore(vk_state->device, frame->acquire_semaphore, nullptr);
+    frame->acquire_semaphore = VK_NULL_HANDLE;
+
+    vkFreeDescriptorSets(vk_state->device, descriptor_pool, 1,
+                         &frame->desc_set);
+  }
 }
 
 struct SwapChainSupportDetails {
@@ -1504,37 +1518,12 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
     InitImage(scene_resources, &image_state);
   }
 
-  if (scene_resources->screen_text) {
-    scene_resources->fg_text_resources.InitQuad(state, extent, scene_resources->screen_text);
-  }
+  //if (scene_resources->screen_text) {
+  //  scene_resources->fg_text_resources.InitQuad(state, extent, scene_resources->screen_text);
+  //}
 
   return true;
 }
-
-//void FgImageResources::Render(VkCommandBuffer cmd_buf,
-//                              VkPipeline image_pipeline,
-//                              VkPipelineLayout pipeline_layout,
-//                              const FgImage* fg_image,
-//                              const VkExtent2D& image_extent) const {
-//  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, image_pipeline);
-//  struct PushConstants {
-//    float pos_x, pos_y;
-//    float size_x, size_y;
-//    float screen_w, screen_h;
-//  };
-//  PushConstants pc = {
-//      .pos_x = static_cast<float>(fg_image->position.x),
-//      .pos_y = static_cast<float>(fg_image->position.y),
-//      .size_x = static_cast<float>(fg_image->width),
-//      .size_y = static_cast<float>(fg_image->height),
-//      .screen_w = static_cast<float>(image_extent.width),
-//      .screen_h = static_cast<float>(image_extent.height),
-//  };
-//  vkCmdPushConstants(cmd_buf, pipeline_layout,
-//                     VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
-//  // Draw 6 vertices as 2 triangles.
-//  vkCmdDraw(cmd_buf, 6, 1, 0, 0);
-//}
 
 void Render(Scene* scene, SceneResources* scene_resources,
             ImageState& image_state, FrameState& frame,
@@ -1620,8 +1609,7 @@ void Render(Scene* scene, SceneResources* scene_resources,
   vkCmdEndRenderPass(frame.cmd_buf);
 
   // --- Composite foreground images onto the swapchain image ---
-  const auto* scene_inner_if = scene->GetInnerInterface();
-  if (scene_inner_if->HasFgImages()) {
+  if (scene->HasFgImages()) {
     // Transition swapchain image from PRESENT_SRC_KHR to COLOR_ATTACHMENT_OPTIMAL.
     VkImageMemoryBarrier composite_barrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1686,9 +1674,9 @@ void Render(Scene* scene, SceneResources* scene_resources,
                             nullptr);
 
     // Draw each foreground image.
-    for (auto* fg_image : scene_inner_if->GetFgImages()) {
+    for (auto* fg_image : scene->GetFgImages()) {
       FgImageResources* fg_image_resources = fg_images_resources.at(fg_image);
-      glm::ivec2 screen_pos = scene_inner_if->GetScreenPosition(fg_image);
+      glm::ivec2 screen_pos = scene->GetScreenPosition(fg_image);
 
       struct PushConstants {
         glm::vec2 position;
@@ -2962,16 +2950,17 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
       .queueFamilyIndex = 0,  //< \warning
   };
   vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmd_pool);
+
   return true;
 }
 
 SceneResources* InitializeSceneResources(VulkanState* vk_state,
                                        VkSurfaceKHR surface,
                                        Scene* scene) {
-  // Доинициализируем глобальное состояние Vulkan,
-  // потому что для этого была нужна поверхность Vulkan.
-  if (!InitializeVulkanState(vk_state,surface))
-    return nullptr;
+  //// Доинициализируем глобальное состояние Vulkan,
+  //// потому что для этого была нужна поверхность Vulkan.
+  //if (!InitializeVulkanState(vk_state,surface))
+  //  return nullptr;
 
   SceneResources scene_resources(vk_state);
   scene_resources.is_external_surface = true;
@@ -2981,31 +2970,6 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
   glm::uvec2 screen_size = scene->GetScreenSize();
   if (!RecreateSwapchain(&scene_resources, VkExtent2D{screen_size.x, screen_size.y}))
     return nullptr;
-
-  VkResult r;
-
-  // Создаем объект пула дескрипторов.
-  // Need descriptors for:
-  // - Uniform buffers: binding 0 (vertex), binding 1 (fragment), binding 4 (text color)
-  // - Combined image samplers: binding 2 (logo), binding 3 (text)
-  std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
-      VkDescriptorPoolSize{
-        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = vk_state->frame_count * 3},  // 3 uniform buffers per frame
-      VkDescriptorPoolSize{
-        .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = vk_state->frame_count * 2},  // 2 image samplers per frame
-  };
-  VkDescriptorPoolCreateInfo ci_descpool{
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .maxSets = vk_state->frame_count,
-      .poolSizeCount = static_cast<uint32_t>(descPoolSizes.size()),
-      .pPoolSizes = descPoolSizes.data()};
-  r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
-                             &vk_state->descriptor_pool);
-
-  for (uint32_t i = 0; i < vk_state->frame_count; ++i)
-    InitFrame(vk_state, &scene_resources.frames_state[i]);
 
   // Память под данные фреймов.
   VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
@@ -3023,7 +2987,32 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
                   &scene_resources.buffer_frame, &scene_resources.alloc_frame,
                   nullptr);
 
+  VkResult r;
+
+  // Создаем объект пула дескрипторов.
+  // Need descriptors for:
+  // - Uniform buffers: binding 0 (vertex), binding 1 (fragment), binding 4 (text color)
+  // - Combined image samplers: binding 2 (logo), binding 3 (text)
+  std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
+      VkDescriptorPoolSize{
+        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+        .descriptorCount = vk_state->frame_count * 3},  // 3 uniform buffers per frame
+      VkDescriptorPoolSize{
+        .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+        .descriptorCount = vk_state->frame_count * 2},  // 2 image samplers per frame
+  };
+  VkDescriptorPoolCreateInfo ci_descpool{
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+      .maxSets = vk_state->frame_count,
+      .poolSizeCount = static_cast<uint32_t>(descPoolSizes.size()),
+      .pPoolSizes = descPoolSizes.data()};
+  r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
+                             &scene_resources.descriptor_pool);
+
   scene_resources.stop_rendering = false;
+
+  scene_resources.InitFrames();
 
   return new SceneResources{scene_resources};
 }
@@ -3034,25 +3023,25 @@ VkInstance VkSceneRenderer::GetInstance() const {
   return impl_->vk_global_state.instance;
 }
 
-bool VkSceneRenderer::Initialize(Scene* scene, VkSurfaceKHR surface) {
-  SceneResources* scene_resources =
-      InitializeSceneResources(&impl_->vk_global_state, surface, scene);
-  if (!scene_resources)
-    return false;
-  impl_->scenes_vulkan_objects.insert(std::make_pair(scene,scene_resources));
-  return true;
-}
+//bool VkSceneRenderer::Initialize(Scene* scene, VkSurfaceKHR surface) {
+//  SceneResources* scene_resources =
+//      InitializeSceneResources(&impl_->vk_global_state, surface, scene);
+//  if (!scene_resources)
+//    return false;
+//  impl_->scenes_resources.insert(std::make_pair(scene,scene_resources));
+//  return true;
+//}
 
 namespace {
-void UpdateScene(
-    SceneResources* scene_resources, const Scene* scene,
-    std::map<const FgImage*, FgImageResources*>& fg_images_resources) {
-  VulkanState* state = scene_resources->vk_state;
+void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
+  VulkanState* vk_global_state = scene_resources->vk_state;
+  auto allocator = vk_global_state->allocator;
+
   if (scene_resources->buffer_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator,scene_resources->buffer_vertex,scene_resources->alloc_vertex);
-    vmaDestroyBuffer(state->allocator,scene_resources->buffer_normal,scene_resources->alloc_normal);
-    vmaDestroyBuffer(state->allocator,scene_resources->buffer_color,scene_resources->alloc_color);
-    vmaDestroyBuffer(state->allocator,scene_resources->buffer_index,scene_resources->alloc_index);
+    vmaDestroyBuffer(allocator,scene_resources->buffer_vertex,scene_resources->alloc_vertex);
+    vmaDestroyBuffer(allocator,scene_resources->buffer_normal,scene_resources->alloc_normal);
+    vmaDestroyBuffer(allocator,scene_resources->buffer_color,scene_resources->alloc_color);
+    vmaDestroyBuffer(allocator,scene_resources->buffer_index,scene_resources->alloc_index);
     scene_resources->buffer_vertex = VK_NULL_HANDLE;
     scene_resources->buffer_normal = VK_NULL_HANDLE;
     scene_resources->buffer_color = VK_NULL_HANDLE;
@@ -3080,20 +3069,20 @@ void UpdateScene(
     VmaAllocationCreateInfo ci_allocation {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
-    VkResult r = vmaCreateBuffer(state->allocator,
+    VkResult r = vmaCreateBuffer(allocator,
                                  &ci_buffer, &ci_allocation,
                                  &scene_resources->buffer_vertex,
                                  &scene_resources->alloc_vertex, nullptr);
     // Копируем вершины.
     void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, scene_resources->alloc_vertex, &mapped_data);
+    vmaMapMemory(allocator, scene_resources->alloc_vertex, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 pt : GetVertexIterator(scene)) {
       *data++ = pt.x;
       *data++ = pt.y;
       *data++ = pt.z;
     }
-    vmaUnmapMemory(state->allocator, scene_resources->alloc_vertex);
+    vmaUnmapMemory(allocator, scene_resources->alloc_vertex);
   }
 
   {
@@ -3106,19 +3095,19 @@ void UpdateScene(
     VmaAllocationCreateInfo ci_allocation {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
-    vmaCreateBuffer(state->allocator,
+    vmaCreateBuffer(allocator,
                     &ci_buffer, &ci_allocation, &scene_resources->buffer_normal,
                     &scene_resources->alloc_normal, nullptr);
     // Копируем нормали.
     void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, scene_resources->alloc_normal, &mapped_data);
+    vmaMapMemory(allocator, scene_resources->alloc_normal, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 n : GetNormalIterator(scene)) {
       *data++ = n.x;
       *data++ = n.y;
       *data++ = n.z;
     }
-    vmaUnmapMemory(state->allocator, scene_resources->alloc_normal);
+    vmaUnmapMemory(allocator, scene_resources->alloc_normal);
   }
 
   {
@@ -3131,19 +3120,19 @@ void UpdateScene(
     VmaAllocationCreateInfo ci_allocation {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
-    vmaCreateBuffer(state->allocator,
+    vmaCreateBuffer(allocator,
                     &ci_buffer, &ci_allocation, &scene_resources->buffer_color,
                     &scene_resources->alloc_color, nullptr);
     // Копируем цвета.
     void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, scene_resources->alloc_color, &mapped_data);
+    vmaMapMemory(allocator, scene_resources->alloc_color, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 c : GetColorIterator(scene)) {
       *data++ = c.x;
       *data++ = c.y;
       *data++ = c.z;
     }
-    vmaUnmapMemory(state->allocator, scene_resources->alloc_color);
+    vmaUnmapMemory(allocator, scene_resources->alloc_color);
   }
 
   {
@@ -3156,74 +3145,39 @@ void UpdateScene(
     VmaAllocationCreateInfo ci_allocation {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
-    vmaCreateBuffer(state->allocator,
-                    &ci_buffer, &ci_allocation, &scene_resources->buffer_index,
+    vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                    &scene_resources->buffer_index,
                     &scene_resources->alloc_index, nullptr);
 
     // Копируем индексный буфер.
     void* mapped_data = nullptr;
-    vmaMapMemory(state->allocator, scene_resources->alloc_index, &mapped_data);
+    vmaMapMemory(allocator, scene_resources->alloc_index, &mapped_data);
     uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
     for (glm::u32vec3 tr : GetTriaIterator(scene)) {
       *data++ = tr.x;
       *data++ = tr.y;
       *data++ = tr.z;
     }
-    vmaUnmapMemory(state->allocator, scene_resources->alloc_index);
+    vmaUnmapMemory(allocator, scene_resources->alloc_index);
   }
 
   scene_resources->index_count = 3 * n_cells;
 
-  // Create foreground image resources for each FgImage.
-  auto scene_inner_if = scene->GetInnerInterface();
-  // Release resources for images that are no longer in the scene.
-  for (auto it = fg_images_resources.begin(); it != fg_images_resources.end();) {
-    bool still_in_scene = false;
-    for (auto* fg_image : scene_inner_if->GetFgImages()) {
-      if (fg_image == it->first) {
-        still_in_scene = true;
-        break;
-      }
-    }
-    if (!still_in_scene) {
-      it->second->Release(state);
-      delete it->second;
-      it = fg_images_resources.erase(it);
-    } else {
-      ++it;
-    }
-  }
-  // Create or update resources for current foreground images.
-  for (auto* fg_image : scene_inner_if->GetFgImages()) {
-    auto it = fg_images_resources.find(fg_image);
-    if (it == fg_images_resources.end()) {
-      auto* resources = new FgImageResources();
-      if (!resources->Initialize(state, fg_image)) {
-        BOOST_LOG_TRIVIAL(warning)
-            << "Failed to create foreground image resources, "
-            << "continuing without image";
-        delete resources;
-        continue;
-      }
-      fg_images_resources[fg_image] = resources;
-    }
-  }
-
-  scene_resources->fg_text_resources.Release(state);
-  scene_resources->screen_text = nullptr;
-  if (scene_inner_if->HasScreenTexts()) {
-    const ScreenText* text = *(scene_inner_if->GetScreenTextObjects());
-    scene_resources->screen_text = text;
-    if (!scene_resources->fg_text_resources.Initialize(state,text)) {
-      BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground text resources, continuing without text";
-    }
-  }
+  //scene_resources->fg_text_resources.Release(vk_global_state);
+  //scene_resources->screen_text = nullptr;
+  //if (scene->HasScreenTexts()) {
+  //  const ScreenText* text = *(scene->GetScreenTextObjects());
+  //  scene_resources->screen_text = text;
+  //  if (!scene_resources->fg_text_resources.Initialize(vk_global_state,text)) {
+  //    BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground text resources, continuing without text";
+  //  }
+  //}
 }
 
 void UpdateDescriptorSets(
     Scene* scene, SceneResources* scene_resources,
-    const std::map<const FgImage*, FgImageResources*>& fg_images_resources) {
-  const VulkanState* state = scene_resources->vk_state;
+    const std::map<const FgImage*,FgImageResources*>& fg_images_resources) {
+  const VulkanState* vk_global_state = scene_resources->vk_state;
   FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
 
   glm::mat4 model_view_matrix = scene->GetViewMatrix();
@@ -3256,11 +3210,11 @@ void UpdateDescriptorSets(
 
   // Осуществляем прямую запись данных в разделяемую память CPU и GPU.
   void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, scene_resources->alloc_frame, &mapped_data);
+  vmaMapMemory(vk_global_state->allocator, scene_resources->alloc_frame, &mapped_data);
   std::byte* data = reinterpret_cast<std::byte*>(mapped_data) + frame_offset;
   std::memcpy(data, &vbo, sizeof(vbo));
   std::memcpy(data + vbo_size, &fbo, sizeof(fbo));
-  vmaUnmapMemory(state->allocator, scene_resources->alloc_frame);
+  vmaUnmapMemory(vk_global_state->allocator, scene_resources->alloc_frame);
 
   std::vector<VkDescriptorBufferInfo> bufferInfo{
       VkDescriptorBufferInfo{
@@ -3293,75 +3247,159 @@ void UpdateDescriptorSets(
       },
   };
   // Add combined image sampler for the first foreground image if available.
-  if (!fg_images_resources.empty()) {
-    const FgImageResources* fg_res = fg_images_resources.begin()->second;
-    if (fg_res->image_view != VK_NULL_HANDLE &&
-        fg_res->sampler != VK_NULL_HANDLE) {
-      VkDescriptorImageInfo imageInfo{
-          .sampler = fg_res->sampler,
-          .imageView = fg_res->image_view,
-          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      };
-      descWrites.push_back(VkWriteDescriptorSet{
-          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = frame.desc_set,
-          .dstBinding = 2,
-          .descriptorCount = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .pImageInfo = &imageInfo,
-      });
+  if (scene->HasFgImages()) {
+    for (FgImage* fg_image : scene->GetFgImages()) {
+      const FgImageResources* fg_res = fg_images_resources.at(fg_image);
+      if (fg_res->image_view != VK_NULL_HANDLE &&
+          fg_res->sampler != VK_NULL_HANDLE) {
+        VkDescriptorImageInfo image_info{
+            .sampler = fg_res->sampler,
+            .imageView = fg_res->image_view,
+            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        };
+        descWrites.push_back(VkWriteDescriptorSet{
+            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+            .dstSet = frame.desc_set,
+            .dstBinding = 2,
+            .descriptorCount = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .pImageInfo = &image_info,
+        });
+      }
     }
   }
 
   // Add combined image sampler for text if available
-  if (scene_resources->fg_text_resources.image_view != VK_NULL_HANDLE &&
-      scene_resources->fg_text_resources.sampler != VK_NULL_HANDLE) {
-    VkDescriptorImageInfo imageInfo{
-        .sampler = scene_resources->fg_text_resources.sampler,
-        .imageView = scene_resources->fg_text_resources.image_view,
-        .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-    };
-    descWrites.push_back(VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = frame.desc_set,
-        .dstBinding = 3,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .pImageInfo = &imageInfo,
-    });
-  }
+  //if (scene_resources->fg_text_resources.image_view != VK_NULL_HANDLE &&
+  //    scene_resources->fg_text_resources.sampler != VK_NULL_HANDLE) {
+  //  VkDescriptorImageInfo imageInfo{
+  //      .sampler = scene_resources->fg_text_resources.sampler,
+  //      .imageView = scene_resources->fg_text_resources.image_view,
+  //      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+  //  };
+  //  descWrites.push_back(VkWriteDescriptorSet{
+  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+  //      .dstSet = frame.desc_set,
+  //      .dstBinding = 3,
+  //      .descriptorCount = 1,
+  //      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+  //      .pImageInfo = &imageInfo,
+  //  });
+  //}
 
   // Add uniform buffer for text color if available
-  if (scene_resources->fg_text_resources.buffer_color != VK_NULL_HANDLE) {
-    VkDescriptorBufferInfo bufferInfo{
-        .buffer = scene_resources->fg_text_resources.buffer_color,
-        .offset = 0,
-        .range = sizeof(glm::vec4),
-    };
-    descWrites.push_back(VkWriteDescriptorSet{
-        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = frame.desc_set,
-        .dstBinding = 4,
-        .descriptorCount = 1,
-        .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .pBufferInfo = &bufferInfo,
-    });
-  }
+  //if (scene_resources->fg_text_resources.buffer_color != VK_NULL_HANDLE) {
+  //  VkDescriptorBufferInfo bufferInfo{
+  //      .buffer = scene_resources->fg_text_resources.buffer_color,
+  //      .offset = 0,
+  //      .range = sizeof(glm::vec4),
+  //  };
+  //  descWrites.push_back(VkWriteDescriptorSet{
+  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+  //      .dstSet = frame.desc_set,
+  //      .dstBinding = 4,
+  //      .descriptorCount = 1,
+  //      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+  //      .pBufferInfo = &bufferInfo,
+  //  });
+  //}
 
-  vkUpdateDescriptorSets(state->device,
+  vkUpdateDescriptorSets(vk_global_state->device,
                          static_cast<uint32_t>(descWrites.size()),
                          descWrites.data(), 0, nullptr);
 }
 
+bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
+  // Обновление данных -- это критическая секция.
+  static std::mutex mtx;
+  std::lock_guard<std::mutex> lock(mtx);
+
+  auto vk_global_state = &render_state->vk_global_state;
+  // Доинициализируем глобальное состояние Vulkan,
+  // потому что для этого была нужна поверхность Vulkan.
+  auto surface = reinterpret_cast<VkSurfaceKHR>(scene->GetVulkanSurface());
+  if (!InitializeVulkanState(vk_global_state,surface))
+    return false;
+
+  // Ожидаем завершения всех заданий в очередях.
+  vkQueueWaitIdle(vk_global_state->queue);
+
+  {
+    auto it = render_state->scenes_resources.find(scene);
+    auto scene_resources =
+        (it != render_state->scenes_resources.end() ? it->second : nullptr);
+    switch (scene->GetState()) {
+    case TrackedObject::State::Clean:
+      break;
+    case TrackedObject::State::New:
+      assert(scene_resources == nullptr);
+      scene_resources = InitializeSceneResources(vk_global_state, surface,
+                                                 scene);
+      if (!scene_resources)
+        return false;
+      render_state->scenes_resources.insert(std::make_pair(scene,scene_resources));
+      // Проваливаемся в следующую ветку `case` осознанно!
+    case TrackedObject::State::Dirty:
+      assert(scene_resources != nullptr);
+      UpdateScene(scene, scene_resources);
+      break;
+    case TrackedObject::State::Removed:
+      scene_resources->Release();
+      render_state->scenes_resources.erase(it);
+      delete scene_resources;
+      break;
+    }
+    scene->Sync();
+  }
+  if (scene->IsDeleted())
+    return false;
+
+  // Синхронизируем связку `FgImage -> FgImageResources`.
+  for (FgImage* fg_image : scene->GetFgImages()) {
+    auto it = render_state->fg_images_resources.find(fg_image);
+    auto fg_image_resources =
+        (it != render_state->fg_images_resources.end() ? it->second : nullptr);
+    auto state = fg_image->GetState();
+    switch (state) {
+    case TrackedObject::State::New:
+      assert(fg_image_resources == nullptr);
+      fg_image_resources = new FgImageResources();
+      fg_image_resources->Initialize(vk_global_state, fg_image);
+      render_state->fg_images_resources[fg_image] = fg_image_resources;
+      break;
+    case TrackedObject::State::Clean:
+      break;
+    case TrackedObject::State::Dirty:
+      fg_image_resources->Release(vk_global_state);
+      fg_image_resources->Initialize(vk_global_state, fg_image);
+      break;
+    case TrackedObject::State::Delete:
+      fg_image_resources->Release(vk_global_state);
+      delete fg_image_resources;
+      render_state->fg_images_resources.erase(it);
+      break;
+    default:
+      std::abort();
+    }
+    fg_image->Sync();
+  }
+
+  auto scene_resources = render_state->scenes_resources.at(scene);
+  UpdateDescriptorSets(scene, scene_resources, render_state->fg_images_resources);
+
+  return true;
+}
 }  // namespace
 
 bool VkSceneRenderer::Update(Scene* scene) {
-  if (!scene) return false;
-
-  auto it = impl_->scenes_vulkan_objects.find(scene);
-  if (it == impl_->scenes_vulkan_objects.end())
+  // Проверяем принадлежность сцены приложению.
+  if (!scene || scene != impl_->app->GetScene(scene->GetName()))
     return false;
-  SceneResources* scene_resources = it->second;
+
+  if (!Synchronize(impl_,scene))
+    return false;
+
+  SceneResources* scene_resources = impl_->scenes_resources.at(scene);
   if (scene_resources->stop_rendering) return false;
 
   auto screen_size = scene->GetScreenSize();
@@ -3382,21 +3420,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
     vkResetFences(state->device, 1, &frame.cmd_fence);
     frame.cmd_fence_waitable = false;
   }
-
-  // Если следует обновить сцену, то ожидаем завершения заданий в очередях
-  // и блокируем рендеринг до обновления вершинных и индексных буферов.
-  {
-    static std::mutex mtx;
-    std::lock_guard<std::mutex> lock(mtx);
-    if (scene->HasChanges()) {
-      scene_resources->stop_rendering = true;
-      vkQueueWaitIdle(state->queue);
-      UpdateScene(scene_resources, scene, impl_->fg_images_resources);
-      scene->ClearChanges();
-      scene_resources->stop_rendering = false;
-    }
-  }
-  UpdateDescriptorSets(scene, scene_resources, impl_->fg_images_resources);
 
   while (true) {
     uint32_t index;
@@ -3460,44 +3483,21 @@ void FgImageResources::Release(VulkanState* state) {
 }
 }
 
-void VkSceneRenderer::Finalize(Scene* scene) {
-  if (!scene)
-    return;
-  auto it = impl_->scenes_vulkan_objects.find(scene);
-  if (it == impl_->scenes_vulkan_objects.end())
-    return;
-  SceneResources* scene_resources = it->second;
-  impl_->scenes_vulkan_objects.erase(it);
+void SceneResources::Release() {
+  vkDeviceWaitIdle(vk_state->device);
 
-  VulkanState* state = scene_resources->vk_state;
+  ReleaseSwapchain(this);
+  ReleaseFrames();
 
-  vkDeviceWaitIdle(state->device);
+  vkDestroyDescriptorPool(vk_state->device, descriptor_pool, nullptr);
 
-  ReleaseSwapchain(scene_resources);
+  vmaDestroyBuffer(vk_state->allocator, buffer_vertex, alloc_vertex);
+  vmaDestroyBuffer(vk_state->allocator, buffer_normal, alloc_normal);
+  vmaDestroyBuffer(vk_state->allocator, buffer_color, alloc_color);
+  vmaDestroyBuffer(vk_state->allocator, buffer_index, alloc_index);
+  vmaDestroyBuffer(vk_state->allocator, buffer_frame, alloc_frame);
 
-  for (int i = 0; i < state->frame_count; ++i) {
-    FrameState* frame = &scene_resources->frames_state[i];
-    ::Finalize(state, frame);
-  }
-
-  vmaDestroyBuffer(state->allocator, scene_resources->buffer_vertex, scene_resources->alloc_vertex);
-  vmaDestroyBuffer(state->allocator, scene_resources->buffer_normal, scene_resources->alloc_normal);
-  vmaDestroyBuffer(state->allocator, scene_resources->buffer_color, scene_resources->alloc_color);
-  vmaDestroyBuffer(state->allocator, scene_resources->buffer_index, scene_resources->alloc_index);
-  vmaDestroyBuffer(state->allocator, scene_resources->buffer_frame, scene_resources->alloc_frame);
-
-  // Cleanup fgimage quad buffers
-  scene_resources->fg_image_resources.Release(state);
-  scene_resources->fg_text_resources.Release(state);
-
-  // Cleanup per-image foreground resources.
-  for (auto& [fg_image, resources] : impl_->fg_images_resources) {
-    resources->Release(state);
-    delete resources;
-  }
-  impl_->fg_images_resources.clear();
-
-  if (!scene_resources->is_external_surface)
-    vkDestroySurfaceKHR(state->instance, scene_resources->surface, nullptr);
-  scene_resources->surface = VK_NULL_HANDLE;
+  if (!is_external_surface)
+    vkDestroySurfaceKHR(vk_state->instance, surface, nullptr);
+  surface = VK_NULL_HANDLE;
 }

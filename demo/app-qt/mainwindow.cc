@@ -99,8 +99,8 @@ void MainWindow::initVulkan() {
     app_->AddFgImage(scene, fg_image, glm::ivec2(5,5));
   }
 
-  ScreenText* screen_text = app_->AddScreenText("Text rendering test");
-  app_->AddScreenText(scene, screen_text, glm::ivec2(5,100));
+  //ScreenText* screen_text = app_->AddScreenText("Text rendering test");
+  //app_->AddScreenText(scene, screen_text, glm::ivec2(5,100));
 
   scene->FitScene();
   //app_->Update();

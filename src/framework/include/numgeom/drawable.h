@@ -6,10 +6,11 @@
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
+#include "numgeom/trackedobject.h"
 
 class SceneObject;
 
-class FRAMEWORK_EXPORT Drawable {
+class FRAMEWORK_EXPORT Drawable : public TrackedObject {
  public:
   enum class PrimitiveType {
     Triangles,
@@ -38,12 +39,6 @@ class FRAMEWORK_EXPORT Drawable {
   void SetColor(float r, float g, float b);
   void SetColor(int r, int g, int b);
   glm::vec3 GetColor() const;
-
-  bool HasChanges() const { return has_changes_; }
-  void ClearChanges() { has_changes_ = false; }
-
- protected:
-  bool has_changes_ = false;
 
  private:
   SceneObject* parent_;

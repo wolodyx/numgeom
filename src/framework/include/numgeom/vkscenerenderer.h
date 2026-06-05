@@ -32,12 +32,6 @@ class VkSceneRenderer {
   //! существующий или, если отсутствует, то вновь созданный.
   VkInstance GetInstance() const;
 
-  //! Инициализация объектов vulkan для новой сцены.
-  bool Initialize(Scene* scene, VkSurfaceKHR surface);
-
-  //! Очистка объектов vulkan для сцены.
-  void Finalize(Scene*);
-
  private:
   VkSceneRenderer(const VkSceneRenderer&) = delete;
   VkSceneRenderer& operator=(const VkSceneRenderer&) = delete;

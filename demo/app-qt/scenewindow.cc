@@ -36,7 +36,7 @@ bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance,
   this->setVulkanInstance(vulkan_instance);
   VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(this);
   assert(surface != VK_NULL_HANDLE);
-  app_->GetRenderer()->Initialize(scene_, surface);
+  scene_->SetVulkanSurface(reinterpret_cast<uint64_t>(surface));
 
   return true;
 }
@@ -122,8 +122,8 @@ bool SceneWindow::event(QEvent* e) {
       auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
       if (pse->surfaceEventType() ==
           QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-        app_->GetRenderer()->Finalize(scene_);
         app_->RemoveScene(scene_);
+        app_->GetRenderer()->Update(scene_);
         scene_ = nullptr;
       }
       break;

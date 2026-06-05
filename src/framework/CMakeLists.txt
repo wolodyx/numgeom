@@ -11,6 +11,7 @@ set(PUBLIC_HEADERS
   include/numgeom/scenewidget.h
   include/numgeom/scenewidget_axisindicator.h
   include/numgeom/screentext.h
+  include/numgeom/trackedobject.h
   include/numgeom/userinputcontroller.h
   include/numgeom/vkscenerenderer.h
 )
@@ -18,8 +19,6 @@ set(PUBLIC_HEADERS
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   application.cc
-  applicationinner.cc       applicationinner.h
-  applicationstate.cc       applicationstate.h
   camera.cc                 camera.h
   debug_framework.cc
   drawable.cc
@@ -28,9 +27,7 @@ set(SOURCE_FILES
   drawable_sphere.cc
   fgimage.cc                fgimage.h
   scene.cc
-  sceneinner.cc             sceneinner.h
   sceneiterators.cc         sceneiterators.h
-  scenestate.cc             scenestate.h
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc
@@ -39,6 +36,9 @@ set(SOURCE_FILES
   screentextds.h
   screentextinner.cc        screentextinner.h
   screentextstate.cc        screentextstate.h
+  trackedobject.cc
+  trackedobjectdict.cc      trackedobjectdict.h
+  trackedobjectlist.cc      trackedobjectlist.h
   userinputcontroller.cc
   vkscenerenderer.cc
   vkutilities.cc            vkutilities.h

@@ -38,7 +38,7 @@ class FRAMEWORK_EXPORT Application {
   //!@{
   //! Методы для управления рисованием.
 
-  void Update();
+  bool Update(Scene*);
   //!@}
 
   //!@{
@@ -52,11 +52,6 @@ class FRAMEWORK_EXPORT Application {
 
   Scene* GetScene(const std::string&);
   const Scene* GetScene(const std::string&) const;
-
-  bool SetActiveScene(Scene*);
-
-  const Scene* GetActiveScene() const;
-  Scene* GetActiveScene();
 
   Iterator<Scene*> GetForegroundScenes(Scene*);
 
@@ -73,7 +68,7 @@ class FRAMEWORK_EXPORT Application {
 
   VkSceneRenderer* GetRenderer();
 
-  void Synch();
+  void Sync();
 
  private:
   Application(const Application&) = delete;

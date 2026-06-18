@@ -32,6 +32,7 @@
 #include "numgeom/screentext.h"
 
 #include "fgimage.h"
+#include "lrudescriptorsetpool.h"
 #include "sceneiterators.h"
 #include "screentextds.h"
 #include "screentextinner.h"
@@ -75,7 +76,7 @@ struct ImageState {
 };
 
 struct FrameState {
-  VkDescriptorSet desc_set = VK_NULL_HANDLE;
+  VkDescriptorSet graphics_desc_set = VK_NULL_HANDLE;
   VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
   VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
   VkFence cmd_fence = VK_NULL_HANDLE;
@@ -118,24 +119,42 @@ struct VulkanState {
   VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT;
   uint32_t frame_count = MAX_NUM_FRAMES;
 
-  VkRenderPass renderpass = VK_NULL_HANDLE;
+  VkRenderPass graphics_renderpass = VK_NULL_HANDLE;
   VkRenderPass composite_renderpass = VK_NULL_HANDLE;
 
-  VkPipelineLayout pipeline_layout = VK_NULL_HANDLE;
-  VkPipeline pipeline = VK_NULL_HANDLE;
-  VkPipeline text_pipeline = VK_NULL_HANDLE;
+  VkPipelineLayout graphics_pipeline_layout = VK_NULL_HANDLE;
+  VkPipeline graphics_pipeline = VK_NULL_HANDLE;
+
+  VkPipelineLayout composite_pipeline_layout = VK_NULL_HANDLE;
   VkPipeline composite_pipeline = VK_NULL_HANDLE;
 
   VkCommandPool cmd_pool = VK_NULL_HANDLE;
-  VkDescriptorSetLayout desc_layout = VK_NULL_HANDLE;
+  VkDescriptorSetLayout graphics_desc_layout = VK_NULL_HANDLE;
+  VkDescriptorSetLayout composite_desc_layout = VK_NULL_HANDLE;
+  VkSampler composite_sampler = VK_NULL_HANDLE;
+
+  LruPool::PoolPtr textures_desc_pool;
 };
 
 //! Ресурсы Vulkan для отрисовки изображения на переднем плане сцены.
-struct FgImageResources {
+struct FgImageResources : public LruPool::Consumer {
+  FgImageResources(VulkanState* vk_global_state)
+    : LruPool::Consumer(vk_global_state->textures_desc_pool) {
+  }
+  bool ConfiscateResource() {
+    desc_texture = VK_NULL_HANDLE;
+    return true;
+  }
+
+  void SetResource(LruPool::Resource* base_res) {
+    auto res = dynamic_cast<LruDescriptorSetPool::Resource*>(base_res);
+    desc_texture = res->desc_set_;
+  }
+
   VkImage image = VK_NULL_HANDLE;
   VmaAllocation alloc_image = VK_NULL_HANDLE;
   VkImageView image_view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
+  VkDescriptorSet desc_texture = VK_NULL_HANDLE;
 
   bool operator!() const { return image == VK_NULL_HANDLE; }
   void Release(VulkanState*);
@@ -243,18 +262,28 @@ VkSceneRenderer::VkSceneRenderer(Application* app) {
 namespace
 {
 void Finalize(VulkanState* state) {
-  vkDestroyPipeline(state->device, state->pipeline, nullptr);
-  state->pipeline = VK_NULL_HANDLE;
+  state->textures_desc_pool = LruPool::PoolPtr();
+
+  if (state->composite_sampler != VK_NULL_HANDLE) {
+    vkDestroySampler(state->device, state->composite_sampler, nullptr);
+    state->composite_sampler = VK_NULL_HANDLE;
+  }
+
+  vkDestroyPipeline(state->device, state->graphics_pipeline, nullptr);
+  state->graphics_pipeline = VK_NULL_HANDLE;
   if (state->composite_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state->device, state->composite_pipeline, nullptr);
     state->composite_pipeline = VK_NULL_HANDLE;
   }
 
-  vkDestroyPipelineLayout(state->device,state->pipeline_layout,nullptr);
-  vkDestroyDescriptorSetLayout(state->device,state->desc_layout,nullptr);
+  vkDestroyPipelineLayout(state->device, state->graphics_pipeline_layout, nullptr);
+  vkDestroyDescriptorSetLayout(state->device, state->graphics_desc_layout, nullptr);
 
-  vkDestroyRenderPass(state->device,state->renderpass,nullptr);
-  state->renderpass = VK_NULL_HANDLE;
+  vkDestroyPipelineLayout(state->device, state->composite_pipeline_layout, nullptr);
+  vkDestroyDescriptorSetLayout(state->device, state->composite_desc_layout, nullptr);
+
+  vkDestroyRenderPass(state->device, state->graphics_renderpass, nullptr);
+  state->graphics_renderpass = VK_NULL_HANDLE;
 
   if (state->composite_renderpass != VK_NULL_HANDLE) {
     vkDestroyRenderPass(state->device, state->composite_renderpass, nullptr);
@@ -263,12 +292,6 @@ void Finalize(VulkanState* state) {
 
   vkDestroyCommandPool(state->device,state->cmd_pool,nullptr);
   state->cmd_pool = VK_NULL_HANDLE;
-
-  // Destroy text pipeline
-  if (state->text_pipeline != VK_NULL_HANDLE) {
-    vkDestroyPipeline(state->device, state->text_pipeline, nullptr);
-    state->text_pipeline = VK_NULL_HANDLE;
-  }
 
   vmaDestroyAllocator(state->allocator);
 
@@ -391,19 +414,20 @@ bool CreateRenderPass(VulkanState* state) {
   };
 
   VkResult r = vkCreateRenderPass(state->device, &ci_renderpass, nullptr,
-                                  &state->renderpass);
+                                  &state->graphics_renderpass);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
         "RenderPass object creation error ({}).", VkResultToString(r));
     return false;
   }
 
-  if (state->renderpass == VK_NULL_HANDLE) {
+  if (state->graphics_renderpass == VK_NULL_HANDLE) {
     BOOST_LOG_TRIVIAL(trace) << "Renderpass creation error.";
     return false;
   }
-  BOOST_LOG_TRIVIAL(trace) << std::format(
-      "Renderpass {} is created.", static_cast<void*>(state->renderpass));
+  BOOST_LOG_TRIVIAL(trace) <<
+      std::format("Renderpass {} is created.",
+                  static_cast<void*>(state->graphics_renderpass));
   return true;
 }
 
@@ -461,9 +485,55 @@ bool CreateCompositeRenderPass(VulkanState* state) {
 bool CreateCompositePipeline(VulkanState* state) {
   VkResult r;
 
+  // Создаем макеты набора дескрипторов.
+  std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings {
+      VkDescriptorSetLayoutBinding{
+          .binding = 0,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = 1,
+          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+      }
+  };
+  VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
+      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+      .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
+      .pBindings = desc_set_layout_bindings.data()};
+  r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
+                                  nullptr, &state->composite_desc_layout);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Descriptor set layout creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  // Создаем макет конвейера.
+  std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
+    state->composite_desc_layout
+  };
+  // Push constant range for foreground image quad parameters
+  VkPushConstantRange push_constant_range {
+      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+      .offset = 0,
+      .size = 6 * sizeof(float),  // position (2) + size (2) + screenSize (2)
+  };
+  VkPipelineLayoutCreateInfo ci_pipeline_layout {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+      .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
+      .pSetLayouts = descriptor_set_layouts.data(),
+      .pushConstantRangeCount = 1,
+      .pPushConstantRanges = &push_constant_range,
+  };
+  r = vkCreatePipelineLayout(state->device, &ci_pipeline_layout, nullptr,
+                             &state->composite_pipeline_layout);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Pipeline layout creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
   // Shader modules are the same as fgimage pipeline.
   static uint32_t vs_spirv_source[] = {
-#include "fgimage.vert.spv.h"
+#include "compositing.vert.spv.h"
   };
   VkShaderModuleCreateInfo ci_vs_module{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -479,7 +549,7 @@ bool CreateCompositePipeline(VulkanState* state) {
   }
 
   static uint32_t fs_spirv_source[] = {
-#include "fgimage.frag.spv.h"
+#include "compositing.frag.spv.h"
   };
   VkShaderModuleCreateInfo ci_fs_module{
       .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
@@ -591,7 +661,7 @@ bool CreateCompositePipeline(VulkanState* state) {
       .pDepthStencilState = &ci_depth_stencil_state,
       .pColorBlendState = &ci_color_blend_state,
       .pDynamicState = &ci_pipeline_dynamic_state,
-      .layout = state->pipeline_layout,
+      .layout = state->composite_pipeline_layout,
       .renderPass = state->composite_renderpass,
       .subpass = 0,
   }};
@@ -623,7 +693,7 @@ bool CreateGraphicsPipeline(VulkanState* state) {
   VkResult r;
 
   // Создаем макеты набора дескрипторов.
-  std::vector<VkDescriptorSetLayoutBinding> descriptorSetLayoutBindings{
+  std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings{
       VkDescriptorSetLayoutBinding{
           .binding = 0,
           .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -636,33 +706,13 @@ bool CreateGraphicsPipeline(VulkanState* state) {
           .descriptorCount = 1,
           .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
       },
-      VkDescriptorSetLayoutBinding{
-          .binding = 2,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      },
-      // Text texture sampler (binding 3)
-      VkDescriptorSetLayoutBinding{
-          .binding = 3,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      },
-      // Text color uniform buffer (binding 4)
-      VkDescriptorSetLayoutBinding{
-          .binding = 4,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      },
   };
-  VkDescriptorSetLayoutCreateInfo ci_descriptorSetLayout{
+  VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(descriptorSetLayoutBindings.size()),
-      .pBindings = descriptorSetLayoutBindings.data()};
-  r = vkCreateDescriptorSetLayout(state->device, &ci_descriptorSetLayout,
-                                  nullptr, &state->desc_layout);
+      .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
+      .pBindings = desc_set_layout_bindings.data()};
+  r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
+                                  nullptr, &state->graphics_desc_layout);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
         "Descriptor set layout creation error ({}).", VkResultToString(r));
@@ -670,24 +720,16 @@ bool CreateGraphicsPipeline(VulkanState* state) {
   }
 
   // Создаем макет конвейера.
-  std::array<VkDescriptorSetLayout, 1> descriptorSetLayouts{state->desc_layout};
-
-  // Push constant range for foreground image quad parameters
-  VkPushConstantRange push_constant_range{
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .offset = 0,
-      .size = 6 * sizeof(float),  // position (2) + size (2) + screenSize (2)
+  std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
+    state->graphics_desc_layout
   };
-
   VkPipelineLayoutCreateInfo ci_pipelineLayout{
       .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size()),
-      .pSetLayouts = descriptorSetLayouts.data(),
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &push_constant_range,
+      .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
+      .pSetLayouts = descriptor_set_layouts.data(),
   };
   r = vkCreatePipelineLayout(state->device, &ci_pipelineLayout, nullptr,
-                             &state->pipeline_layout);
+                             &state->graphics_pipeline_layout);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
         "Pipeline layout creation error ({}).", VkResultToString(r));
@@ -852,8 +894,8 @@ bool CreateGraphicsPipeline(VulkanState* state) {
       .pDepthStencilState = &ci_depthStencilState,
       .pColorBlendState = &ci_colorBlendState,
       .pDynamicState = &ci_pipelineDynamicState,
-      .layout = state->pipeline_layout,
-      .renderPass = state->renderpass,
+      .layout = state->graphics_pipeline_layout,
+      .renderPass = state->graphics_renderpass,
       .subpass = 0,
   }};
   VkPipeline pipelines[] = {VK_NULL_HANDLE};
@@ -864,205 +906,18 @@ bool CreateGraphicsPipeline(VulkanState* state) {
         "Graphics pipeline creation error ({}).", VkResultToString(r));
     return false;
   }
-  state->pipeline = pipelines[0];
+  state->graphics_pipeline = pipelines[0];
 
-  if (state->pipeline == VK_NULL_HANDLE) {
+  if (state->graphics_pipeline == VK_NULL_HANDLE) {
     BOOST_LOG_TRIVIAL(trace) << "Graphics pipeline creation error.";
     return false;
   }
-  BOOST_LOG_TRIVIAL(trace) << std::format("Graphics pipeline {} is created.",
-                                          static_cast<void*>(state->pipeline));
+  BOOST_LOG_TRIVIAL(trace) <<
+      std::format("Graphics pipeline {} is created.",
+                  static_cast<void*>(state->graphics_pipeline));
 
   vkDestroyShaderModule(state->device, vsModule, nullptr);
   vkDestroyShaderModule(state->device, fsModule, nullptr);
-
-  return true;
-}
-
-bool CreateTextPipeline(VulkanState* state) {
-  VkResult r;
-
-  // Подготавливаем шейдерные модули для текста.
-  static uint32_t vs_spirv_source[] = {
-#include "text.vert.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_vs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(vs_spirv_source),
-      .pCode = (uint32_t*)vs_spirv_source,
-  };
-  VkShaderModule vs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Text vertex shader creation error ({}).", VkResultToString(r));
-    return false;
-  }
-
-  static uint32_t fs_spirv_source[] = {
-#include "text.frag.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_fs_module{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(fs_spirv_source),
-      .pCode = (uint32_t*)fs_spirv_source,
-  };
-  VkShaderModule fs_module = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Text fragment shader creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    return false;
-  }
-
-  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = vs_module,
-          .pName = "main",
-      },
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = fs_module,
-          .pName = "main",
-      },
-  };
-
-  // Vertex input for text quad: position (vec2) and uv (vec2).
-  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
-      VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = 4 * sizeof(float), // position + uv
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-  };
-  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
-      VkVertexInputAttributeDescription{
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 1,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32_SFLOAT,
-        .offset = 2 * sizeof(float)
-      },
-  };
-  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
-      .pVertexBindingDescriptions = vertex_binding_descs.data(),
-      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
-      .pVertexAttributeDescriptions = vertex_attr_descs.data()
-  };
-
-  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = false,
-  };
-
-  VkPipelineViewportStateCreateInfo ci_viewport_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
-  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .rasterizerDiscardEnable = false,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_NONE, // no culling for 2D text
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .lineWidth = 1.0f,
-  };
-
-  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = state->sample_count,
-  };
-
-  // Disable depth test for overlay
-  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_FALSE,
-      .depthWriteEnable = VK_FALSE,
-      .depthCompareOp = VK_COMPARE_OP_ALWAYS,
-  };
-
-  // Alpha blending for text.
-  VkPipelineColorBlendAttachmentState attachment_state = {
-      .blendEnable = VK_TRUE,
-      .srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA,
-      .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
-      .colorBlendOp = VK_BLEND_OP_ADD,
-      .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-      .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
-      .alphaBlendOp = VK_BLEND_OP_ADD,
-      .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
-                        VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
-  };
-  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .logicOpEnable = VK_FALSE,
-      .attachmentCount = 1,
-      .pAttachments = &attachment_state,
-  };
-
-  VkDynamicState dynamic_states[] = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = 2,
-      .pDynamicStates = dynamic_states,
-  };
-
-  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = static_cast<uint32_t>(ci_stages.size()),
-      .pStages = ci_stages.data(),
-      .pVertexInputState = &ci_vertex_input_state,
-      .pInputAssemblyState = &ci_input_assembly_state,
-      .pViewportState = &ci_viewport_state,
-      .pRasterizationState = &ci_rasterization_state,
-      .pMultisampleState = &ci_multisample_state,
-      .pDepthStencilState = &ci_depth_stencil_state,
-      .pColorBlendState = &ci_color_blend_state,
-      .pDynamicState = &ci_pipeline_dynamic_state,
-      .layout = state->pipeline_layout,
-      .renderPass = state->renderpass,
-      .subpass = 0,
-  }};
-  VkPipeline pipelines[] = {VK_NULL_HANDLE};
-  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
-                                nullptr, pipelines);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Text graphics pipeline creation error ({}).", VkResultToString(r));
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  state->text_pipeline = pipelines[0];
-
-  if (state->text_pipeline == VK_NULL_HANDLE) {
-    BOOST_LOG_TRIVIAL(trace) << "Text graphics pipeline creation error.";
-    vkDestroyShaderModule(state->device, vs_module, nullptr);
-    vkDestroyShaderModule(state->device, fs_module, nullptr);
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) << std::format("Text graphics pipeline {} is created.",
-                                          static_cast<void*>(state->text_pipeline));
-
-  vkDestroyShaderModule(state->device, vs_module, nullptr);
-  vkDestroyShaderModule(state->device, fs_module, nullptr);
 
   return true;
 }
@@ -1108,7 +963,7 @@ bool InitImage(SceneResources* scene_resources, ImageState* image_state) {
 
   VkFramebufferCreateInfo ci_framebuffer{
       .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = state->renderpass,
+      .renderPass = state->graphics_renderpass,
       .attachmentCount = static_cast<uint32_t>(msaa ? 3 : 2),
       .pAttachments = attachments,
       .width = scene_resources->image_extent.width,
@@ -1144,7 +999,7 @@ bool InitImage(SceneResources* scene_resources, ImageState* image_state) {
   return true;
 }
 
-void SceneResources::InitFrames(/*VulkanState* state, FrameState* resources*/) {
+void SceneResources::InitFrames() {
   BOOST_LOG_TRIVIAL(trace) << "Create frame resources ...";
 
   VkResult r;
@@ -1178,11 +1033,13 @@ void SceneResources::InitFrames(/*VulkanState* state, FrameState* resources*/) {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = descriptor_pool,
         .descriptorSetCount = 1,
-        .pSetLayouts = &vk_state->desc_layout};
+        .pSetLayouts = &vk_state->graphics_desc_layout};
     r = vkAllocateDescriptorSets(vk_state->device, &descSetAllocInfo,
-                                 &frame.desc_set);
+                                 &frame.graphics_desc_set);
     assert(r == VK_SUCCESS);
-    BOOST_LOG_TRIVIAL(trace) << std::format("DescriptorSet = {}", reinterpret_cast<void*>(frame.desc_set));
+    BOOST_LOG_TRIVIAL(trace) <<
+        std::format("DescriptorSet = {}",
+                    reinterpret_cast<void*>(frame.graphics_desc_set));
   }
 }
 
@@ -1226,7 +1083,7 @@ void SceneResources::ReleaseFrames() {
     frame->acquire_semaphore = VK_NULL_HANDLE;
 
     vkFreeDescriptorSets(vk_state->device, descriptor_pool, 1,
-                         &frame->desc_set);
+                         &frame->graphics_desc_set);
   }
 }
 
@@ -1557,7 +1414,7 @@ void Render(Scene* scene, SceneResources* scene_resources,
       {.color = lavender}, {.depthStencil = {1.0f, 0}}, {.color = lavender}};
   VkRenderPassBeginInfo bi_renderpass{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
-      .renderPass = state->renderpass,
+      .renderPass = state->graphics_renderpass,
       .framebuffer = image_state.frame_buffer,
       .renderArea = {.offset = {0, 0}, .extent = scene_resources->image_extent},
       .clearValueCount = 3,
@@ -1568,11 +1425,11 @@ void Render(Scene* scene, SceneResources* scene_resources,
   // Дальнейшие команды будут вызваны, только если сцена не пуста.
   if (scene_resources->buffer_vertex) {
     vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                      state->pipeline);
+                      state->graphics_pipeline);
 
     vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            state->pipeline_layout, 0, 1, &frame.desc_set, 0,
-                            nullptr);
+                            state->graphics_pipeline_layout, 0, 1,
+                            &frame.graphics_desc_set, 0, nullptr);
 
     // Bind vertex buffers.
     std::vector<VkBuffer> buffers = {
@@ -1669,21 +1526,25 @@ void Render(Scene* scene, SceneResources* scene_resources,
     vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       state->composite_pipeline);
 
-    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            state->pipeline_layout, 0, 1, &frame.desc_set, 0,
-                            nullptr);
-
     // Draw each foreground image.
     for (auto* fg_image : scene->GetFgImages()) {
       FgImageResources* fg_image_resources = fg_images_resources.at(fg_image);
+
+      if (fg_image_resources->desc_texture == VK_NULL_HANDLE)
+        continue;
+
       glm::ivec2 screen_pos = scene->GetScreenPosition(fg_image);
+
+      vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              state->composite_pipeline_layout, 0, 1,
+                              &fg_image_resources->desc_texture, 0, nullptr);
 
       struct PushConstants {
         glm::vec2 position;
         glm::vec2 size;
         glm::vec2 screenSize;
       };
-      PushConstants pc{
+      PushConstants pc {
           .position = glm::vec2(screen_pos),
           .size = glm::vec2(static_cast<float>(fg_image->width),
                             static_cast<float>(fg_image->height)),
@@ -1691,7 +1552,7 @@ void Render(Scene* scene, SceneResources* scene_resources,
               static_cast<float>(scene_resources->image_extent.width),
               static_cast<float>(scene_resources->image_extent.height)),
       };
-      vkCmdPushConstants(frame.cmd_buf, state->pipeline_layout,
+      vkCmdPushConstants(frame.cmd_buf, state->composite_pipeline_layout,
                          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
 
       // Draw 6 vertices (two triangles forming a quad).
@@ -2403,34 +2264,6 @@ bool FgImageResources::Initialize(const VulkanState* state,
     return false;
   }
 
-  // Create sampler
-  VkSamplerCreateInfo sampler_ci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_LINEAR,
-      .minFilter = VK_FILTER_LINEAR,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .mipLodBias = 0.0f,
-      .anisotropyEnable = VK_FALSE,
-      .maxAnisotropy = 1.0f,
-      .compareEnable = VK_FALSE,
-      .compareOp = VK_COMPARE_OP_ALWAYS,
-      .minLod = 0.0f,
-      .maxLod = 0.0f,
-      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-      .unnormalizedCoordinates = VK_FALSE,
-  };
-  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &sampler);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create logo sampler: "
-                             << VkResultToString(r);
-    vkDestroyImageView(state->device, image_view, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    return false;
-  }
-
   BOOST_LOG_TRIVIAL(trace) << "Logo resources created successfully";
   return true;
 }
@@ -2910,7 +2743,7 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
   if (surface == VK_NULL_HANDLE)
     return false;
 
-  if (state->renderpass != VK_NULL_HANDLE)
+  if (state->graphics_renderpass != VK_NULL_HANDLE)
     return true;
 
   VkResult r = VK_SUCCESS;
@@ -2940,7 +2773,6 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
   if (!CreateRenderPass(state)) return false;
 
   if (!CreateGraphicsPipeline(state)) return false;
-  if (!CreateTextPipeline(state)) return false;
   if (!CreateCompositeRenderPass(state)) return false;
   if (!CreateCompositePipeline(state)) return false;
 
@@ -2950,6 +2782,31 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
       .queueFamilyIndex = 0,  //< \warning
   };
   vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmd_pool);
+
+  // Create sampler
+  VkSamplerCreateInfo sampler_ci = {
+      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+      .magFilter = VK_FILTER_LINEAR,
+      .minFilter = VK_FILTER_LINEAR,
+      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+      .mipLodBias = 0.0f,
+      .anisotropyEnable = VK_FALSE,
+      .maxAnisotropy = 1.0f,
+      .compareEnable = VK_FALSE,
+      .compareOp = VK_COMPARE_OP_ALWAYS,
+      .minLod = 0.0f,
+      .maxLod = 0.0f,
+      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+      .unnormalizedCoordinates = VK_FALSE,
+  };
+  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &state->composite_sampler);
+  assert(r == VK_SUCCESS);
+
+  state->textures_desc_pool = LruPool::Make<LruDescriptorSetPool>(
+      state->device, state->composite_desc_layout, 5);
 
   return true;
 }
@@ -2990,23 +2847,21 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
   VkResult r;
 
   // Создаем объект пула дескрипторов.
-  // Need descriptors for:
-  // - Uniform buffers: binding 0 (vertex), binding 1 (fragment), binding 4 (text color)
-  // - Combined image samplers: binding 2 (logo), binding 3 (text)
   std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
       VkDescriptorPoolSize{
         .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = vk_state->frame_count * 3},  // 3 uniform buffers per frame
+        .descriptorCount = vk_state->frame_count * 3},
       VkDescriptorPoolSize{
         .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = vk_state->frame_count * 2},  // 2 image samplers per frame
+        .descriptorCount = vk_state->frame_count * 2},
   };
-  VkDescriptorPoolCreateInfo ci_descpool{
+  VkDescriptorPoolCreateInfo ci_descpool {
       .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
       .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
       .maxSets = vk_state->frame_count,
       .poolSizeCount = static_cast<uint32_t>(descPoolSizes.size()),
-      .pPoolSizes = descPoolSizes.data()};
+      .pPoolSizes = descPoolSizes.data()
+  };
   r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
                              &scene_resources.descriptor_pool);
 
@@ -3022,15 +2877,6 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
 VkInstance VkSceneRenderer::GetInstance() const {
   return impl_->vk_global_state.instance;
 }
-
-//bool VkSceneRenderer::Initialize(Scene* scene, VkSurfaceKHR surface) {
-//  SceneResources* scene_resources =
-//      InitializeSceneResources(&impl_->vk_global_state, surface, scene);
-//  if (!scene_resources)
-//    return false;
-//  impl_->scenes_resources.insert(std::make_pair(scene,scene_resources));
-//  return true;
-//}
 
 namespace {
 void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
@@ -3231,7 +3077,7 @@ void UpdateDescriptorSets(
   std::vector<VkWriteDescriptorSet> descWrites{
       VkWriteDescriptorSet{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = frame.desc_set,
+        .dstSet = frame.graphics_desc_set,
         .dstBinding = 0,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -3239,33 +3085,35 @@ void UpdateDescriptorSets(
       },
       VkWriteDescriptorSet{
         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-        .dstSet = frame.desc_set,
+        .dstSet = frame.graphics_desc_set,
         .dstBinding = 1,
         .descriptorCount = 1,
         .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
         .pBufferInfo = &bufferInfo[1],
       },
   };
-  // Add combined image sampler for the first foreground image if available.
+
   if (scene->HasFgImages()) {
     for (FgImage* fg_image : scene->GetFgImages()) {
-      const FgImageResources* fg_res = fg_images_resources.at(fg_image);
-      if (fg_res->image_view != VK_NULL_HANDLE &&
-          fg_res->sampler != VK_NULL_HANDLE) {
-        VkDescriptorImageInfo image_info{
-            .sampler = fg_res->sampler,
-            .imageView = fg_res->image_view,
-            .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        };
-        descWrites.push_back(VkWriteDescriptorSet{
-            .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-            .dstSet = frame.desc_set,
-            .dstBinding = 2,
-            .descriptorCount = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .pImageInfo = &image_info,
-        });
+      FgImageResources* fg_res = fg_images_resources.at(fg_image);
+      if (fg_res->desc_texture == VK_NULL_HANDLE) {
+        vk_global_state->textures_desc_pool->Allocate(fg_res);
+        if (fg_res->desc_texture == VK_NULL_HANDLE)
+          continue;
       }
+      VkDescriptorImageInfo image_info {
+          .sampler = vk_global_state->composite_sampler,
+          .imageView = fg_res->image_view,
+          .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+      };
+      descWrites.push_back(VkWriteDescriptorSet{
+          .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+          .dstSet = fg_res->desc_texture,
+          .dstBinding = 0,
+          .descriptorCount = 1,
+          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .pImageInfo = &image_info,
+      });
     }
   }
 
@@ -3363,7 +3211,7 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
     switch (state) {
     case TrackedObject::State::New:
       assert(fg_image_resources == nullptr);
-      fg_image_resources = new FgImageResources();
+      fg_image_resources = new FgImageResources(vk_global_state);
       fg_image_resources->Initialize(vk_global_state, fg_image);
       render_state->fg_images_resources[fg_image] = fg_image_resources;
       break;
@@ -3395,6 +3243,8 @@ bool VkSceneRenderer::Update(Scene* scene) {
   // Проверяем принадлежность сцены приложению.
   if (!scene || scene != impl_->app->GetScene(scene->GetName()))
     return false;
+
+  assert(!scene->IsDeleted());
 
   if (!Synchronize(impl_,scene))
     return false;
@@ -3465,10 +3315,9 @@ bool VkSceneRenderer::Update(Scene* scene) {
 
 namespace {
 void FgImageResources::Release(VulkanState* state) {
-  // Cleanup logo resources
-  if (sampler != VK_NULL_HANDLE) {
-    vkDestroySampler(state->device, sampler, nullptr);
-    sampler = VK_NULL_HANDLE;
+  if (desc_texture != VK_NULL_HANDLE) {
+    state->textures_desc_pool->Free(this);
+    desc_texture = VK_NULL_HANDLE;
   }
   if (image_view != VK_NULL_HANDLE) {
     vkDestroyImageView(state->device, image_view, nullptr);

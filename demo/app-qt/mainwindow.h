@@ -7,6 +7,7 @@
 #include "qvulkaninstance.h"
 
 class Application;
+class Scene;
 class SceneWindow;
 class SceneMdiSubWindow;
 
@@ -20,6 +21,7 @@ class MainWindow : public QMainWindow {
 
   // Возвращает активное MDI подокно (или nullptr, если нет окон)
   SceneMdiSubWindow* GetActiveMdiSubWindow() const;
+  Scene* GetActiveScene() const;
 
  private:
   void createActions();
@@ -55,7 +57,6 @@ class MainWindow : public QMainWindow {
   void onNextWindow();
   void onPreviousWindow();
   void onWindowActivated();
-  void onSubWindowActivated(QMdiSubWindow* window);
 
  private:
   Application* app_;

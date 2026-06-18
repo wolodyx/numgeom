@@ -4,6 +4,7 @@ set(SOURCE_FILES
   testdrawable.cc
   testexample.cc
   testiterator.cc
+  testlrupool.cc
   testscene.cc
   testtrimesh.cc
   utilities.cc              utilities.h

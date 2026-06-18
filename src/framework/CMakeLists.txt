@@ -5,6 +5,7 @@ set(PUBLIC_HEADERS
   include/numgeom/drawable_cone.h
   include/numgeom/drawable_cylinder.h
   include/numgeom/drawable_sphere.h
+  include/numgeom/lrupool.h
   include/numgeom/scene.h
   include/numgeom/sceneobject.h
   include/numgeom/sceneobject_mesh.h
@@ -26,6 +27,8 @@ set(SOURCE_FILES
   drawable_cylinder.cc
   drawable_sphere.cc
   fgimage.cc                fgimage.h
+  lrudescriptorsetpool.cc   lrudescriptorsetpool.h
+  lrupool.cc
   scene.cc
   sceneiterators.cc         sceneiterators.h
   sceneobject.cc
@@ -47,8 +50,8 @@ set(SOURCE_FILES
 set(SHADER_FILES
   app.vert
   app.frag
-  fgimage.vert
-  fgimage.frag
+  compositing.vert
+  compositing.frag
   text.vert
   text.frag
 )

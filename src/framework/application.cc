@@ -64,15 +64,14 @@ Application::Application(int argc, char* argv[]) {
 
 Application::~Application() { delete impl_; }
 
-void Application::Update() {
-  impl_->renderer_->Update(this->GetActiveScene());
+bool Application::Update(Scene* scene) {
+  if (!scene)
+    return false;
+  impl_->renderer_->Update(scene);
+  return true;
 }
 
 VkSceneRenderer* Application::GetRenderer() { return impl_->renderer_; }
-
-const Scene* Application::GetActiveScene() const { return impl_->active_scene_; }
-
-Scene* Application::GetActiveScene() { return impl_->active_scene_; }
 
 Scene* Application::AddAxisIndicator() {
   if (!impl_->active_scene_)
@@ -134,17 +133,6 @@ Scene* Application::GetScene(const std::string& name) {
 
 const Scene* Application::GetScene(const std::string& name) const {
   return dynamic_cast<Scene*>(impl_->scenes_.Get(name));
-}
-
-bool Application::SetActiveScene(Scene* scene) {
-  if (!scene)
-    return false;
-  if (impl_->foreground2background_.contains(scene))
-    return false;
-  if (this->GetScene(scene->GetName()) != scene)
-    return false;
-  impl_->active_scene_ = scene;
-  return true;
 }
 
 namespace {
@@ -256,7 +244,7 @@ bool Application::Remove(Scene*, const FgImage*) {
   return false;
 }
 
-void Application::Synch() {
+void Application::Sync() {
   impl_->scenes_.Synch();
   impl_->fg_images_.Synch();
   impl_->screen_texts_.Synch();

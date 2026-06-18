@@ -45,6 +45,16 @@ SceneMdiSubWindow* MainWindow::GetActiveMdiSubWindow() const {
   return qobject_cast<SceneMdiSubWindow*>(sub);
 }
 
+Scene* MainWindow::GetActiveScene() const {
+  auto sub_window = GetActiveMdiSubWindow();
+  if (!sub_window)
+    return nullptr;
+  auto scene_sub_window = qobject_cast<SceneMdiSubWindow*>(sub_window);
+  if (!scene_sub_window)
+    return nullptr;
+  return scene_sub_window->GetScene();
+}
+
 SceneMdiSubWindow* MainWindow::CreateMdiSubWindow(const QString& scene_name) {
   SceneMdiSubWindow* sub = new SceneMdiSubWindow(app_, scene_name, &vulkan_instance_, mdi_area_);
   sub->setAttribute(Qt::WA_DeleteOnClose);
@@ -174,8 +184,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,1,0),
                   glm::vec3(0,0,1));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("1")));
     std_view->addAction(act);
@@ -187,8 +198,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,-1),
                   glm::vec3(0,1,0));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("2")));
     std_view->addAction(act);
@@ -200,8 +212,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(-1,0,0),
                   glm::vec3(0,0,1));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("3")));
     std_view->addAction(act);
@@ -213,8 +226,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,-1,0),
                   glm::vec3(0,0,1));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("4")));
     std_view->addAction(act);
@@ -226,8 +240,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,1),
                   glm::vec3(0,-1,0));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("5")));
     std_view->addAction(act);
@@ -239,8 +254,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(1,0,0),
                   glm::vec3(0,0,1));
-              app_->GetActiveScene()->OrientCamera(ortho_basis);
-              app_->Update();
+              auto scene = this->GetActiveScene();
+              scene->OrientCamera(ortho_basis);
+              app_->Update(scene);
     });
     act->setShortcut(QKeySequence(tr("6")));
     std_view->addAction(act);
@@ -282,7 +298,7 @@ void MainWindow::createWindowMenu() {
 
   // Close Window
   QAction* close_window_act = new QAction(tr("&Close Window"), this);
-  close_window_act->setShortcut(QKeySequence(tr("Ctrl+W")));
+  close_window_act->setShortcut(QKeySequence(Qt::CTRL + Qt::Key_F4));
   close_window_act->setStatusTip(tr("Close the active window"));
   connect(close_window_act, SIGNAL(triggered()), this, SLOT(onCloseWindow()));
   menu->addAction(close_window_act);
@@ -329,11 +345,8 @@ void MainWindow::createWindowMenu() {
   window_list_menu_ = menu->addMenu(tr("Windows"));
   updateWindowMenu();
 
-  // Connect signals from MDI area to update window list and active scene
   connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
           this, SLOT(updateWindowMenu()));
-  connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
-          this, SLOT(onSubWindowActivated(QMdiSubWindow*)));
 }
 
 void MainWindow::onScreenshot() {
@@ -414,7 +427,7 @@ void MainWindow::openFile(const QString& filename) {
   active_sub->setWindowTitle(fileInfo.fileName());
 
   scene->Clear();
-  app_->Update();
+  app_->Update(scene);
 #ifdef USE_NUMGEOM_MODULE_OCC
   if (IsStepFile(filename)) {
     auto document = LoadStepDocument(filename.toStdWString());
@@ -424,7 +437,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_TDocStd_Document>(document);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
   } else if (IsStlFile(filename)) {
     auto triangulation = LoadStl(filename.toStdWString());
@@ -434,7 +447,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
   } else if (IsIgesFile(filename)) {
     auto document = LoadIges(filename.toStdWString());
@@ -444,7 +457,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_TDocStd_Document>(document);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
   } else if (IsObjFile(filename)) {
     auto triangulation = LoadObj(filename.toStdWString());
@@ -454,7 +467,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
 #ifdef NUMGEOM_OCC_LOAD_VRML
   } else if (IsVrmlFile(filename)) {
@@ -465,7 +478,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_TDocStd_Document>(document);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
 #endif
   } else if (IsGltfFile(filename)) {
@@ -476,7 +489,7 @@ void MainWindow::openFile(const QString& filename) {
     }
     scene->AddObject<SceneObject_TDocStd_Document>(document);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
     return;
   }
 #endif
@@ -484,7 +497,7 @@ void MainWindow::openFile(const QString& filename) {
   if(mesh) {
     scene->AddObject<SceneObject_Mesh>(mesh);
     scene->FitScene();
-    app_->Update();
+    app_->Update(scene);
   }
 }
 
@@ -506,7 +519,7 @@ void MainWindow::onFitScene() {
   Scene* scene = active_sub->GetScene();
   if (!scene) return;
   scene->FitScene();
-  app_->Update();
+  app_->Update(scene);
 }
 
 void MainWindow::onAddAxisIndicator() {
@@ -517,7 +530,7 @@ void MainWindow::onAddAxisIndicator() {
   scene->Clear();
   scene->AddObject<SceneWidget_AxisIndicator>();
   scene->FitScene();
-  app_->Update();
+  app_->Update(scene);
 }
 
 void MainWindow::onAddFgImage() {
@@ -537,13 +550,13 @@ void MainWindow::onAddFgImage() {
   Scene* scene = active_sub->GetScene();
   assert(scene != nullptr);
   FgImage* fg_image = app_->AddFgImage(filename.toStdString());
-  app_->AddFgImage(scene,fg_image, glm::ivec2{5,5});
-  app_->Update();
+  app_->AddFgImage(scene, fg_image, glm::ivec2{5,5});
+  app_->Update(scene);
 }
 
-// Window menu slots
 void MainWindow::onNewWindow() {
-  CreateMdiSubWindow(QString("scene_%1").arg(mdi_area_->subWindowList().size() + 1));
+  static int window_count = 0;
+  CreateMdiSubWindow(QString("scene_%1").arg(++window_count));
 }
 
 void MainWindow::onCloseWindow() {
@@ -693,19 +706,4 @@ void MainWindow::onOpenRecentFile() {
   }
   this->openFile(filename);
   addToRecentFiles(filename);
-}
-
-void MainWindow::onSubWindowActivated(QMdiSubWindow* window) {
-  if (!window) {
-    // No active window, set active scene to nullptr
-    app_->SetActiveScene(nullptr);
-    // Check if all windows are closed and create a new one
-    //if (mdi_area_->subWindowList().isEmpty()) {
-    //  CreateMdiSubWindow(tr("Scene %1").arg(1));
-    //}
-    return;
-  }
-  SceneMdiSubWindow* scene_window = qobject_cast<SceneMdiSubWindow*>(window);
-  assert(scene_window != nullptr);
-  app_->SetActiveScene(scene_window->GetScene());
 }

@@ -1,6 +1,7 @@
 #include "numgeom/lrupool.h"
 
 #include <cassert>
+#include <limits>
 
 LruPool::Consumer::Consumer(PoolPtr pool) : lru_pool_(pool.get()) {
   assert(pool != nullptr);

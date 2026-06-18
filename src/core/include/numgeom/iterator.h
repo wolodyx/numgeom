@@ -4,6 +4,7 @@
 #include <cassert>
 #include <cstddef>
 #include <iterator>
+#include <utility>
 
 template <typename T>
 class IteratorImpl {

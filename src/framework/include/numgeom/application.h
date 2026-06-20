@@ -11,10 +11,10 @@
 class QWindow;
 
 class ApplicationImpl;
-class FgImage;
+class FgObject;
+class FgText;
 class Scene;
 class SceneObject;
-class ScreenText;
 class VkSceneRenderer;
 
 /** \class Application
@@ -58,13 +58,10 @@ class FRAMEWORK_EXPORT Application {
   Scene* GetBackgroundScene(Scene*);
   //!@}
 
-  FgImage* AddFgImage(const std::string& image_filename);
-  FgImage* AddFgImage(const unsigned char* image_data, size_t image_data_size);
-  ScreenText* AddScreenText(const std::string& text);
-  bool AddFgImage(Scene*, FgImage*, const glm::ivec2& screen_position);
-  bool AddScreenText(Scene*, ScreenText*, const glm::ivec2& screen_position);
-  bool Remove(Scene*, const ScreenText*);
-  bool Remove(Scene*, const FgImage*);
+  FgObject* AddFgImage(const std::string& image_filename);
+  FgObject* AddFgImage(const unsigned char* image_data, size_t image_data_size);
+  FgText* AddFgText(const std::string& text);
+  bool Remove(Scene*, const FgObject*);
 
   VkSceneRenderer* GetRenderer();
 

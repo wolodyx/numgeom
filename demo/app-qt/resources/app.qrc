@@ -2,6 +2,7 @@
   <qresource prefix="/resources">
     <file>logo.png</file>
     <file>icons/add-foreground-image-16.png</file>
+    <file>icons/add-foreground-text-16.png</file>
     <file>icons/axis-indicator-32.png</file>
     <file>icons/axis-indicator-16.png</file>
     <file>icons/closeapp-16.png</file>

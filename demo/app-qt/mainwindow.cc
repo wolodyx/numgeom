@@ -15,16 +15,19 @@
 #include "qscreen.h"
 
 #include "numgeom/application.h"
+#include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
-#include "numgeom/screentext.h"
 #include "numgeom/vkscenerenderer.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
 #  include "numgeom/loadusingocc.h"
 #  include "numgeom/sceneobject_polytriangulation.h"
 #  include "numgeom/sceneobject_tdocstd_document.h"
 #endif
+
+#include "dialogs/addforegroundimage.h"
+#include "dialogs/addforegroundtext.h"
 
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
@@ -103,17 +106,16 @@ void MainWindow::initVulkan() {
   } else {
     QByteArray resource_data = resource_file.readAll();
     resource_file.close();
-    FgImage* fg_image = app_->AddFgImage(
+    FgObject* fg_image = app_->AddFgImage(
         reinterpret_cast<const unsigned char*>(resource_data.constData()),
         resource_data.size());
-    app_->AddFgImage(scene, fg_image, glm::ivec2(5,5));
+    scene->AddFgObject(fg_image, glm::ivec2(5,5));
   }
 
-  //ScreenText* screen_text = app_->AddScreenText("Text rendering test");
-  //app_->AddScreenText(scene, screen_text, glm::ivec2(5,100));
+  FgText* fg_text = app_->AddFgText("Text rendering test");
+  scene->AddFgObject(fg_text, glm::ivec2(5,100));
 
   scene->FitScene();
-  //app_->Update();
 }
 
 void MainWindow::createActions() {
@@ -280,6 +282,14 @@ void MainWindow::createSceneMenu() {
                  QSize(), QIcon::Normal, QIcon::Off);
     QAction* act = new QAction(icon, tr("Add foreground image"), this);
     connect(act, SIGNAL(triggered()), this, SLOT(onAddFgImage()));
+    menu->addAction(act);
+  }
+  {
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-text-16.png"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Add foreground text"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onAddFgText()));
     menu->addAction(act);
   }
 }
@@ -534,23 +544,39 @@ void MainWindow::onAddAxisIndicator() {
 }
 
 void MainWindow::onAddFgImage() {
-  // \warning Запрашиваем активное окно в начале. Если запросить после
-  // `QFileDialog::getOpenFileName`, то окно почему-то не инициализировано.
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
-  assert(active_sub != nullptr);
-  QString last_directory = settings_.value("MainWindow/lastFgImageDirectory",
-                                           QDir::homePath()).toString();
-  QString filename = QFileDialog::getOpenFileName(
-      this,
-      tr("Select foreground image file"),
-      last_directory);
-  if (filename.isEmpty()) return;
-  settings_.setValue("MainWindow/lastFgImageDirectory",
-                     QFileInfo(filename).absolutePath());
+  if (!active_sub)
+    return;
   Scene* scene = active_sub->GetScene();
   assert(scene != nullptr);
-  FgImage* fg_image = app_->AddFgImage(filename.toStdString());
-  app_->AddFgImage(scene, fg_image, glm::ivec2{5,5});
+
+  Dialog_AddForegroundImage dialog(this, settings_);
+  if (dialog.exec() != QDialog::Accepted)
+    return;
+
+  const std::string file_path = dialog.GetFilePath();
+  if (file_path.empty())
+    return;
+
+  FgObject* fg = app_->AddFgImage(file_path);
+  scene->AddFgObject(fg, dialog.GetPosition());
+  app_->Update(scene);
+}
+
+void MainWindow::onAddFgText() {
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub)
+    return;
+  Scene* scene = active_sub->GetScene();
+  assert(scene != nullptr);
+
+  Dialog_AddForegroundText dialog(this);
+  if (dialog.exec() != QDialog::Accepted)
+    return;
+
+  FgText* fg = app_->AddFgText(dialog.GetText());
+  fg->SetColor(dialog.GetColor());
+  scene->AddFgObject(fg, dialog.GetPosition());
   app_->Update(scene);
 }
 

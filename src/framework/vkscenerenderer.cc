@@ -27,15 +27,13 @@
 
 #include "numgeom/application.h"
 #include "numgeom/drawable.h"
+#include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject.h"
-#include "numgeom/screentext.h"
 
 #include "fgimage.h"
 #include "lrudescriptorsetpool.h"
 #include "sceneiterators.h"
-#include "screentextds.h"
-#include "screentextinner.h"
 #include "vkutilities.h"
 
 // Количество изображений в обращении.
@@ -136,50 +134,29 @@ struct VulkanState {
   LruPool::PoolPtr textures_desc_pool;
 };
 
-//! Ресурсы Vulkan для отрисовки изображения на переднем плане сцены.
-struct FgImageResources : public LruPool::Consumer {
-  FgImageResources(VulkanState* vk_global_state)
+//! Ресурсы Vulkan для представления текстуры.
+struct TextureResources : public LruPool::Consumer {
+  TextureResources(VulkanState* vk_global_state)
     : LruPool::Consumer(vk_global_state->textures_desc_pool) {
   }
   bool ConfiscateResource() {
-    desc_texture = VK_NULL_HANDLE;
+    desc_set = VK_NULL_HANDLE;
     return true;
   }
 
   void SetResource(LruPool::Resource* base_res) {
     auto res = dynamic_cast<LruDescriptorSetPool::Resource*>(base_res);
-    desc_texture = res->desc_set_;
+    desc_set = res->desc_set_;
   }
 
   VkImage image = VK_NULL_HANDLE;
   VmaAllocation alloc_image = VK_NULL_HANDLE;
   VkImageView image_view = VK_NULL_HANDLE;
-  VkDescriptorSet desc_texture = VK_NULL_HANDLE;
+  VkDescriptorSet desc_set = VK_NULL_HANDLE;
 
   bool operator!() const { return image == VK_NULL_HANDLE; }
+  bool Initialize(VulkanState*, const FgObject*);
   void Release(VulkanState*);
-  bool Initialize(const VulkanState*, const FgImage*);
-};
-
-//! Ресурсы для отображения текста на переднем плане сцены.
-struct FgTextResources {
-  VkBuffer buffer_vertex = VK_NULL_HANDLE;
-  VmaAllocation alloc_vertex = VK_NULL_HANDLE;
-  VkBuffer buffer_index = VK_NULL_HANDLE;
-  VmaAllocation alloc_index = VK_NULL_HANDLE;
-  uint32_t index_count = 0;
-  VkImage image = VK_NULL_HANDLE;
-  VmaAllocation alloc_image = VK_NULL_HANDLE;
-  VkImageView image_view = VK_NULL_HANDLE;
-  VkSampler sampler = VK_NULL_HANDLE;
-  VkBuffer buffer_color = VK_NULL_HANDLE;
-  VmaAllocation alloc_color = VK_NULL_HANDLE;
-
-  bool operator!() const { return buffer_vertex == VK_NULL_HANDLE; }
-  bool Initialize(VulkanState*, const ScreenText*);
-  void Release(VulkanState*);
-  void Render(VkCommandBuffer cmd_buf, VkPipeline pipeline) const;
-  bool InitQuad(VulkanState*, const VkExtent2D&, const ScreenText*);
 };
 
 struct SceneResources {
@@ -245,8 +222,7 @@ struct VkSceneRenderer::Impl {
 #endif
   VulkanState vk_global_state;
   std::map<Scene*, SceneResources*> scenes_resources;
-  std::map<const FgImage*, FgImageResources*> fg_images_resources;
-  std::map<const ScreenText*, FgTextResources*> fg_texts_resources;
+  std::map<const FgObject*, TextureResources*> fgs_resources;
 };
 
 VkSceneRenderer::VkSceneRenderer(Application* app) {
@@ -303,17 +279,13 @@ void Finalize(VulkanState* state) {
 }
 
 VkSceneRenderer::~VkSceneRenderer() {
-  for (const auto [fg_image, resources] : impl_->fg_images_resources) {
-    resources->Release(&impl_->vk_global_state);
-    delete resources;
+  for (const auto [fg, res] : impl_->fgs_resources) {
+    res->Release(&impl_->vk_global_state);
+    delete res;
   }
-  for (const auto [fg_text, resources] : impl_->fg_texts_resources) {
-    resources->Release(&impl_->vk_global_state);
-    delete resources;
-  }
-  for (const auto [scene, scene_resources] : impl_->scenes_resources) {
-    scene_resources->Release();
-    delete scene_resources;
+  for (const auto [scene, res] : impl_->scenes_resources) {
+    res->Release();
+    delete res;
   }
   ::Finalize(&impl_->vk_global_state);
   delete impl_;
@@ -1375,17 +1347,13 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
     InitImage(scene_resources, &image_state);
   }
 
-  //if (scene_resources->screen_text) {
-  //  scene_resources->fg_text_resources.InitQuad(state, extent, scene_resources->screen_text);
-  //}
-
   return true;
 }
 
-void Render(Scene* scene, SceneResources* scene_resources,
-            ImageState& image_state, FrameState& frame,
-            const std::map<const FgImage*, FgImageResources*>&
-                fg_images_resources) {
+void Render(
+    Scene* scene, SceneResources* scene_resources,
+    ImageState& image_state, FrameState& frame,
+    const std::map<const FgObject*, TextureResources*>& fgs_resources) {
   VulkanState* state = scene_resources->vk_state;
 
   // Пересоздаем командный буфер.
@@ -1466,7 +1434,7 @@ void Render(Scene* scene, SceneResources* scene_resources,
   vkCmdEndRenderPass(frame.cmd_buf);
 
   // --- Composite foreground images onto the swapchain image ---
-  if (scene->HasFgImages()) {
+  if (scene->HasFgObjects()) {
     // Transition swapchain image from PRESENT_SRC_KHR to COLOR_ATTACHMENT_OPTIMAL.
     VkImageMemoryBarrier composite_barrier {
         .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
@@ -1527,17 +1495,17 @@ void Render(Scene* scene, SceneResources* scene_resources,
                       state->composite_pipeline);
 
     // Draw each foreground image.
-    for (auto* fg_image : scene->GetFgImages()) {
-      FgImageResources* fg_image_resources = fg_images_resources.at(fg_image);
+    for (auto* fg : scene->GetFgObjects()) {
+      TextureResources* fg_res = fgs_resources.at(fg);
 
-      if (fg_image_resources->desc_texture == VK_NULL_HANDLE)
+      if (fg_res->desc_set == VK_NULL_HANDLE)
         continue;
 
-      glm::ivec2 screen_pos = scene->GetScreenPosition(fg_image);
+      glm::ivec2 screen_pos = scene->GetScreenPosition(fg);
 
       vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                               state->composite_pipeline_layout, 0, 1,
-                              &fg_image_resources->desc_texture, 0, nullptr);
+                              &fg_res->desc_set, 0, nullptr);
 
       struct PushConstants {
         glm::vec2 position;
@@ -1546,8 +1514,8 @@ void Render(Scene* scene, SceneResources* scene_resources,
       };
       PushConstants pc {
           .position = glm::vec2(screen_pos),
-          .size = glm::vec2(static_cast<float>(fg_image->width),
-                            static_cast<float>(fg_image->height)),
+          .size = glm::vec2(static_cast<float>(fg->GetWidth()),
+                            static_cast<float>(fg->GetHeight())),
           .screenSize = glm::vec2(
               static_cast<float>(scene_resources->image_extent.width),
               static_cast<float>(scene_resources->image_extent.height)),
@@ -2042,19 +2010,20 @@ bool ChooseSwapchainSettings(VulkanState* state, VkSurfaceKHR surface) {
   return true;
 }
 
-bool FgImageResources::Initialize(const VulkanState* state,
-                                  const FgImage* fg_image) {
-  BOOST_LOG_TRIVIAL(trace) << "Creating logo resources...";
-  assert(fg_image != nullptr);
+bool TextureResources::Initialize(VulkanState* state,
+                                  const FgObject* fg_object) {
+  this->Release(state);
 
   VkResult r = VK_SUCCESS;
+
+  const PixelBuffer& pixel_buffer = fg_object->GetPixelBuffer();
 
   // Create staging buffer
   VkBuffer staging_buffer = VK_NULL_HANDLE;
   VmaAllocation staging_allocation = VK_NULL_HANDLE;
   VkBufferCreateInfo bufferInfo = {
       .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = static_cast<VkDeviceSize>(fg_image->pixels.size()),
+      .size = static_cast<VkDeviceSize>(pixel_buffer.pixels.size()),
       .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
   };
   VmaAllocationCreateInfo alloc_ci = {
@@ -2072,7 +2041,7 @@ bool FgImageResources::Initialize(const VulkanState* state,
   // Copy pixel data
   void* mapped_data = nullptr;
   vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
-  memcpy(mapped_data, fg_image->pixels.data(), fg_image->pixels.size());
+  memcpy(mapped_data, pixel_buffer.pixels.data(), pixel_buffer.pixels.size());
   vmaUnmapMemory(state->allocator, staging_allocation);
 
   // Create image
@@ -2080,8 +2049,7 @@ bool FgImageResources::Initialize(const VulkanState* state,
       .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
       .imageType = VK_IMAGE_TYPE_2D,
       .format = VK_FORMAT_R8G8B8A8_UNORM,
-      .extent = {static_cast<uint32_t>(fg_image->width),
-                 static_cast<uint32_t>(fg_image->height), 1},
+      .extent = { pixel_buffer.width, pixel_buffer.height, 1 },
       .mipLevels = 1,
       .arrayLayers = 1,
       .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -2095,7 +2063,8 @@ bool FgImageResources::Initialize(const VulkanState* state,
       .usage = VMA_MEMORY_USAGE_GPU_ONLY,
   };
   r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
-                     &image, &alloc_image, nullptr);
+                     &image, &alloc_image,
+                     nullptr);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(error) << "Failed to create logo image: "
                              << VkResultToString(r);
@@ -2181,8 +2150,7 @@ bool FgImageResources::Initialize(const VulkanState* state,
           .layerCount = 1,
       },
       .imageOffset = {0, 0, 0},
-      .imageExtent = {static_cast<uint32_t>(fg_image->width),
-                      static_cast<uint32_t>(fg_image->height), 1},
+      .imageExtent = { pixel_buffer.width, pixel_buffer.height, 1 },
   };
   vkCmdCopyBufferToImage(cmd_buf, staging_buffer, image,
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
@@ -2266,477 +2234,6 @@ bool FgImageResources::Initialize(const VulkanState* state,
 
   BOOST_LOG_TRIVIAL(trace) << "Logo resources created successfully";
   return true;
-}
-
-bool FgTextResources::Initialize(VulkanState* state, const ScreenText* text) {
-  BOOST_LOG_TRIVIAL(trace) << "Creating text resources...";
-  assert(text != nullptr);
-  auto text_internal_if = text->GetInnerInterface();
-
-  VkResult r = VK_SUCCESS;
-
-  // Create staging buffer
-  VkBuffer staging_buffer = VK_NULL_HANDLE;
-  VmaAllocation staging_allocation = VK_NULL_HANDLE;
-  VkBufferCreateInfo bufferInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = static_cast<VkDeviceSize>(text_internal_if->GetAtlasPixels().size()),
-      .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-  };
-  VmaAllocationCreateInfo alloc_ci = {
-      .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  r = vmaCreateBuffer(state->allocator, &bufferInfo, &alloc_ci,
-                      &staging_buffer, &staging_allocation, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create staging buffer for text: "
-                             << VkResultToString(r);
-    return false;
-  }
-
-  // Copy pixel data
-  void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, staging_allocation, &mapped_data);
-  memcpy(mapped_data, text_internal_if->GetAtlasPixels().data(),
-         text_internal_if->GetAtlasPixels().size());
-  vmaUnmapMemory(state->allocator, staging_allocation);
-
-  // Create image - text atlas is single-channel (R8)
-  auto atlas_size = text_internal_if->GetAtlasSize();
-  VkImageCreateInfo image_ci = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-      .imageType = VK_IMAGE_TYPE_2D,
-      .format = VK_FORMAT_R8_UNORM,
-      .extent = {static_cast<uint32_t>(atlas_size.x),
-                 static_cast<uint32_t>(atlas_size.y), 1},
-      .mipLevels = 1,
-      .arrayLayers = 1,
-      .samples = VK_SAMPLE_COUNT_1_BIT,
-      .tiling = VK_IMAGE_TILING_OPTIMAL,
-      .usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
-      .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-  };
-  VmaAllocationCreateInfo image_alloc_ci = {
-      .flags = 0,
-      .usage = VMA_MEMORY_USAGE_GPU_ONLY,
-  };
-  r = vmaCreateImage(state->allocator, &image_ci, &image_alloc_ci,
-                     &image, &alloc_image, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text image: "
-                             << VkResultToString(r);
-    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-    return false;
-  }
-
-  // Create temporary command pool and buffer
-  VkCommandPool cmd_pool = VK_NULL_HANDLE;
-  VkCommandPoolCreateInfo pool_ci = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = VK_COMMAND_POOL_CREATE_TRANSIENT_BIT,
-      .queueFamilyIndex = state->graphics_family_index.value(),
-  };
-  r = vkCreateCommandPool(state->device, &pool_ci, nullptr, &cmd_pool);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for text: "
-                             << VkResultToString(r);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-    return false;
-  }
-
-  VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
-  VkCommandBufferAllocateInfo alloc_buf_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-      .commandPool = cmd_pool,
-      .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-      .commandBufferCount = 1,
-  };
-  r = vkAllocateCommandBuffers(state->device, &alloc_buf_info, &cmd_buf);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for text: "
-                             << VkResultToString(r);
-    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-    return false;
-  }
-
-  // Begin command buffer
-  VkCommandBufferBeginInfo begin_info = {
-      .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-      .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
-  };
-  vkBeginCommandBuffer(cmd_buf, &begin_info);
-
-  // Transition image layout for copy
-  VkImageMemoryBarrier barrier = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER,
-      .srcAccessMask = 0,
-      .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT,
-      .oldLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-      .newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-      .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-      .image = image,
-      .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-      },
-  };
-  vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                       VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
-                       nullptr, 1, &barrier);
-
-  // Copy buffer to image
-  VkBufferImageCopy region = {
-      .bufferOffset = 0,
-      .bufferRowLength = 0,
-      .bufferImageHeight = 0,
-      .imageSubresource = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .mipLevel = 0,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-      },
-      .imageOffset = {0, 0, 0},
-      .imageExtent = {static_cast<uint32_t>(atlas_size.x),
-                      static_cast<uint32_t>(atlas_size.y), 1},
-  };
-  vkCmdCopyBufferToImage(cmd_buf, staging_buffer, image,
-                         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-
-  // Transition image layout for shader reading
-  barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-  barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-  barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-  vkCmdPipelineBarrier(cmd_buf, VK_PIPELINE_STAGE_TRANSFER_BIT,
-                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
-                       0, nullptr, 1, &barrier);
-
-  vkEndCommandBuffer(cmd_buf);
-
-  // Submit command buffer
-  VkSubmitInfo submit_info = {
-      .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-      .commandBufferCount = 1,
-      .pCommandBuffers = &cmd_buf,
-  };
-  r = vkQueueSubmit(state->queue, 1, &submit_info, VK_NULL_HANDLE);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to submit text copy commands: "
-                             << VkResultToString(r);
-    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
-    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-    return false;
-  }
-
-  // Wait for queue to finish
-  r = vkQueueWaitIdle(state->queue);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to wait for text copy: "
-                             << VkResultToString(r);
-    vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
-    vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-    return false;
-  }
-
-  // Cleanup temporary command pool and staging buffer
-  vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
-  vkDestroyCommandPool(state->device, cmd_pool, nullptr);
-  vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
-
-  // Create image view
-  VkImageViewCreateInfo view_info = {
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = image,
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = VK_FORMAT_R8_UNORM,
-      .components = {
-          .r = VK_COMPONENT_SWIZZLE_R,
-          .g = VK_COMPONENT_SWIZZLE_R,
-          .b = VK_COMPONENT_SWIZZLE_R,
-          .a = VK_COMPONENT_SWIZZLE_ONE,
-      },
-      .subresourceRange = {
-          .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-          .baseMipLevel = 0,
-          .levelCount = 1,
-          .baseArrayLayer = 0,
-          .layerCount = 1,
-      },
-  };
-  r = vkCreateImageView(state->device, &view_info, nullptr, &image_view);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text image view: "
-                             << VkResultToString(r);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    return false;
-  }
-
-  // Create sampler
-  VkSamplerCreateInfo sampler_ci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_LINEAR,
-      .minFilter = VK_FILTER_LINEAR,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .mipLodBias = 0.0f,
-      .anisotropyEnable = VK_FALSE,
-      .maxAnisotropy = 1.0f,
-      .compareEnable = VK_FALSE,
-      .compareOp = VK_COMPARE_OP_ALWAYS,
-      .minLod = 0.0f,
-      .maxLod = 0.0f,
-      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-      .unnormalizedCoordinates = VK_FALSE,
-  };
-  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &sampler);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text sampler: "
-                             << VkResultToString(r);
-    vkDestroyImageView(state->device, image_view, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    return false;
-  }
-
-  // Create color uniform buffer
-  VkBufferCreateInfo color_buffer_ci = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = sizeof(glm::vec4),
-      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-  };
-  VmaAllocationCreateInfo color_alloc_ci = {
-      .flags = VMA_ALLOCATION_CREATE_MAPPED_BIT,
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  r = vmaCreateBuffer(state->allocator, &color_buffer_ci, &color_alloc_ci,
-                      &buffer_color, &alloc_color, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text color uniform buffer: "
-                             << VkResultToString(r);
-    vkDestroySampler(state->device, sampler, nullptr);
-    vkDestroyImageView(state->device, image_view, nullptr);
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    return false;
-  }
-
-  // Update color buffer with initial color
-  void* color_mapped = nullptr;
-  vmaMapMemory(state->allocator, alloc_color, &color_mapped);
-  glm::vec4 color = text_internal_if->GetColor();
-  memcpy(color_mapped, &color, sizeof(glm::vec4));
-  vmaUnmapMemory(state->allocator, alloc_color);
-
-  BOOST_LOG_TRIVIAL(trace) << "Text resources created successfully";
-  return true;
-}
-
-void FgTextResources::Render(VkCommandBuffer cmd_buf, VkPipeline pipeline) const {
-  vkCmdBindPipeline(cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-  // Descriptor set already bound (same as scene, includes text texture and color)
-  // Bind text vertex buffer (binding 0)
-  VkDeviceSize offsets[] = {0};
-  vkCmdBindVertexBuffers(cmd_buf, 0, 1, &buffer_vertex, offsets);
-  // Bind text index buffer
-  vkCmdBindIndexBuffer(cmd_buf, buffer_index, 0,
-                        VK_INDEX_TYPE_UINT16);
-  // Viewport and scissor already set (same as scene)
-  vkCmdDrawIndexed(cmd_buf, index_count, 1, 0, 0, 0);
-}
-
-bool FgTextResources::InitQuad(VulkanState* state,
-                               const VkExtent2D& image_extent,
-                               const ScreenText* text) {
-  BOOST_LOG_TRIVIAL(trace) << "Creating text quad buffers...";
-
-  if (image_extent.width == 0 || image_extent.height == 0) {
-    BOOST_LOG_TRIVIAL(warning) << "Invalid image extent, skipping text quad buffer creation";
-    return false;
-  }
-
-  if (!text) {
-    BOOST_LOG_TRIVIAL(warning) << "Text is empty, skipping quad buffer creation";
-    return false;
-  }
-  auto text_inner_if = text->GetInnerInterface();
-
-  // Convert screen coordinates to NDC
-  float screen_width = static_cast<float>(image_extent.width);
-  float screen_height = static_cast<float>(image_extent.height);
-
-  // Vertex data: position (x,y) and UV (u,v)
-  struct Vertex {
-    float x, y;
-    float u, v;
-  };
-
-  // Index data for two triangles per character
-  std::vector<Vertex> vertices;
-  std::vector<uint16_t> indices;
-
-  // Starting position in screen coordinates
-  glm::ivec2 position = text_inner_if->GetPosition();
-  float cursor_x = static_cast<float>(position.x);
-  float cursor_y = static_cast<float>(position.y);
-
-  const std::string& text_str = text_inner_if->GetText();
-  uint32_t vertex_offset = 0;
-
-  for (size_t i = 0; i < text_str.size(); ++i) {
-    char c = text_str[i];
-    uint32_t codepoint = static_cast<uint32_t>(c);
-
-    const GlyphInfo* glyph = text_inner_if->GetGlyphInfo(codepoint);
-    if (!glyph)
-      continue; //< Skip unknown characters
-
-    // Calculate quad position in screen coordinates
-    float x_pos = cursor_x + glyph->bearing.x;
-    float y_pos = cursor_y - glyph->bearing.y;  // Y is down in screen coordinates
-
-    float w = static_cast<float>(glyph->size.x);
-    float h = static_cast<float>(glyph->size.y);
-
-    // Convert to NDC
-    float left = (x_pos * 2.0f / screen_width) - 1.0f;
-    float right = ((x_pos + w) * 2.0f / screen_width) - 1.0f;
-    float top = (y_pos * 2.0f / screen_height) - 1.0f;
-    float bottom = ((y_pos + h) * 2.0f / screen_height) - 1.0f;
-
-    // UV coordinates from atlas
-    float u_min = glyph->uv_min.x;
-    float u_max = glyph->uv_max.x;
-    float v_min = glyph->uv_min.y;
-    float v_max = glyph->uv_max.y;
-
-    // Add vertices for this quad
-    vertices.push_back({left,  top,    u_min, v_min});
-    vertices.push_back({right, top,    u_max, v_min});
-    vertices.push_back({right, bottom, u_max, v_max});
-    vertices.push_back({left,  bottom, u_min, v_max});
-
-    // Add indices for two triangles
-    indices.push_back(vertex_offset + 0);
-    indices.push_back(vertex_offset + 1);
-    indices.push_back(vertex_offset + 2);
-    indices.push_back(vertex_offset + 0);
-    indices.push_back(vertex_offset + 2);
-    indices.push_back(vertex_offset + 3);
-
-    vertex_offset += 4;
-
-    // Advance cursor
-    cursor_x += glyph->advance / 64.0f;  // advance is in 1/64 pixels
-  }
-
-  if (vertices.empty()) {
-    BOOST_LOG_TRIVIAL(warning) << "No vertices generated for text";
-    return false;
-  }
-
-  // Destroy existing buffers if any
-  if (buffer_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_vertex, alloc_vertex);
-    buffer_vertex = VK_NULL_HANDLE;
-  }
-  if (buffer_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_index, alloc_index);
-    buffer_index = VK_NULL_HANDLE;
-  }
-
-  // Create vertex buffer
-  VkBufferCreateInfo vertexBufferInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = vertices.size() * sizeof(Vertex),
-      .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-  };
-  VmaAllocationCreateInfo vertexAllocInfo = {
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  VkResult r = vmaCreateBuffer(state->allocator, &vertexBufferInfo, &vertexAllocInfo,
-                               &buffer_vertex, &alloc_vertex, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text vertex buffer: "
-                             << VkResultToString(r);
-    return false;
-  }
-
-  // Copy vertex data
-  void* mapped_data = nullptr;
-  vmaMapMemory(state->allocator, alloc_vertex, &mapped_data);
-  memcpy(mapped_data, vertices.data(), vertices.size() * sizeof(Vertex));
-  vmaUnmapMemory(state->allocator, alloc_vertex);
-
-  // Create index buffer
-  VkBufferCreateInfo indexBufferInfo = {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = indices.size() * sizeof(uint16_t),
-      .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-  };
-  VmaAllocationCreateInfo indexAllocInfo = {
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU,
-  };
-  r = vmaCreateBuffer(state->allocator, &indexBufferInfo, &indexAllocInfo,
-                      &buffer_index, &alloc_index, nullptr);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create text index buffer: "
-                             << VkResultToString(r);
-    vmaDestroyBuffer(state->allocator, buffer_vertex, alloc_vertex);
-    buffer_vertex = VK_NULL_HANDLE;
-    return false;
-  }
-
-  // Copy index data
-  vmaMapMemory(state->allocator, alloc_index, &mapped_data);
-  memcpy(mapped_data, indices.data(), indices.size() * sizeof(uint16_t));
-  vmaUnmapMemory(state->allocator, alloc_index);
-
-  index_count = static_cast<uint32_t>(indices.size());
-  BOOST_LOG_TRIVIAL(trace) << "Text quad buffers created, index count = " << index_count;
-  return true;
-}
-
-void FgTextResources::Release(VulkanState* state) {
-  if (buffer_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_vertex, alloc_vertex);
-    buffer_vertex = VK_NULL_HANDLE;
-  }
-  if (buffer_index != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_index, alloc_index);
-    buffer_index = VK_NULL_HANDLE;
-  }
-
-  // Cleanup text resources
-  if (sampler != VK_NULL_HANDLE) {
-    vkDestroySampler(state->device, sampler, nullptr);
-    sampler = VK_NULL_HANDLE;
-  }
-  if (image_view != VK_NULL_HANDLE) {
-    vkDestroyImageView(state->device, image_view, nullptr);
-    image_view = VK_NULL_HANDLE;
-  }
-  if (image != VK_NULL_HANDLE) {
-    vmaDestroyImage(state->allocator, image, alloc_image);
-    image = VK_NULL_HANDLE;
-    alloc_image = VK_NULL_HANDLE;
-  }
-  if (buffer_color != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(state->allocator, buffer_color, alloc_color);
-    buffer_color = VK_NULL_HANDLE;
-  }
 }
 
 bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
@@ -3008,21 +2505,11 @@ void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
   }
 
   scene_resources->index_count = 3 * n_cells;
-
-  //scene_resources->fg_text_resources.Release(vk_global_state);
-  //scene_resources->screen_text = nullptr;
-  //if (scene->HasScreenTexts()) {
-  //  const ScreenText* text = *(scene->GetScreenTextObjects());
-  //  scene_resources->screen_text = text;
-  //  if (!scene_resources->fg_text_resources.Initialize(vk_global_state,text)) {
-  //    BOOST_LOG_TRIVIAL(warning) << "Failed to create foreground text resources, continuing without text";
-  //  }
-  //}
 }
 
 void UpdateDescriptorSets(
     Scene* scene, SceneResources* scene_resources,
-    const std::map<const FgImage*,FgImageResources*>& fg_images_resources) {
+    const std::map<const FgObject*,TextureResources*>& fgs_resources) {
   const VulkanState* vk_global_state = scene_resources->vk_state;
   FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
 
@@ -3093,64 +2580,32 @@ void UpdateDescriptorSets(
       },
   };
 
-  if (scene->HasFgImages()) {
-    for (FgImage* fg_image : scene->GetFgImages()) {
-      FgImageResources* fg_res = fg_images_resources.at(fg_image);
-      if (fg_res->desc_texture == VK_NULL_HANDLE) {
+  // VkDescriptorImageInfo objects must outlive the vkUpdateDescriptorSets call.
+  // Store them in a vector so the pointers in `descWrites` remain valid.
+  std::list<VkDescriptorImageInfo> image_infos;
+  if (scene->HasFgObjects()) {
+    for (FgObject* fg : scene->GetFgObjects()) {
+      TextureResources* fg_res = fgs_resources.at(fg);
+      if (fg_res->desc_set == VK_NULL_HANDLE) {
         vk_global_state->textures_desc_pool->Allocate(fg_res);
-        if (fg_res->desc_texture == VK_NULL_HANDLE)
+        if (fg_res->desc_set == VK_NULL_HANDLE)
           continue;
       }
-      VkDescriptorImageInfo image_info {
+      image_infos.push_back(VkDescriptorImageInfo{
           .sampler = vk_global_state->composite_sampler,
           .imageView = fg_res->image_view,
           .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-      };
+      });
       descWrites.push_back(VkWriteDescriptorSet{
           .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-          .dstSet = fg_res->desc_texture,
+          .dstSet = fg_res->desc_set,
           .dstBinding = 0,
           .descriptorCount = 1,
           .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .pImageInfo = &image_info,
+          .pImageInfo = &image_infos.back(),
       });
     }
   }
-
-  // Add combined image sampler for text if available
-  //if (scene_resources->fg_text_resources.image_view != VK_NULL_HANDLE &&
-  //    scene_resources->fg_text_resources.sampler != VK_NULL_HANDLE) {
-  //  VkDescriptorImageInfo imageInfo{
-  //      .sampler = scene_resources->fg_text_resources.sampler,
-  //      .imageView = scene_resources->fg_text_resources.image_view,
-  //      .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-  //  };
-  //  descWrites.push_back(VkWriteDescriptorSet{
-  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-  //      .dstSet = frame.desc_set,
-  //      .dstBinding = 3,
-  //      .descriptorCount = 1,
-  //      .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-  //      .pImageInfo = &imageInfo,
-  //  });
-  //}
-
-  // Add uniform buffer for text color if available
-  //if (scene_resources->fg_text_resources.buffer_color != VK_NULL_HANDLE) {
-  //  VkDescriptorBufferInfo bufferInfo{
-  //      .buffer = scene_resources->fg_text_resources.buffer_color,
-  //      .offset = 0,
-  //      .range = sizeof(glm::vec4),
-  //  };
-  //  descWrites.push_back(VkWriteDescriptorSet{
-  //      .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-  //      .dstSet = frame.desc_set,
-  //      .dstBinding = 4,
-  //      .descriptorCount = 1,
-  //      .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-  //      .pBufferInfo = &bufferInfo,
-  //  });
-  //}
 
   vkUpdateDescriptorSets(vk_global_state->device,
                          static_cast<uint32_t>(descWrites.size()),
@@ -3202,38 +2657,38 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
   if (scene->IsDeleted())
     return false;
 
-  // Синхронизируем связку `FgImage -> FgImageResources`.
-  for (FgImage* fg_image : scene->GetFgImages()) {
-    auto it = render_state->fg_images_resources.find(fg_image);
-    auto fg_image_resources =
-        (it != render_state->fg_images_resources.end() ? it->second : nullptr);
-    auto state = fg_image->GetState();
+  // Синхронизируем связку `FgImage -> TextureResources`.
+  for (FgObject* fg : scene->GetFgObjects()) {
+    auto it = render_state->fgs_resources.find(fg);
+    auto fg_res = it != render_state->fgs_resources.end()
+                          ? it->second
+                          : nullptr;
+    auto state = fg->GetState();
     switch (state) {
     case TrackedObject::State::New:
-      assert(fg_image_resources == nullptr);
-      fg_image_resources = new FgImageResources(vk_global_state);
-      fg_image_resources->Initialize(vk_global_state, fg_image);
-      render_state->fg_images_resources[fg_image] = fg_image_resources;
+      assert(fg_res == nullptr);
+      fg_res = new TextureResources(vk_global_state);
+      fg_res->Initialize(vk_global_state, fg);
+      render_state->fgs_resources[fg] = fg_res;
       break;
     case TrackedObject::State::Clean:
       break;
     case TrackedObject::State::Dirty:
-      fg_image_resources->Release(vk_global_state);
-      fg_image_resources->Initialize(vk_global_state, fg_image);
+      fg_res->Initialize(vk_global_state, fg);
       break;
     case TrackedObject::State::Delete:
-      fg_image_resources->Release(vk_global_state);
-      delete fg_image_resources;
-      render_state->fg_images_resources.erase(it);
+      fg_res->Release(vk_global_state);
+      delete fg_res;
+      render_state->fgs_resources.erase(it);
       break;
     default:
       std::abort();
     }
-    fg_image->Sync();
+    fg->Sync();
   }
 
   auto scene_resources = render_state->scenes_resources.at(scene);
-  UpdateDescriptorSets(scene, scene_resources, render_state->fg_images_resources);
+  UpdateDescriptorSets(scene, scene_resources, render_state->fgs_resources);
 
   return true;
 }
@@ -3292,7 +2747,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
     assert(index <= MAX_NUM_IMAGES);
     ImageState& image_state = scene_resources->images_state[index];
     Render(scene, scene_resources, image_state, frame,
-           impl_->fg_images_resources);
+           impl_->fgs_resources);
 
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
@@ -3314,10 +2769,10 @@ bool VkSceneRenderer::Update(Scene* scene) {
 }
 
 namespace {
-void FgImageResources::Release(VulkanState* state) {
-  if (desc_texture != VK_NULL_HANDLE) {
+void TextureResources::Release(VulkanState* state) {
+  if (desc_set != VK_NULL_HANDLE) {
     state->textures_desc_pool->Free(this);
-    desc_texture = VK_NULL_HANDLE;
+    desc_set = VK_NULL_HANDLE;
   }
   if (image_view != VK_NULL_HANDLE) {
     vkDestroyImageView(state->device, image_view, nullptr);

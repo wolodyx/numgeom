@@ -1,8 +1,8 @@
 #include "numgeom/scene.h"
 
+#include "numgeom/fgtext.h"
 #include "numgeom/iteratorimpl.hpp"
 #include "numgeom/sceneobject.h"
-#include "numgeom/screentext.h"
 
 #include "trackedobjectlist.h"
 
@@ -11,8 +11,7 @@
 class SceneImpl {
  public:
   std::string name_;
-  std::map<FgImage*,glm::ivec2> fg_image_positions;
-  std::map<ScreenText*,glm::ivec2> screen_text_positions;
+  std::map<FgObject*,glm::ivec2> fgobjects_positions;
   Camera camera_;
   TrackedObjectList objects_;
   uint64_t vulkan_surface_ = 0;
@@ -44,13 +43,13 @@ AlignedBoundBox Scene::GetBoundBox() const {
 }
 
 void Scene::Clear() {
-  if(impl_->objects_.IsEmpty() && impl_->screen_text_positions.empty() &&
-     impl_->fg_image_positions.empty())
+  if(impl_->objects_.IsEmpty() && impl_->fgobjects_positions.empty() &&
+     impl_->fgobjects_positions.empty())
     return;
   this->SetDirty();
   impl_->objects_.Clear();
-  impl_->screen_text_positions.clear();
-  impl_->screen_text_positions.clear();
+  impl_->fgobjects_positions.clear();
+  impl_->fgobjects_positions.clear();
 }
 
 Iterator<SceneObject*> Scene::Objects() const {
@@ -111,45 +110,26 @@ void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>(
   impl_->camera_.SetViewportSizeFunction(func);
 }
 
-bool Scene::HasFgImages() const {
-  return !impl_->fg_image_positions.empty();
+bool Scene::HasFgObjects() const {
+  return !impl_->fgobjects_positions.empty();
 }
 
-Iterator<FgImage*> Scene::GetFgImages() const {
-  auto it = new IteratorImpl_StdMapKey<FgImage*,glm::ivec2>(
-      impl_->fg_image_positions.begin(),
-      impl_->fg_image_positions.end());
-  return Iterator<FgImage*>(it);
+Iterator<FgObject*> Scene::GetFgObjects() const {
+  auto it = new IteratorImpl_StdMapKey<FgObject*,glm::ivec2>(
+      impl_->fgobjects_positions.begin(),
+      impl_->fgobjects_positions.end());
+  return Iterator<FgObject*>(it);
 }
 
-bool Scene::HasScreenTexts() const {
-  return !impl_->screen_text_positions.empty();
-}
-
-Iterator<ScreenText*> Scene::GetScreenTextObjects() const {
-  auto it = new IteratorImpl_StdMapKey<ScreenText*,glm::ivec2>(
-      impl_->screen_text_positions.begin(),
-      impl_->screen_text_positions.end());
-  return Iterator<ScreenText*>(it);
-}
-
-glm::ivec2 Scene::GetScreenPosition(const FgImage* fg_image) const {
-  auto it = impl_->fg_image_positions.find(const_cast<FgImage*>(fg_image));
-  if (it == impl_->fg_image_positions.end())
+glm::ivec2 Scene::GetScreenPosition(const FgObject* fg) const {
+  auto it = impl_->fgobjects_positions.find(const_cast<FgObject*>(fg));
+  if (it == impl_->fgobjects_positions.end())
     return glm::ivec2{};
   return it->second;
 }
 
-glm::ivec2 Scene::GetScreenPosition(const ScreenText* screen_text) const {
-  auto it = impl_->screen_text_positions.find(const_cast<ScreenText*>(screen_text));
-  if (it == impl_->screen_text_positions.end())
-    return glm::ivec2{};
-  return it->second;
-}
-
-void Scene::AddFgImage(FgImage* fg_image,
-                       const glm::ivec2& screen_position) {
-  impl_->fg_image_positions[fg_image] = screen_position;
+void Scene::AddFgObject(FgObject* fg, const glm::ivec2& screen_position) {
+  impl_->fgobjects_positions[fg] = screen_position;
   this->SetDirty();
 }
 

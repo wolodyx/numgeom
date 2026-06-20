@@ -16,7 +16,7 @@ LruDescriptorSetPool::~LruDescriptorSetPool() {}
 
 void LruDescriptorSetPool::Initialize() {
   size_t ds_count = GetResourcesCount();
-  std::array<VkDescriptorPoolSize, 2> desc_pool_sizes = {
+  std::array<VkDescriptorPoolSize, 1> desc_pool_sizes = {
       VkDescriptorPoolSize {
         .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .descriptorCount = static_cast<uint32_t>(ds_count)

@@ -5,21 +5,23 @@
 
 #include "glm/glm.hpp"
 
-#include "numgeom/trackedobject.h"
+#include "numgeom/fgobject.h"
 
-class FgImage : public TrackedObject {
+class FgImage : public FgObject {
  public:
-  FgImage(const std::filesystem::path& image_path);
-
-  FgImage(const unsigned char* image_data, size_t image_data_size);
-
-  bool operator!() const;
-  bool IsEmpty() const { return this->operator!(); }
+  static FgImage* Make(const std::filesystem::path& image_path);
+  static FgImage* Make(const unsigned char* image_data, size_t image_data_size);
 
  public:
-  std::vector<unsigned char> pixels;
-  int width = 0;
-  int height = 0;
+  virtual ~FgImage() {}
+  const PixelBuffer& GetPixelBuffer() const;
+  uint32_t GetWidth() const;
+  uint32_t GetHeight() const;
+
+private:
+  FgImage(PixelBuffer&&);
+
+ private:
+  PixelBuffer pixel_buffer_;
 };
-
 #endif // !NUMGEOM_FRAMEWORK_FGIMAGE_H

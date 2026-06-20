@@ -12,10 +12,9 @@
 #include "numgeom/orthobasis.h"
 #include "numgeom/trackedobject.h"
 
-class FgImage;
+class FgObject;
 class SceneImpl;
 class SceneObject;
-class ScreenText;
 
 /**
 \class Scene
@@ -70,13 +69,10 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
 
   void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
 
-  bool HasFgImages() const;
-  Iterator<FgImage*> GetFgImages() const;
-  glm::ivec2 GetScreenPosition(const FgImage*) const;
-  void AddFgImage(FgImage*, const glm::ivec2&);
-  bool HasScreenTexts() const;
-  Iterator<ScreenText*> GetScreenTextObjects() const;
-  glm::ivec2 GetScreenPosition(const ScreenText*) const;
+  bool HasFgObjects() const;
+  Iterator<FgObject*> GetFgObjects() const;
+  glm::ivec2 GetScreenPosition(const FgObject*) const;
+  void AddFgObject(FgObject*, const glm::ivec2&);
 
   void SetVulkanSurface(uint64_t);
   uint64_t GetVulkanSurface() const;

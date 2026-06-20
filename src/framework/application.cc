@@ -5,6 +5,7 @@
 #include <map>
 
 #include "numgeom/alignedboundbox.h"
+#include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
@@ -25,8 +26,7 @@ class ApplicationImpl {
   TrackedObjectDict scenes_;
   std::map<Scene*,Scene*> foreground2background_;
   Scene* active_scene_ = nullptr;
-  TrackedObjectList fg_images_;
-  TrackedObjectList screen_texts_;
+  TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
 };
 
@@ -198,54 +198,36 @@ Scene* Application::GetBackgroundScene(Scene* foreground_scene) {
   return it->second;
 }
 
-FgImage* Application::AddFgImage(const std::string& image_filename) {
-  FgImage fg(image_filename);
-  if (fg.IsEmpty())
+FgObject* Application::AddFgImage(const std::string& image_filename) {
+  auto fg_image = FgImage::Make(image_filename);
+  if (!fg_image)
     return nullptr;
-  auto fg_image = new FgImage(fg);
-  impl_->fg_images_.Insert(fg_image);
+  impl_->fg_objects_.Insert(fg_image);
   return fg_image;
 }
 
-FgImage* Application::AddFgImage(const unsigned char* image_data,
+FgObject* Application::AddFgImage(const unsigned char* image_data,
                                  size_t image_data_size) {
-  FgImage fg(image_data, image_data_size);
-  if (fg.IsEmpty())
+  auto fg_image = FgImage::Make(image_data, image_data_size);
+  if (!fg_image)
     return nullptr;
-  auto fg_image = new FgImage(fg);
-  impl_->fg_images_.Insert(fg_image);
+  impl_->fg_objects_.Insert(fg_image);
   return fg_image;
 }
 
-ScreenText* Application::AddScreenText(const std::string& text) {
-  return nullptr;
+FgText* Application::AddFgText(const std::string& text) {
+  if (text.empty())
+    return nullptr;
+  auto fg_text = FgText::Make(text);
+  impl_->fg_objects_.Insert(fg_text);
+  return fg_text;
 }
 
-bool Application::AddFgImage(Scene* scene, FgImage* fg_image,
-                             const glm::ivec2& screen_position) {
-  if (scene == nullptr || fg_image == nullptr ||
-      screen_position.x < 0 || screen_position.y < 0)
-    return false;
-
-  scene->AddFgImage(fg_image, screen_position);
-  return false;
-}
-
-bool Application::AddScreenText(Scene*, ScreenText*,
-                                const glm::ivec2& screen_position) {
-  return false;
-}
-
-bool Application::Remove(Scene*, const ScreenText*) {
-  return false;
-}
-
-bool Application::Remove(Scene*, const FgImage*) {
+bool Application::Remove(Scene*, const FgObject*) {
   return false;
 }
 
 void Application::Sync() {
   impl_->scenes_.Synch();
-  impl_->fg_images_.Synch();
-  impl_->screen_texts_.Synch();
+  impl_->fg_objects_.Synch();
 }

@@ -5,13 +5,15 @@ set(PUBLIC_HEADERS
   include/numgeom/drawable_cone.h
   include/numgeom/drawable_cylinder.h
   include/numgeom/drawable_sphere.h
+  include/numgeom/fgobject.h
+  include/numgeom/fgtext.h
   include/numgeom/lrupool.h
+  include/numgeom/pixelbuffer.h
   include/numgeom/scene.h
   include/numgeom/sceneobject.h
   include/numgeom/sceneobject_mesh.h
   include/numgeom/scenewidget.h
   include/numgeom/scenewidget_axisindicator.h
-  include/numgeom/screentext.h
   include/numgeom/trackedobject.h
   include/numgeom/userinputcontroller.h
   include/numgeom/vkscenerenderer.h
@@ -27,18 +29,17 @@ set(SOURCE_FILES
   drawable_cylinder.cc
   drawable_sphere.cc
   fgimage.cc                fgimage.h
+  fgobject.cc
+  fgtext.cc
   lrudescriptorsetpool.cc   lrudescriptorsetpool.h
   lrupool.cc
+  pixelbuffer.cc
   scene.cc
   sceneiterators.cc         sceneiterators.h
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc
   scenewidget_axisindicator.cc
-  screentext.cc
-  screentextds.h
-  screentextinner.cc        screentextinner.h
-  screentextstate.cc        screentextstate.h
   trackedobject.cc
   trackedobjectdict.cc      trackedobjectdict.h
   trackedobjectlist.cc      trackedobjectlist.h

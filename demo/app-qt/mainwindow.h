@@ -45,6 +45,7 @@ class MainWindow : public QMainWindow {
   void onQuit();
   void onFitScene();
   void onAddFgImage();
+  void onAddFgText();
   void onAddAxisIndicator();
   void updateWindowMenu(); //!< Обновляет список окон в меню Window.
 

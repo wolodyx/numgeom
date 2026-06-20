@@ -10,8 +10,15 @@ set(RESOURCE_FILES
   resources/app.qrc
 )
 
+set(DIALOG_FILES
+  addforegroundtext.cc       addforegroundtext.h
+  addforegroundimage.cc      addforegroundimage.h
+)
+list(TRANSFORM DIALOG_FILES PREPEND "dialogs/")
+
 add_executable(app-qt
   ${SOURCE_FILES}
+  ${DIALOG_FILES}
   ${RESOURCE_FILES}
 )
 

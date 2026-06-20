@@ -1,6 +1,8 @@
 #ifndef NUMGEOM_FRAMEWORK_FGOBJECT_H
 #define NUMGEOM_FRAMEWORK_FGOBJECT_H
 
+#include <cstdint>
+
 #include "numgeom/pixelbuffer.h"
 #include "numgeom/trackedobject.h"
 

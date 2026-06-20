@@ -1,6 +1,7 @@
 #ifndef NUMGEOM_FRAMEWORK_PIXELBUFFER_H
 #define NUMGEOM_FRAMEWORK_PIXELBUFFER_H
 
+#include <cstdint>
 #include <vector>
 
 class PixelBuffer {

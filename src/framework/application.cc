@@ -141,12 +141,10 @@ class IteratorImpl_ForegroundScenes : public IteratorImpl<Scene*> {
   IteratorImpl_ForegroundScenes(
       const std::map<Scene*,Scene*>& f2b,
       Scene* background_scene,
-      std::map<Scene*,Scene*>::const_iterator it = std::map<Scene*,Scene*>::const_iterator())
+      const std::map<Scene*,Scene*>::const_iterator* it = nullptr)
       : f2b_(f2b) {
     background_scene_ = background_scene;
-    it_ = it;
-    if (it_ == std::map<Scene*,Scene*>::const_iterator())
-      it_ = f2b.begin();
+    it_ = !it ? f2b.begin() : *it;
     while (it_ != f2b_.end() && it_->second != background_scene_)
       ++it_;
   }
@@ -162,11 +160,12 @@ class IteratorImpl_ForegroundScenes : public IteratorImpl<Scene*> {
   Scene* current() const override { return it_->first; }
 
   IteratorImpl<Scene*>* clone() const override {
-    return new IteratorImpl_ForegroundScenes{f2b_, background_scene_, it_};
+    return new IteratorImpl_ForegroundScenes{f2b_, background_scene_, &it_};
   }
 
   IteratorImpl<Scene*>* last() const override {
-    return new IteratorImpl_ForegroundScenes{f2b_, background_scene_, f2b_.end()};
+    auto it = f2b_.end();
+    return new IteratorImpl_ForegroundScenes{f2b_, background_scene_, &it};
   }
 
   bool end() const override { return it_ == f2b_.end(); }

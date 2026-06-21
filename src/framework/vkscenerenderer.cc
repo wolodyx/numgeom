@@ -49,7 +49,7 @@
 
 namespace {
 ;
-struct ImageState {
+struct ImageRes {
   //! Изображение для показа.
   VkImage image = VK_NULL_HANDLE;
 
@@ -73,7 +73,7 @@ struct ImageState {
   VkSemaphore submit_semaphore = VK_NULL_HANDLE;
 };
 
-struct FrameState {
+struct FrameRes {
   VkDescriptorSet graphics_desc_set = VK_NULL_HANDLE;
   VkCommandBuffer cmd_buf = VK_NULL_HANDLE;
   VkSemaphore acquire_semaphore = VK_NULL_HANDLE;
@@ -135,8 +135,8 @@ struct VulkanState {
 };
 
 //! Ресурсы Vulkan для представления текстуры.
-struct TextureResources : public LruPool::Consumer {
-  TextureResources(VulkanState* vk_global_state)
+struct TextureRes : public LruPool::Consumer {
+  TextureRes(VulkanState* vk_global_state)
     : LruPool::Consumer(vk_global_state->textures_desc_pool) {
   }
   bool ConfiscateResource() {
@@ -159,11 +159,19 @@ struct TextureResources : public LruPool::Consumer {
   void Release(VulkanState*);
 };
 
-struct SceneResources {
-  SceneResources(VulkanState* s) {
-    vk_state = s;
-  }
+class SceneRes {
+ public:
+  SceneRes(VulkanState*, VkSurfaceKHR, Scene*);
+  void Release();
+  bool RecreateSwapchain(VkExtent2D extent);
+ private:
+  bool InitImages();
+  void ReleaseImages();
+  void InitFrames();
+  void ReleaseFrames();
+  void ReleaseSwapchain();
 
+ public:
   VulkanState* vk_state;
 
   VkSurfaceKHR surface = VK_NULL_HANDLE;
@@ -171,14 +179,13 @@ struct SceneResources {
 
   VkDescriptorPool descriptor_pool = VK_NULL_HANDLE;
 
-  std::array<FrameState, MAX_NUM_FRAMES> frames_state;
+  std::array<FrameRes, MAX_NUM_FRAMES> frame_res_array;
   size_t current_frame_index = 0;
-  bool stop_rendering = true; //!< Признак остановки рендеринга.
 
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
   uint32_t image_count = 0;
   VkExtent2D image_extent;
-  std::array<ImageState, MAX_NUM_IMAGES> images_state;
+  std::array<ImageRes, MAX_NUM_IMAGES> image_res_array;
   VkImage depth_stencil_image = VK_NULL_HANDLE;
   VkDeviceMemory depth_stencil_mem = VK_NULL_HANDLE;
   VkImageView depth_stencil_view = VK_NULL_HANDLE;
@@ -199,10 +206,6 @@ struct SceneResources {
   //! \}
 
   uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
-
-  void Release();
-  void InitFrames();
-  void ReleaseFrames();
 };
 
 //! Prototypes
@@ -221,8 +224,8 @@ struct VkSceneRenderer::Impl {
   Xcb xcb;
 #endif
   VulkanState vk_global_state;
-  std::map<Scene*, SceneResources*> scenes_resources;
-  std::map<const FgObject*, TextureResources*> fgs_resources;
+  std::map<Scene*, SceneRes*> scene_res_array;
+  std::map<const FgObject*, TextureRes*> fg_res_array;
 };
 
 VkSceneRenderer::VkSceneRenderer(Application* app) {
@@ -279,11 +282,11 @@ void Finalize(VulkanState* state) {
 }
 
 VkSceneRenderer::~VkSceneRenderer() {
-  for (const auto [fg, res] : impl_->fgs_resources) {
+  for (const auto [fg, res] : impl_->fg_res_array) {
     res->Release(&impl_->vk_global_state);
     delete res;
   }
-  for (const auto [scene, res] : impl_->scenes_resources) {
+  for (const auto [scene, res] : impl_->scene_res_array) {
     res->Release();
     delete res;
   }
@@ -894,90 +897,13 @@ bool CreateGraphicsPipeline(VulkanState* state) {
   return true;
 }
 
-bool InitImage(SceneResources* scene_resources, ImageState* image_state) {
-  BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
-
-  VulkanState* state = scene_resources->vk_state;
-
-  VkResult r;
-
-  VkImageViewCreateInfo ci_imageView{
-      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-      .image = image_state->image,
-      .viewType = VK_IMAGE_VIEW_TYPE_2D,
-      .format = state->image_format,
-      .components =
-          {
-              .r = VK_COMPONENT_SWIZZLE_R,
-              .g = VK_COMPONENT_SWIZZLE_G,
-              .b = VK_COMPONENT_SWIZZLE_B,
-              .a = VK_COMPONENT_SWIZZLE_A,
-          },
-      .subresourceRange =
-          {
-              .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
-              .baseMipLevel = 0,
-              .levelCount = 1,
-              .baseArrayLayer = 0,
-              .layerCount = 1,
-          },
-  };
-  r = vkCreateImageView(state->device, &ci_imageView, nullptr,
-                        &image_state->image_view);
-  assert(r == VK_SUCCESS);
-
-  bool msaa = (state->sample_count != VK_SAMPLE_COUNT_1_BIT);
-
-  VkImageView attachments[3];
-  attachments[0] = image_state->image_view;
-  attachments[1] = scene_resources->depth_stencil_view;
-  attachments[2] = image_state->msaa_image_view;
-
-  VkFramebufferCreateInfo ci_framebuffer{
-      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = state->graphics_renderpass,
-      .attachmentCount = static_cast<uint32_t>(msaa ? 3 : 2),
-      .pAttachments = attachments,
-      .width = scene_resources->image_extent.width,
-      .height = scene_resources->image_extent.height,
-      .layers = 1};
-  r = vkCreateFramebuffer(state->device, &ci_framebuffer, nullptr,
-                          &image_state->frame_buffer);
-  assert(r == VK_SUCCESS);
-
-  // Create a separate framebuffer for compositing with only the color attachment.
-  // This framebuffer is created with composite_renderpass for compatibility.
-  VkImageView composite_attachment = image_state->image_view;
-  VkFramebufferCreateInfo ci_composite_framebuffer{
-      .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-      .renderPass = state->composite_renderpass,
-      .attachmentCount = 1,
-      .pAttachments = &composite_attachment,
-      .width = scene_resources->image_extent.width,
-      .height = scene_resources->image_extent.height,
-      .layers = 1
-  };
-  r = vkCreateFramebuffer(state->device, &ci_composite_framebuffer, nullptr,
-                          &image_state->composite_frame_buffer);
-  assert(r == VK_SUCCESS);
-
-  VkSemaphoreCreateInfo semaphoreCreateInfo{
-      .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-  };
-  r = vkCreateSemaphore(state->device, &semaphoreCreateInfo, nullptr,
-                        &image_state->submit_semaphore);
-  assert(r == VK_SUCCESS);
-
-  return true;
-}
-
-void SceneResources::InitFrames() {
+void SceneRes::InitFrames() {
   BOOST_LOG_TRIVIAL(trace) << "Create frame resources ...";
 
   VkResult r;
 
   for (uint32_t i = 0; i < vk_state->frame_count; ++i) {
-    FrameState& frame = frames_state[i];
+    FrameRes& frame = frame_res_array[i];
     VkFenceCreateInfo ci_fence{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
                                .flags = VK_FENCE_CREATE_SIGNALED_BIT};
     r = vkCreateFence(vk_state->device, &ci_fence, nullptr, &frame.cmd_fence);
@@ -1009,41 +935,41 @@ void SceneResources::InitFrames() {
     r = vkAllocateDescriptorSets(vk_state->device, &descSetAllocInfo,
                                  &frame.graphics_desc_set);
     assert(r == VK_SUCCESS);
-    BOOST_LOG_TRIVIAL(trace) <<
-        std::format("DescriptorSet = {}",
-                    reinterpret_cast<void*>(frame.graphics_desc_set));
   }
 }
 
-void Finalize(VulkanState* state, ImageState* image_state) {
+void SceneRes::ReleaseImages() {
   BOOST_LOG_TRIVIAL(trace) << "Finalize image resources ...";
 
-  if (image_state->composite_frame_buffer != VK_NULL_HANDLE) {
-    vkDestroyFramebuffer(state->device, image_state->composite_frame_buffer,
-                         nullptr);
-    image_state->composite_frame_buffer = VK_NULL_HANDLE;
+  for (int i = 0; i < image_count; ++i) {
+    ImageRes* image_res = &image_res_array[i];
+    if (image_res->composite_frame_buffer != VK_NULL_HANDLE) {
+      vkDestroyFramebuffer(vk_state->device,
+                           image_res->composite_frame_buffer, nullptr);
+      image_res->composite_frame_buffer = VK_NULL_HANDLE;
+    }
+
+    vkDestroyFramebuffer(vk_state->device, image_res->frame_buffer, nullptr);
+    image_res->frame_buffer = VK_NULL_HANDLE;
+
+    vkDestroyImageView(vk_state->device, image_res->image_view, nullptr);
+    image_res->image_view = VK_NULL_HANDLE;
+
+    vkDestroyImageView(vk_state->device, image_res->msaa_image_view, nullptr);
+    image_res->msaa_image_view = VK_NULL_HANDLE;
+
+    vkDestroyImage(vk_state->device, image_res->msaa_image, nullptr);
+    image_res->msaa_image = VK_NULL_HANDLE;
+
+    vkDestroySemaphore(vk_state->device, image_res->submit_semaphore, nullptr);
+    image_res->submit_semaphore = VK_NULL_HANDLE;
   }
-
-  vkDestroyFramebuffer(state->device, image_state->frame_buffer, nullptr);
-  image_state->frame_buffer = VK_NULL_HANDLE;
-
-  vkDestroyImageView(state->device, image_state->image_view, nullptr);
-  image_state->image_view = VK_NULL_HANDLE;
-
-  vkDestroyImageView(state->device, image_state->msaa_image_view, nullptr);
-  image_state->msaa_image_view = VK_NULL_HANDLE;
-
-  vkDestroyImage(state->device, image_state->msaa_image, nullptr);
-  image_state->msaa_image = VK_NULL_HANDLE;
-
-  vkDestroySemaphore(state->device, image_state->submit_semaphore, nullptr);
-  image_state->submit_semaphore = VK_NULL_HANDLE;
 }
 
-void SceneResources::ReleaseFrames() {
+void SceneRes::ReleaseFrames() {
+  BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
   for (int i = 0; i < vk_state->frame_count; ++i) {
-    FrameState* frame = &frames_state[i];
-    BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
+    FrameRes* frame = &frame_res_array[i];
 
     vkFreeCommandBuffers(vk_state->device, vk_state->cmd_pool, 1, &frame->cmd_buf);
 
@@ -1125,13 +1051,15 @@ uint32_t ChooseTransientImageMemType(VulkanState* state, VkImage img,
   return memTypeIndex;
 }
 
-bool CreateTransientImage(SceneResources* scene_resources, VkFormat format,
+bool CreateTransientImage(SceneRes* scene_res, VkFormat format,
                           VkImageUsageFlags usage,
-                          VkImageAspectFlags aspectMask, VkImage* images,
+                          VkImageAspectFlags aspect_mask, VkImage* images,
                           VkDeviceMemory* mem, VkImageView* views, int count) {
-  VulkanState* state = scene_resources->vk_state;
+  VulkanState* vk_state = scene_res->vk_state;
+  VkDevice device = vk_state->device;
+  VkSampleCountFlagBits sample_count = vk_state->sample_count;
 
-  VkMemoryRequirements memReq;
+  VkMemoryRequirements mem_req;
   VkResult r;
 
   assert(count > 0);
@@ -1140,43 +1068,42 @@ bool CreateTransientImage(SceneResources* scene_resources, VkFormat format,
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .imageType = VK_IMAGE_TYPE_2D,
         .format = format,
-        .extent = VkExtent3D{.width = scene_resources->image_extent.width,
-                             .height = scene_resources->image_extent.height,
+        .extent = VkExtent3D{.width = scene_res->image_extent.width,
+                             .height = scene_res->image_extent.height,
                              .depth = 1},
         .mipLevels = 1,
         .arrayLayers = 1,
-        .samples = state->sample_count,
+        .samples = sample_count,
         .tiling = VK_IMAGE_TILING_OPTIMAL,
         .usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
     };
-
-    r = vkCreateImage(state->device, &ci_image, nullptr, images + i);
+    r = vkCreateImage(device, &ci_image, nullptr, images + i);
     if (r != VK_SUCCESS) {
       BOOST_LOG_TRIVIAL(error)
           << std::format("Failed to create image: {}", VkResultToString(r));
       return false;
     }
-    vkGetImageMemoryRequirements(state->device, images[i], &memReq);
+    vkGetImageMemoryRequirements(device, images[i], &mem_req);
   }
 
-  VkMemoryAllocateInfo memInfo;
-  memset(&memInfo, 0, sizeof(memInfo));
-  memInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-  memInfo.allocationSize = Aligned(memReq.size, memReq.alignment) * count;
+  VkMemoryAllocateInfo mem_info = {
+      .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+      .allocationSize = Aligned(mem_req.size, mem_req.alignment) * count
+  };
 
   uint32_t startIndex = 0;
   do {
-    memInfo.memoryTypeIndex =
-        ChooseTransientImageMemType(state, images[0], startIndex);
-    if (memInfo.memoryTypeIndex == uint32_t(-1)) {
+    mem_info.memoryTypeIndex =
+        ChooseTransientImageMemType(vk_state, images[0], startIndex);
+    if (mem_info.memoryTypeIndex == uint32_t(-1)) {
       BOOST_LOG_TRIVIAL(error) << "No suitable memory type found";
       return false;
     }
-    startIndex = memInfo.memoryTypeIndex + 1;
+    startIndex = mem_info.memoryTypeIndex + 1;
     BOOST_LOG_TRIVIAL(trace) << std::format(
         "Allocating {} bytes for transient image (memtype {})",
-        uint32_t(memInfo.allocationSize), memInfo.memoryTypeIndex);
-    r = vkAllocateMemory(state->device, &memInfo, nullptr, mem);
+        uint32_t(mem_info.allocationSize), mem_info.memoryTypeIndex);
+    r = vkAllocateMemory(device, &mem_info, nullptr, mem);
     if (r != VK_SUCCESS && r != VK_ERROR_OUT_OF_DEVICE_MEMORY) {
       BOOST_LOG_TRIVIAL(error) << std::format(
           "Failed to allocate image memory: {}", VkResultToString(r));
@@ -1186,32 +1113,34 @@ bool CreateTransientImage(SceneResources* scene_resources, VkFormat format,
 
   VkDeviceSize ofs = 0;
   for (int i = 0; i < count; ++i) {
-    r = vkBindImageMemory(state->device, images[i], *mem, ofs);
+    r = vkBindImageMemory(device, images[i], *mem, ofs);
     if (r != VK_SUCCESS) {
       BOOST_LOG_TRIVIAL(error) << std::format("Failed to bind image memory: {}",
                                               VkResultToString(r));
       return false;
     }
-    ofs += Aligned(memReq.size, memReq.alignment);
-
-    VkImageViewCreateInfo imgViewInfo;
-    memset(&imgViewInfo, 0, sizeof(imgViewInfo));
-    imgViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    imgViewInfo.image = images[i];
-    imgViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    imgViewInfo.format = format;
-    imgViewInfo.components.r = VK_COMPONENT_SWIZZLE_R;
-    imgViewInfo.components.g = VK_COMPONENT_SWIZZLE_G;
-    imgViewInfo.components.b = VK_COMPONENT_SWIZZLE_B;
-    imgViewInfo.components.a = VK_COMPONENT_SWIZZLE_A;
-    imgViewInfo.subresourceRange.aspectMask = aspectMask;
-    imgViewInfo.subresourceRange.levelCount =
-        imgViewInfo.subresourceRange.layerCount = 1;
-
-    r = vkCreateImageView(state->device, &imgViewInfo, nullptr, views + i);
+    ofs += Aligned(mem_req.size, mem_req.alignment);
+    VkImageViewCreateInfo ci_image_view = {
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = images[i],
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = format,
+        .components = {
+            .r = VK_COMPONENT_SWIZZLE_R,
+            .g = VK_COMPONENT_SWIZZLE_G,
+            .b = VK_COMPONENT_SWIZZLE_B,
+            .a = VK_COMPONENT_SWIZZLE_A
+        },
+        .subresourceRange = {
+            .aspectMask = aspect_mask,
+            .levelCount = 1,
+            .layerCount = 1
+        }
+    };
+    r = vkCreateImageView(device, &ci_image_view, nullptr, views + i);
     if (r != VK_SUCCESS) {
-      BOOST_LOG_TRIVIAL(error) << std::format("Failed to create image view: {}",
-                                              VkResultToString(r));
+      BOOST_LOG_TRIVIAL(error) <<
+          std::format("Failed to create image view: {}", VkResultToString(r));
       return false;
     }
   }
@@ -1219,33 +1148,127 @@ bool CreateTransientImage(SceneResources* scene_resources, VkFormat format,
   return true;
 }
 
-void ReleaseSwapchain(SceneResources* scene_resources) {
-  VulkanState* state = scene_resources->vk_state;
-  vkDestroySwapchainKHR(state->device,scene_resources->swapchain, nullptr);
+bool SceneRes::InitImages() {
+  BOOST_LOG_TRIVIAL(trace) << "Create image resources ...";
 
-  for (int i = 0; i < scene_resources->image_count; ++i)
-    Finalize(state, &scene_resources->images_state[i]);
+  VkResult r;
 
-  vkFreeMemory(state->device,scene_resources->msaa_image_mem, nullptr);
+  std::vector<VkImage> swapchainImages(image_count);
+  r = vkGetSwapchainImagesKHR(vk_state->device, swapchain, &image_count,
+                              swapchainImages.data());
+  if (r != VK_SUCCESS) return false;
+  if (image_count > MAX_NUM_IMAGES) return false;
 
-  vkDestroyImageView(state->device,scene_resources->depth_stencil_view, nullptr);
-  vkDestroyImage(state->device,scene_resources->depth_stencil_image, nullptr);
-  vkFreeMemory(state->device,scene_resources->depth_stencil_mem, nullptr);
+  std::vector<VkImage> msaaImages(image_count, VK_NULL_HANDLE);
+  std::vector<VkImageView> msaaViews(image_count, VK_NULL_HANDLE);
+  bool msaa = (vk_state->sample_count != VK_SAMPLE_COUNT_1_BIT);
+  if (msaa) {
+    CreateTransientImage(
+        this, vk_state->image_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+        VK_IMAGE_ASPECT_COLOR_BIT, msaaImages.data(), &msaa_image_mem,
+        msaaViews.data(), image_count);
+  }
+
+  for (size_t i = 0; i < image_count; ++i) {
+    ImageRes* image_res = &image_res_array[i];
+    image_res->image = swapchainImages[i];
+    image_res->msaa_image = msaaImages[i];
+    image_res->msaa_image_view = msaaViews[i];
+
+    VkImageViewCreateInfo ci_imageView{
+        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+        .image = image_res->image,
+        .viewType = VK_IMAGE_VIEW_TYPE_2D,
+        .format = vk_state->image_format,
+        .components =
+            {
+                .r = VK_COMPONENT_SWIZZLE_R,
+                .g = VK_COMPONENT_SWIZZLE_G,
+                .b = VK_COMPONENT_SWIZZLE_B,
+                .a = VK_COMPONENT_SWIZZLE_A,
+            },
+        .subresourceRange =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .baseMipLevel = 0,
+                .levelCount = 1,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+    };
+    r = vkCreateImageView(vk_state->device, &ci_imageView, nullptr,
+                          &image_res->image_view);
+    assert(r == VK_SUCCESS);
+
+    bool msaa = (vk_state->sample_count != VK_SAMPLE_COUNT_1_BIT);
+
+    VkImageView attachments[3];
+    attachments[0] = image_res->image_view;
+    attachments[1] = depth_stencil_view;
+    attachments[2] = image_res->msaa_image_view;
+
+    VkFramebufferCreateInfo ci_framebuffer{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = vk_state->graphics_renderpass,
+        .attachmentCount = static_cast<uint32_t>(msaa ? 3 : 2),
+        .pAttachments = attachments,
+        .width = image_extent.width,
+        .height = image_extent.height,
+        .layers = 1};
+    r = vkCreateFramebuffer(vk_state->device, &ci_framebuffer, nullptr,
+                            &image_res->frame_buffer);
+    assert(r == VK_SUCCESS);
+
+    // Create a separate framebuffer for compositing with only the color attachment.
+    // This framebuffer is created with composite_renderpass for compatibility.
+    VkImageView composite_attachment = image_res->image_view;
+    VkFramebufferCreateInfo ci_composite_framebuffer{
+        .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+        .renderPass = vk_state->composite_renderpass,
+        .attachmentCount = 1,
+        .pAttachments = &composite_attachment,
+        .width = image_extent.width,
+        .height = image_extent.height,
+        .layers = 1
+    };
+    r = vkCreateFramebuffer(vk_state->device, &ci_composite_framebuffer, nullptr,
+                            &image_res->composite_frame_buffer);
+    assert(r == VK_SUCCESS);
+
+    VkSemaphoreCreateInfo semaphoreCreateInfo{
+        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+    };
+    r = vkCreateSemaphore(vk_state->device, &semaphoreCreateInfo, nullptr,
+                          &image_res->submit_semaphore);
+    assert(r == VK_SUCCESS);
+  }
+
+  return true;
 }
 
-bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
+void SceneRes::ReleaseSwapchain() {
+  vkDestroySwapchainKHR(vk_state->device, swapchain, nullptr);
+
+  ReleaseImages();
+
+  vkFreeMemory(vk_state->device, msaa_image_mem, nullptr);
+
+  vkDestroyImageView(vk_state->device, depth_stencil_view, nullptr);
+  vkDestroyImage(vk_state->device, depth_stencil_image, nullptr);
+  vkFreeMemory(vk_state->device, depth_stencil_mem, nullptr);
+}
+
+bool SceneRes::RecreateSwapchain(VkExtent2D extent) {
   // Защита от вырождения окна в нулевой размер.
-  scene_resources->image_extent = extent;
+  image_extent = extent;
   if (extent.width == 0 || extent.height == 0) {
     BOOST_LOG_TRIVIAL(debug) << "Degenerated Window";
     return true;
   }
 
-  VulkanState* state = scene_resources->vk_state;
-
   VkResult r;
 
-  r = vkDeviceWaitIdle(state->device);
+  r = vkDeviceWaitIdle(vk_state->device);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(fatal) << std::format("vkDeviceWaitIdle returned {}",
                                             VkResultToString(r));
@@ -1253,13 +1276,11 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
   }
 
   VkSurfaceCapabilitiesKHR surfaceCaps;
-  r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(state->physical_device,
-                                                scene_resources->surface,
-                                                &surfaceCaps);
+  r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_state->physical_device,
+                                                surface, &surfaceCaps);
   assert(r == VK_SUCCESS);
 
   // Выбираем размер изображений.
-  scene_resources->image_extent = extent;
   assert(surfaceCaps.currentExtent.width == static_cast<uint32_t>(-1) ||
          surfaceCaps.currentExtent.width == extent.width &&
              surfaceCaps.currentExtent.height == extent.height);
@@ -1269,19 +1290,19 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
           ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
           : surfaceCaps.currentTransform;
 
-  assert(state->graphics_family_index == state->present_family_index);
+  assert(vk_state->graphics_family_index == vk_state->present_family_index);
   std::array<uint32_t, 1> queueFamilyIndices = {
-      state->graphics_family_index.value()};
+      vk_state->graphics_family_index.value()};
 
-  VkSwapchainKHR oldSwapchain = scene_resources->swapchain;
+  VkSwapchainKHR oldSwapchain = swapchain;
 
   VkSwapchainCreateInfoKHR ci_swapchain{
       .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-      .surface = scene_resources->surface,
-      .minImageCount = state->min_image_count,
-      .imageFormat = state->image_format,
-      .imageColorSpace = state->color_space,
-      .imageExtent = scene_resources->image_extent,
+      .surface = surface,
+      .minImageCount = vk_state->min_image_count,
+      .imageFormat = vk_state->image_format,
+      .imageColorSpace = vk_state->color_space,
+      .imageExtent = image_extent,
       .imageArrayLayers = 1,
       .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
       .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
@@ -1289,10 +1310,10 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
       .pQueueFamilyIndices = queueFamilyIndices.data(),
       .preTransform = preTransform,
       .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      .presentMode = state->present_mode,
+      .presentMode = vk_state->present_mode,
       .oldSwapchain = oldSwapchain};
   VkSwapchainKHR newSwapchain;
-  r = vkCreateSwapchainKHR(state->device, &ci_swapchain, nullptr,
+  r = vkCreateSwapchainKHR(vk_state->device, &ci_swapchain, nullptr,
                            &newSwapchain);
   if (r != VK_SUCCESS) {
     BOOST_LOG_TRIVIAL(trace) << std::format(
@@ -1304,57 +1325,34 @@ bool RecreateSwapchain(SceneResources* scene_resources, VkExtent2D extent) {
       static_cast<void*>(newSwapchain));
 
   if (oldSwapchain != VK_NULL_HANDLE) {
-    ReleaseSwapchain(scene_resources);
+    ReleaseSwapchain();
   }
 
-  scene_resources->swapchain = newSwapchain;
+  swapchain = newSwapchain;
 
-  r = vkGetSwapchainImagesKHR(state->device, scene_resources->swapchain,
-                              &scene_resources->image_count, nullptr);
+  r = vkGetSwapchainImagesKHR(vk_state->device, swapchain,
+                              &image_count, nullptr);
   if (r != VK_SUCCESS) return false;
-  if (scene_resources->image_count == 0) return false;
+  if (image_count == 0) return false;
   BOOST_LOG_TRIVIAL(trace) << std::format("Count of images in swapchain is {}.",
-                                          scene_resources->image_count);
-
-  std::vector<VkImage> swapchainImages(scene_resources->image_count);
-  r = vkGetSwapchainImagesKHR(state->device, scene_resources->swapchain,
-                              &scene_resources->image_count, swapchainImages.data());
-  if (r != VK_SUCCESS) return false;
-  if (scene_resources->image_count > MAX_NUM_IMAGES) return false;
+                                          image_count);
 
   // Создаем изображение буфера глубины.
-  CreateTransientImage(scene_resources, state->depth_stencil_format,
+  CreateTransientImage(this, vk_state->depth_stencil_format,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                       &scene_resources->depth_stencil_image, &scene_resources->depth_stencil_mem,
-                       &scene_resources->depth_stencil_view, 1);
+                       &depth_stencil_image, &depth_stencil_mem,
+                       &depth_stencil_view, 1);
 
-  std::vector<VkImage> msaaImages(scene_resources->image_count, VK_NULL_HANDLE);
-  std::vector<VkImageView> msaaViews(scene_resources->image_count, VK_NULL_HANDLE);
-  bool msaa = (state->sample_count != VK_SAMPLE_COUNT_1_BIT);
-  if (msaa) {
-    CreateTransientImage(
-        scene_resources, state->image_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT, msaaImages.data(),
-        &scene_resources->msaa_image_mem,
-        msaaViews.data(),scene_resources->image_count);
-  }
-  for (size_t i = 0; i < scene_resources->image_count; ++i) {
-    ImageState& image_state = scene_resources->images_state[i];
-    image_state.image = swapchainImages[i];
-    image_state.msaa_image = msaaImages[i];
-    image_state.msaa_image_view = msaaViews[i];
-    InitImage(scene_resources, &image_state);
-  }
-
+  InitImages();
   return true;
 }
 
 void Render(
-    Scene* scene, SceneResources* scene_resources,
-    ImageState& image_state, FrameState& frame,
-    const std::map<const FgObject*, TextureResources*>& fgs_resources) {
-  VulkanState* state = scene_resources->vk_state;
+    Scene* scene, SceneRes* scene_res,
+    ImageRes& image_res, FrameRes& frame,
+    const std::map<const FgObject*, TextureRes*>& fg_res_array) {
+  VulkanState* state = scene_res->vk_state;
 
   // Пересоздаем командный буфер.
   if (frame.cmd_buf != VK_NULL_HANDLE) {
@@ -1383,15 +1381,15 @@ void Render(
   VkRenderPassBeginInfo bi_renderpass{
       .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
       .renderPass = state->graphics_renderpass,
-      .framebuffer = image_state.frame_buffer,
-      .renderArea = {.offset = {0, 0}, .extent = scene_resources->image_extent},
+      .framebuffer = image_res.frame_buffer,
+      .renderArea = {.offset = {0, 0}, .extent = scene_res->image_extent},
       .clearValueCount = 3,
       .pClearValues = clearValues};
   vkCmdBeginRenderPass(frame.cmd_buf, &bi_renderpass,
                        VK_SUBPASS_CONTENTS_INLINE);
 
   // Дальнейшие команды будут вызваны, только если сцена не пуста.
-  if (scene_resources->buffer_vertex) {
+  if (scene_res->buffer_vertex) {
     vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
                       state->graphics_pipeline);
 
@@ -1401,22 +1399,22 @@ void Render(
 
     // Bind vertex buffers.
     std::vector<VkBuffer> buffers = {
-        scene_resources->buffer_vertex,
-        scene_resources->buffer_normal,
-        scene_resources->buffer_color
+        scene_res->buffer_vertex,
+        scene_res->buffer_normal,
+        scene_res->buffer_color
     };
     VkDeviceSize offsets[] = {0, 0, 0};
     vkCmdBindVertexBuffers(frame.cmd_buf, 0, buffers.size(), buffers.data(), offsets);
 
     // Bind index buffers.
-    vkCmdBindIndexBuffer(frame.cmd_buf, scene_resources->buffer_index, 0,
+    vkCmdBindIndexBuffer(frame.cmd_buf, scene_res->buffer_index, 0,
                          VK_INDEX_TYPE_UINT32);
 
     const VkViewport viewport = {
         .x = 0,
         .y = 0,
-        .width = static_cast<float>(scene_resources->image_extent.width),
-        .height = static_cast<float>(scene_resources->image_extent.height),
+        .width = static_cast<float>(scene_res->image_extent.width),
+        .height = static_cast<float>(scene_res->image_extent.height),
         .minDepth = 0,
         .maxDepth = 1,
     };
@@ -1424,11 +1422,11 @@ void Render(
 
     const VkRect2D scissor = {
         .offset = {0, 0},
-        .extent = scene_resources->image_extent,
+        .extent = scene_res->image_extent,
     };
     vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
 
-    vkCmdDrawIndexed(frame.cmd_buf, scene_resources->index_count, 1, 0, 0, 0);
+    vkCmdDrawIndexed(frame.cmd_buf, scene_res->index_count, 1, 0, 0, 0);
   }
 
   vkCmdEndRenderPass(frame.cmd_buf);
@@ -1444,7 +1442,7 @@ void Render(
         .newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
         .srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
         .dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED,
-        .image = image_state.image,
+        .image = image_res.image,
         .subresourceRange = {
             .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
             .baseMipLevel = 0,
@@ -1462,10 +1460,10 @@ void Render(
     VkRenderPassBeginInfo bi_composite {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
         .renderPass = state->composite_renderpass,
-        .framebuffer = image_state.composite_frame_buffer,
+        .framebuffer = image_res.composite_frame_buffer,
         .renderArea = {
             .offset = {0, 0},
-            .extent = scene_resources->image_extent
+            .extent = scene_res->image_extent
         },
         .clearValueCount = 0,
         .pClearValues = nullptr,
@@ -1477,8 +1475,8 @@ void Render(
     VkViewport composite_viewport{
         .x = 0,
         .y = 0,
-        .width = static_cast<float>(scene_resources->image_extent.width),
-        .height = static_cast<float>(scene_resources->image_extent.height),
+        .width = static_cast<float>(scene_res->image_extent.width),
+        .height = static_cast<float>(scene_res->image_extent.height),
         .minDepth = 0,
         .maxDepth = 1,
     };
@@ -1486,7 +1484,7 @@ void Render(
 
     VkRect2D composite_scissor{
         .offset = {0, 0},
-        .extent = scene_resources->image_extent,
+        .extent = scene_res->image_extent,
     };
     vkCmdSetScissor(frame.cmd_buf, 0, 1, &composite_scissor);
 
@@ -1496,7 +1494,7 @@ void Render(
 
     // Draw each foreground image.
     for (auto* fg : scene->GetFgObjects()) {
-      TextureResources* fg_res = fgs_resources.at(fg);
+      TextureRes* fg_res = fg_res_array.at(fg);
 
       if (fg_res->desc_set == VK_NULL_HANDLE)
         continue;
@@ -1517,8 +1515,8 @@ void Render(
           .size = glm::vec2(static_cast<float>(fg->GetWidth()),
                             static_cast<float>(fg->GetHeight())),
           .screenSize = glm::vec2(
-              static_cast<float>(scene_resources->image_extent.width),
-              static_cast<float>(scene_resources->image_extent.height)),
+              static_cast<float>(scene_res->image_extent.width),
+              static_cast<float>(scene_res->image_extent.height)),
       };
       vkCmdPushConstants(frame.cmd_buf, state->composite_pipeline_layout,
                          VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(pc), &pc);
@@ -1543,7 +1541,7 @@ void Render(
       .commandBufferCount = 1,
       .pCommandBuffers = &frame.cmd_buf,
       .signalSemaphoreCount = static_cast<uint32_t>(1),
-      .pSignalSemaphores = &image_state.submit_semaphore
+      .pSignalSemaphores = &image_res.submit_semaphore
   };
   assert(!frame.cmd_fence_waitable);
   vkQueueSubmit(state->queue, 1, &submitInfo, frame.cmd_fence);
@@ -2010,7 +2008,7 @@ bool ChooseSwapchainSettings(VulkanState* state, VkSurfaceKHR surface) {
   return true;
 }
 
-bool TextureResources::Initialize(VulkanState* state,
+bool TextureRes::Initialize(VulkanState* state,
                                   const FgObject* fg_object) {
   this->Release(state);
 
@@ -2033,7 +2031,7 @@ bool TextureResources::Initialize(VulkanState* state,
   r = vmaCreateBuffer(state->allocator, &bufferInfo, &alloc_ci,
                       &staging_buffer, &staging_allocation, nullptr);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create staging buffer for logo: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to create staging buffer for texture: "
                              << VkResultToString(r);
     return false;
   }
@@ -2066,7 +2064,7 @@ bool TextureResources::Initialize(VulkanState* state,
                      &image, &alloc_image,
                      nullptr);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create logo image: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to create texture image: "
                              << VkResultToString(r);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
     return false;
@@ -2081,7 +2079,7 @@ bool TextureResources::Initialize(VulkanState* state,
   };
   r = vkCreateCommandPool(state->device, &pool_ci, nullptr, &cmd_pool);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for logo: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to create command pool for texture: "
                              << VkResultToString(r);
     vmaDestroyImage(state->allocator, image, alloc_image);
     vmaDestroyBuffer(state->allocator, staging_buffer, staging_allocation);
@@ -2097,7 +2095,7 @@ bool TextureResources::Initialize(VulkanState* state,
   };
   r = vkAllocateCommandBuffers(state->device, &alloc_buf_info, &cmd_buf);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for logo: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to allocate command buffer for texture: "
                              << VkResultToString(r);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
     vmaDestroyImage(state->allocator, image, alloc_image);
@@ -2178,7 +2176,7 @@ bool TextureResources::Initialize(VulkanState* state,
   };
   r = vkQueueSubmit(state->queue, 1, &submit_info, VK_NULL_HANDLE);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to submit logo copy commands: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to submit texture copy commands: "
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
@@ -2190,7 +2188,7 @@ bool TextureResources::Initialize(VulkanState* state,
   // Wait for queue to finish
   r = vkQueueWaitIdle(state->queue);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to wait for logo copy: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to wait for texture copy: "
                              << VkResultToString(r);
     vkFreeCommandBuffers(state->device, cmd_pool, 1, &cmd_buf);
     vkDestroyCommandPool(state->device, cmd_pool, nullptr);
@@ -2226,13 +2224,13 @@ bool TextureResources::Initialize(VulkanState* state,
   };
   r = vkCreateImageView(state->device, &view_info, nullptr, &image_view);
   if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(error) << "Failed to create logo image view: "
+    BOOST_LOG_TRIVIAL(error) << "Failed to create texture image view: "
                              << VkResultToString(r);
     vmaDestroyImage(state->allocator, image, alloc_image);
     return false;
   }
 
-  BOOST_LOG_TRIVIAL(trace) << "Logo resources created successfully";
+  BOOST_LOG_TRIVIAL(trace) << "Texture resources created successfully";
   return true;
 }
 
@@ -2308,22 +2306,15 @@ bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
   return true;
 }
 
-SceneResources* InitializeSceneResources(VulkanState* vk_state,
-                                       VkSurfaceKHR surface,
-                                       Scene* scene) {
-  //// Доинициализируем глобальное состояние Vulkan,
-  //// потому что для этого была нужна поверхность Vulkan.
-  //if (!InitializeVulkanState(vk_state,surface))
-  //  return nullptr;
-
-  SceneResources scene_resources(vk_state);
-  scene_resources.is_external_surface = true;
-  scene_resources.surface = surface;
+SceneRes::SceneRes(VulkanState* state, VkSurfaceKHR srf, Scene* scene) {
+  vk_state = state;
+  is_external_surface = true;
+  surface = srf;
 
   // Создаем объект swapchain.
   glm::uvec2 screen_size = scene->GetScreenSize();
-  if (!RecreateSwapchain(&scene_resources, VkExtent2D{screen_size.x, screen_size.y}))
-    return nullptr;
+  if (!RecreateSwapchain(VkExtent2D{screen_size.x, screen_size.y}))
+    return;
 
   // Память под данные фреймов.
   VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
@@ -2338,7 +2329,7 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
       .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
   };
   vmaCreateBuffer(vk_state->allocator, &ci_buffer, &ci_allocation,
-                  &scene_resources.buffer_frame, &scene_resources.alloc_frame,
+                  &buffer_frame, &alloc_frame,
                   nullptr);
 
   VkResult r;
@@ -2360,35 +2351,30 @@ SceneResources* InitializeSceneResources(VulkanState* vk_state,
       .pPoolSizes = descPoolSizes.data()
   };
   r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
-                             &scene_resources.descriptor_pool);
+                             &descriptor_pool);
 
-  scene_resources.stop_rendering = false;
-
-  scene_resources.InitFrames();
-
-  return new SceneResources{scene_resources};
+  InitFrames();
 }
-
-}  // namespace
+} // namespace
 
 VkInstance VkSceneRenderer::GetInstance() const {
   return impl_->vk_global_state.instance;
 }
 
 namespace {
-void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
-  VulkanState* vk_global_state = scene_resources->vk_state;
+void UpdateScene(const Scene* scene, SceneRes* scene_res) {
+  VulkanState* vk_global_state = scene_res->vk_state;
   auto allocator = vk_global_state->allocator;
 
-  if (scene_resources->buffer_vertex != VK_NULL_HANDLE) {
-    vmaDestroyBuffer(allocator,scene_resources->buffer_vertex,scene_resources->alloc_vertex);
-    vmaDestroyBuffer(allocator,scene_resources->buffer_normal,scene_resources->alloc_normal);
-    vmaDestroyBuffer(allocator,scene_resources->buffer_color,scene_resources->alloc_color);
-    vmaDestroyBuffer(allocator,scene_resources->buffer_index,scene_resources->alloc_index);
-    scene_resources->buffer_vertex = VK_NULL_HANDLE;
-    scene_resources->buffer_normal = VK_NULL_HANDLE;
-    scene_resources->buffer_color = VK_NULL_HANDLE;
-    scene_resources->buffer_index = VK_NULL_HANDLE;
+  if (scene_res->buffer_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator,scene_res->buffer_vertex,scene_res->alloc_vertex);
+    vmaDestroyBuffer(allocator,scene_res->buffer_normal,scene_res->alloc_normal);
+    vmaDestroyBuffer(allocator,scene_res->buffer_color,scene_res->alloc_color);
+    vmaDestroyBuffer(allocator,scene_res->buffer_index,scene_res->alloc_index);
+    scene_res->buffer_vertex = VK_NULL_HANDLE;
+    scene_res->buffer_normal = VK_NULL_HANDLE;
+    scene_res->buffer_color = VK_NULL_HANDLE;
+    scene_res->buffer_index = VK_NULL_HANDLE;
   }
 
   size_t n_verts = 0, n_cells = 0;
@@ -2414,18 +2400,18 @@ void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
     };
     VkResult r = vmaCreateBuffer(allocator,
                                  &ci_buffer, &ci_allocation,
-                                 &scene_resources->buffer_vertex,
-                                 &scene_resources->alloc_vertex, nullptr);
+                                 &scene_res->buffer_vertex,
+                                 &scene_res->alloc_vertex, nullptr);
     // Копируем вершины.
     void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_resources->alloc_vertex, &mapped_data);
+    vmaMapMemory(allocator, scene_res->alloc_vertex, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 pt : GetVertexIterator(scene)) {
       *data++ = pt.x;
       *data++ = pt.y;
       *data++ = pt.z;
     }
-    vmaUnmapMemory(allocator, scene_resources->alloc_vertex);
+    vmaUnmapMemory(allocator, scene_res->alloc_vertex);
   }
 
   {
@@ -2439,18 +2425,18 @@ void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
     vmaCreateBuffer(allocator,
-                    &ci_buffer, &ci_allocation, &scene_resources->buffer_normal,
-                    &scene_resources->alloc_normal, nullptr);
+                    &ci_buffer, &ci_allocation, &scene_res->buffer_normal,
+                    &scene_res->alloc_normal, nullptr);
     // Копируем нормали.
     void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_resources->alloc_normal, &mapped_data);
+    vmaMapMemory(allocator, scene_res->alloc_normal, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 n : GetNormalIterator(scene)) {
       *data++ = n.x;
       *data++ = n.y;
       *data++ = n.z;
     }
-    vmaUnmapMemory(allocator, scene_resources->alloc_normal);
+    vmaUnmapMemory(allocator, scene_res->alloc_normal);
   }
 
   {
@@ -2464,18 +2450,18 @@ void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
     vmaCreateBuffer(allocator,
-                    &ci_buffer, &ci_allocation, &scene_resources->buffer_color,
-                    &scene_resources->alloc_color, nullptr);
+                    &ci_buffer, &ci_allocation, &scene_res->buffer_color,
+                    &scene_res->alloc_color, nullptr);
     // Копируем цвета.
     void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_resources->alloc_color, &mapped_data);
+    vmaMapMemory(allocator, scene_res->alloc_color, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
     for (glm::vec3 c : GetColorIterator(scene)) {
       *data++ = c.x;
       *data++ = c.y;
       *data++ = c.z;
     }
-    vmaUnmapMemory(allocator, scene_resources->alloc_color);
+    vmaUnmapMemory(allocator, scene_res->alloc_color);
   }
 
   {
@@ -2489,29 +2475,29 @@ void UpdateScene(const Scene* scene, SceneResources* scene_resources) {
         .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
     };
     vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
-                    &scene_resources->buffer_index,
-                    &scene_resources->alloc_index, nullptr);
+                    &scene_res->buffer_index,
+                    &scene_res->alloc_index, nullptr);
 
     // Копируем индексный буфер.
     void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_resources->alloc_index, &mapped_data);
+    vmaMapMemory(allocator, scene_res->alloc_index, &mapped_data);
     uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
     for (glm::u32vec3 tr : GetTriaIterator(scene)) {
       *data++ = tr.x;
       *data++ = tr.y;
       *data++ = tr.z;
     }
-    vmaUnmapMemory(allocator, scene_resources->alloc_index);
+    vmaUnmapMemory(allocator, scene_res->alloc_index);
   }
 
-  scene_resources->index_count = 3 * n_cells;
+  scene_res->index_count = 3 * n_cells;
 }
 
 void UpdateDescriptorSets(
-    Scene* scene, SceneResources* scene_resources,
-    const std::map<const FgObject*,TextureResources*>& fgs_resources) {
-  const VulkanState* vk_global_state = scene_resources->vk_state;
-  FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
+    Scene* scene, SceneRes* scene_res,
+    const std::map<const FgObject*,TextureRes*>& fg_res_array) {
+  const VulkanState* vk_global_state = scene_res->vk_state;
+  FrameRes& frame = scene_res->frame_res_array[scene_res->current_frame_index];
 
   glm::mat4 model_view_matrix = scene->GetViewMatrix();
   glm::mat3 normal_matrix = glm::mat3(1.0); //glm::transpose(glm::inverse(glm::mat3(model_view_matrix)));
@@ -2539,24 +2525,24 @@ void UpdateDescriptorSets(
   VkDeviceSize vbo_size = Aligned(sizeof(vbo), 256);
   VkDeviceSize fbo_size = Aligned(sizeof(fbo), 256);
   VkDeviceSize frame_data_size = vbo_size + fbo_size;
-  VkDeviceSize frame_offset = scene_resources->current_frame_index * frame_data_size;
+  VkDeviceSize frame_offset = scene_res->current_frame_index * frame_data_size;
 
   // Осуществляем прямую запись данных в разделяемую память CPU и GPU.
   void* mapped_data = nullptr;
-  vmaMapMemory(vk_global_state->allocator, scene_resources->alloc_frame, &mapped_data);
+  vmaMapMemory(vk_global_state->allocator, scene_res->alloc_frame, &mapped_data);
   std::byte* data = reinterpret_cast<std::byte*>(mapped_data) + frame_offset;
   std::memcpy(data, &vbo, sizeof(vbo));
   std::memcpy(data + vbo_size, &fbo, sizeof(fbo));
-  vmaUnmapMemory(vk_global_state->allocator, scene_resources->alloc_frame);
+  vmaUnmapMemory(vk_global_state->allocator, scene_res->alloc_frame);
 
   std::vector<VkDescriptorBufferInfo> bufferInfo{
       VkDescriptorBufferInfo{
-        .buffer = scene_resources->buffer_frame,
+        .buffer = scene_res->buffer_frame,
         .offset = frame_offset,
         .range = sizeof(vbo)
       },
       VkDescriptorBufferInfo{
-        .buffer = scene_resources->buffer_frame,
+        .buffer = scene_res->buffer_frame,
         .offset = frame_offset + vbo_size,
         .range = sizeof(fbo)
       },
@@ -2585,7 +2571,7 @@ void UpdateDescriptorSets(
   std::list<VkDescriptorImageInfo> image_infos;
   if (scene->HasFgObjects()) {
     for (FgObject* fg : scene->GetFgObjects()) {
-      TextureResources* fg_res = fgs_resources.at(fg);
+      TextureRes* fg_res = fg_res_array.at(fg);
       if (fg_res->desc_set == VK_NULL_HANDLE) {
         vk_global_state->textures_desc_pool->Allocate(fg_res);
         if (fg_res->desc_set == VK_NULL_HANDLE)
@@ -2627,29 +2613,31 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
   // Ожидаем завершения всех заданий в очередях.
   vkQueueWaitIdle(vk_global_state->queue);
 
-  {
-    auto it = render_state->scenes_resources.find(scene);
-    auto scene_resources =
-        (it != render_state->scenes_resources.end() ? it->second : nullptr);
+  std::list<Scene*> scenes_for_update;
+  scenes_for_update.push_back(scene);
+  for (Scene* fg_scene : render_state->app->GetForegroundScenes(scene))
+    scenes_for_update.push_back(fg_scene);
+
+  for (Scene* scene : scenes_for_update) {
+    auto it = render_state->scene_res_array.find(scene);
+    auto scene_res =
+        (it != render_state->scene_res_array.end() ? it->second : nullptr);
     switch (scene->GetState()) {
     case TrackedObject::State::Clean:
       break;
     case TrackedObject::State::New:
-      assert(scene_resources == nullptr);
-      scene_resources = InitializeSceneResources(vk_global_state, surface,
-                                                 scene);
-      if (!scene_resources)
-        return false;
-      render_state->scenes_resources.insert(std::make_pair(scene,scene_resources));
+      assert(scene_res == nullptr);
+      scene_res = new SceneRes(vk_global_state, surface, scene);
+      render_state->scene_res_array.insert(std::make_pair(scene,scene_res));
       // Проваливаемся в следующую ветку `case` осознанно!
     case TrackedObject::State::Dirty:
-      assert(scene_resources != nullptr);
-      UpdateScene(scene, scene_resources);
+      assert(scene_res != nullptr);
+      UpdateScene(scene, scene_res);
       break;
     case TrackedObject::State::Removed:
-      scene_resources->Release();
-      render_state->scenes_resources.erase(it);
-      delete scene_resources;
+      scene_res->Release();
+      render_state->scene_res_array.erase(it);
+      delete scene_res;
       break;
     }
     scene->Sync();
@@ -2657,19 +2645,19 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
   if (scene->IsDeleted())
     return false;
 
-  // Синхронизируем связку `FgImage -> TextureResources`.
+  // Синхронизируем связку `FgObject -> TextureRes`.
   for (FgObject* fg : scene->GetFgObjects()) {
-    auto it = render_state->fgs_resources.find(fg);
-    auto fg_res = it != render_state->fgs_resources.end()
+    auto it = render_state->fg_res_array.find(fg);
+    auto fg_res = it != render_state->fg_res_array.end()
                           ? it->second
                           : nullptr;
     auto state = fg->GetState();
     switch (state) {
     case TrackedObject::State::New:
       assert(fg_res == nullptr);
-      fg_res = new TextureResources(vk_global_state);
+      fg_res = new TextureRes(vk_global_state);
       fg_res->Initialize(vk_global_state, fg);
-      render_state->fgs_resources[fg] = fg_res;
+      render_state->fg_res_array[fg] = fg_res;
       break;
     case TrackedObject::State::Clean:
       break;
@@ -2679,7 +2667,7 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
     case TrackedObject::State::Delete:
       fg_res->Release(vk_global_state);
       delete fg_res;
-      render_state->fgs_resources.erase(it);
+      render_state->fg_res_array.erase(it);
       break;
     default:
       std::abort();
@@ -2687,8 +2675,8 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
     fg->Sync();
   }
 
-  auto scene_resources = render_state->scenes_resources.at(scene);
-  UpdateDescriptorSets(scene, scene_resources, render_state->fgs_resources);
+  auto scene_res = render_state->scene_res_array.at(scene);
+  UpdateDescriptorSets(scene, scene_res, render_state->fg_res_array);
 
   return true;
 }
@@ -2704,20 +2692,19 @@ bool VkSceneRenderer::Update(Scene* scene) {
   if (!Synchronize(impl_,scene))
     return false;
 
-  SceneResources* scene_resources = impl_->scenes_resources.at(scene);
-  if (scene_resources->stop_rendering) return false;
+  SceneRes* scene_res = impl_->scene_res_array.at(scene);
 
   auto screen_size = scene->GetScreenSize();
   if (screen_size.x == 0 || screen_size.y == 0)
     return false;
   VkExtent2D current_extent(screen_size.x, screen_size.y);
-  if (scene_resources->image_extent.width != current_extent.width ||
-      scene_resources->image_extent.height != current_extent.height) {
-    if (!RecreateSwapchain(scene_resources,current_extent)) return false;
+  if (scene_res->image_extent.width != current_extent.width ||
+      scene_res->image_extent.height != current_extent.height) {
+    if (!scene_res->RecreateSwapchain(current_extent)) return false;
   }
 
-  VulkanState* state = scene_resources->vk_state;
-  FrameState& frame = scene_resources->frames_state[scene_resources->current_frame_index];
+  VulkanState* state = scene_res->vk_state;
+  FrameRes& frame = scene_res->frame_res_array[scene_res->current_frame_index];
 
   // Ожидаем освобождения последнего фрейма.
   if (frame.cmd_fence_waitable) {
@@ -2729,7 +2716,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
   while (true) {
     uint32_t index;
     VkResult r =
-        vkAcquireNextImageKHR(state->device, scene_resources->swapchain,
+        vkAcquireNextImageKHR(state->device, scene_res->swapchain,
                               UINT64_MAX, frame.acquire_semaphore,
                               VK_NULL_HANDLE, &index);
     if (r == VK_SUBOPTIMAL_KHR || r == VK_ERROR_OUT_OF_DATE_KHR) {
@@ -2737,7 +2724,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
       if (screen_size.x == 0 || screen_size.y == 0)
         return false;
       VkExtent2D extent(screen_size.x,screen_size.y);
-      RecreateSwapchain(scene_resources, extent);
+      scene_res->RecreateSwapchain(extent);
       continue;
     }
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
@@ -2745,17 +2732,16 @@ bool VkSceneRenderer::Update(Scene* scene) {
 
     // Рендеринг основной сцены и наложение текстур переднего плана.
     assert(index <= MAX_NUM_IMAGES);
-    ImageState& image_state = scene_resources->images_state[index];
-    Render(scene, scene_resources, image_state, frame,
-           impl_->fgs_resources);
+    ImageRes& image_res = scene_res->image_res_array[index];
+    Render(scene, scene_res, image_res, frame, impl_->fg_res_array);
 
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
-        .pWaitSemaphores = &image_state.submit_semaphore,
+        .pWaitSemaphores = &image_res.submit_semaphore,
         .swapchainCount = 1,
-        .pSwapchains = &scene_resources->swapchain,
+        .pSwapchains = &scene_res->swapchain,
         .pImageIndices = &index,
     };
     r = vkQueuePresentKHR(state->queue, &presentInfoKHR);
@@ -2764,12 +2750,12 @@ bool VkSceneRenderer::Update(Scene* scene) {
     break;
   }
 
-  scene_resources->current_frame_index = (scene_resources->current_frame_index + 1) % MAX_NUM_FRAMES;
+  scene_res->current_frame_index = (scene_res->current_frame_index + 1) % MAX_NUM_FRAMES;
   return true;
 }
 
 namespace {
-void TextureResources::Release(VulkanState* state) {
+void TextureRes::Release(VulkanState* state) {
   if (desc_set != VK_NULL_HANDLE) {
     state->textures_desc_pool->Free(this);
     desc_set = VK_NULL_HANDLE;
@@ -2787,10 +2773,10 @@ void TextureResources::Release(VulkanState* state) {
 }
 }
 
-void SceneResources::Release() {
+void SceneRes::Release() {
   vkDeviceWaitIdle(vk_state->device);
 
-  ReleaseSwapchain(this);
+  ReleaseSwapchain();
   ReleaseFrames();
 
   vkDestroyDescriptorPool(vk_state->device, descriptor_pool, nullptr);

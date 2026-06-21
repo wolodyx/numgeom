@@ -95,8 +95,12 @@ void MainWindow::initVulkan() {
   // Добавляем тестовый куб
   auto trimesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");
   scene->AddObject<SceneObject_Mesh>(trimesh);
-  // auto fg_scene = app_->AddScene("axis-indicator", scene);
-  // fg_scene->AddObject<SceneWidget_AxisIndicator>();
+
+  //auto fg_scene = app_->AddScene("axis-indicator", scene);
+  //fg_scene->AddObject<SceneWidget_AxisIndicator>();
+  //fg_scene->SetViewportSizeFunction([this]() {
+  //  return std::make_tuple(100, 100);
+  //});
 
   // Загружаем логотип
   QFile resource_file(":/resources/logo.png");

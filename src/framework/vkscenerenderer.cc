@@ -60,6 +60,8 @@ struct ImageRes {
   //! `VulkanState::sampleCount != VK_SAMPLE_COUNT_1_BIT`.
   VkImage msaa_image = VK_NULL_HANDLE;
 
+  VmaAllocation alloc_msaa_image = VK_NULL_HANDLE;
+
   // Вид сэмплированного изображения.
   VkImageView msaa_image_view = VK_NULL_HANDLE;
 
@@ -187,9 +189,8 @@ class SceneRes {
   VkExtent2D image_extent;
   std::array<ImageRes, MAX_NUM_IMAGES> image_res_array;
   VkImage depth_stencil_image = VK_NULL_HANDLE;
-  VkDeviceMemory depth_stencil_mem = VK_NULL_HANDLE;
+  VmaAllocation alloc_depth_stencil = VK_NULL_HANDLE;
   VkImageView depth_stencil_view = VK_NULL_HANDLE;
-  VkDeviceMemory msaa_image_mem = VK_NULL_HANDLE;
 
   //! Буферы и память под данные для отправки на GPU.
   //! \{
@@ -942,27 +943,27 @@ void SceneRes::ReleaseImages() {
   BOOST_LOG_TRIVIAL(trace) << "Finalize image resources ...";
 
   for (int i = 0; i < image_count; ++i) {
-    ImageRes* image_res = &image_res_array[i];
-    if (image_res->composite_frame_buffer != VK_NULL_HANDLE) {
+    ImageRes* res = &image_res_array[i];
+    if (res->composite_frame_buffer != VK_NULL_HANDLE) {
       vkDestroyFramebuffer(vk_state->device,
-                           image_res->composite_frame_buffer, nullptr);
-      image_res->composite_frame_buffer = VK_NULL_HANDLE;
+                           res->composite_frame_buffer, nullptr);
+      res->composite_frame_buffer = VK_NULL_HANDLE;
     }
 
-    vkDestroyFramebuffer(vk_state->device, image_res->frame_buffer, nullptr);
-    image_res->frame_buffer = VK_NULL_HANDLE;
+    vkDestroyFramebuffer(vk_state->device, res->frame_buffer, nullptr);
+    res->frame_buffer = VK_NULL_HANDLE;
 
-    vkDestroyImageView(vk_state->device, image_res->image_view, nullptr);
-    image_res->image_view = VK_NULL_HANDLE;
+    vkDestroyImageView(vk_state->device, res->image_view, nullptr);
+    res->image_view = VK_NULL_HANDLE;
 
-    vkDestroyImageView(vk_state->device, image_res->msaa_image_view, nullptr);
-    image_res->msaa_image_view = VK_NULL_HANDLE;
+    vkDestroyImageView(vk_state->device, res->msaa_image_view, nullptr);
+    res->msaa_image_view = VK_NULL_HANDLE;
 
-    vkDestroyImage(vk_state->device, image_res->msaa_image, nullptr);
-    image_res->msaa_image = VK_NULL_HANDLE;
+    vmaDestroyImage(vk_state->allocator, res->msaa_image, res->alloc_msaa_image);
+    res->msaa_image = VK_NULL_HANDLE;
 
-    vkDestroySemaphore(vk_state->device, image_res->submit_semaphore, nullptr);
-    image_res->submit_semaphore = VK_NULL_HANDLE;
+    vkDestroySemaphore(vk_state->device, res->submit_semaphore, nullptr);
+    res->submit_semaphore = VK_NULL_HANDLE;
   }
 }
 
@@ -1020,41 +1021,10 @@ SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device,
   return details;
 }
 
-uint32_t ChooseTransientImageMemType(VulkanState* state, VkImage img,
-                                     uint32_t startIndex) {
-  VkPhysicalDeviceMemoryProperties props;
-  vkGetPhysicalDeviceMemoryProperties(state->physical_device, &props);
-
-  VkMemoryRequirements memReq;
-  vkGetImageMemoryRequirements(state->device, img, &memReq);
-  if (memReq.memoryTypeBits == 0) return -1;
-
-  uint32_t memTypeIndex = static_cast<uint32_t>(-1);
-  const VkMemoryType* memType = props.memoryTypes;
-  bool foundDevLocal = false;
-  for (uint32_t i = startIndex; i < props.memoryTypeCount; ++i) {
-    if (memReq.memoryTypeBits & (1 << i)) {
-      if (memType[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) {
-        if (!foundDevLocal) {
-          foundDevLocal = true;
-          memTypeIndex = i;
-        }
-        if (memType[i].propertyFlags &
-            VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT) {
-          memTypeIndex = i;
-          break;
-        }
-      }
-    }
-  }
-
-  return memTypeIndex;
-}
-
 bool CreateTransientImage(SceneRes* scene_res, VkFormat format,
                           VkImageUsageFlags usage,
-                          VkImageAspectFlags aspect_mask, VkImage* images,
-                          VkDeviceMemory* mem, VkImageView* views, int count) {
+                          VkImageAspectFlags aspect_mask, VkImage& image,
+                          VmaAllocation* alloc, VkImageView& view) {
   VulkanState* vk_state = scene_res->vk_state;
   VkDevice device = vk_state->device;
   VkSampleCountFlagBits sample_count = vk_state->sample_count;
@@ -1062,87 +1032,67 @@ bool CreateTransientImage(SceneRes* scene_res, VkFormat format,
   VkMemoryRequirements mem_req;
   VkResult r;
 
-  assert(count > 0);
-  for (int i = 0; i < count; ++i) {
-    VkImageCreateInfo ci_image{
-        .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
-        .imageType = VK_IMAGE_TYPE_2D,
-        .format = format,
-        .extent = VkExtent3D{.width = scene_res->image_extent.width,
-                             .height = scene_res->image_extent.height,
-                             .depth = 1},
-        .mipLevels = 1,
-        .arrayLayers = 1,
-        .samples = sample_count,
-        .tiling = VK_IMAGE_TILING_OPTIMAL,
-        .usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
-    };
-    r = vkCreateImage(device, &ci_image, nullptr, images + i);
-    if (r != VK_SUCCESS) {
-      BOOST_LOG_TRIVIAL(error)
-          << std::format("Failed to create image: {}", VkResultToString(r));
-      return false;
-    }
-    vkGetImageMemoryRequirements(device, images[i], &mem_req);
+  VkImageCreateInfo ci_image{
+      .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
+      .imageType = VK_IMAGE_TYPE_2D,
+      .format = format,
+      .extent = VkExtent3D{.width = scene_res->image_extent.width,
+                            .height = scene_res->image_extent.height,
+                            .depth = 1},
+      .mipLevels = 1,
+      .arrayLayers = 1,
+      .samples = sample_count,
+      .tiling = VK_IMAGE_TILING_OPTIMAL,
+      .usage = usage | VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT,
+  };
+  r = vkCreateImage(device, &ci_image, nullptr, &image);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error)
+        << std::format("Failed to create image: {}", VkResultToString(r));
+    return false;
   }
+  vkGetImageMemoryRequirements(device, image, &mem_req);
 
   VkMemoryAllocateInfo mem_info = {
       .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
-      .allocationSize = Aligned(mem_req.size, mem_req.alignment) * count
+      .allocationSize = Aligned(mem_req.size, mem_req.alignment)
   };
 
-  uint32_t startIndex = 0;
-  do {
-    mem_info.memoryTypeIndex =
-        ChooseTransientImageMemType(vk_state, images[0], startIndex);
-    if (mem_info.memoryTypeIndex == uint32_t(-1)) {
-      BOOST_LOG_TRIVIAL(error) << "No suitable memory type found";
-      return false;
-    }
-    startIndex = mem_info.memoryTypeIndex + 1;
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Allocating {} bytes for transient image (memtype {})",
-        uint32_t(mem_info.allocationSize), mem_info.memoryTypeIndex);
-    r = vkAllocateMemory(device, &mem_info, nullptr, mem);
-    if (r != VK_SUCCESS && r != VK_ERROR_OUT_OF_DEVICE_MEMORY) {
-      BOOST_LOG_TRIVIAL(error) << std::format(
-          "Failed to allocate image memory: {}", VkResultToString(r));
-      return false;
-    }
-  } while (r != VK_SUCCESS);
+  VmaAllocationCreateInfo ci_alloc {
+      .preferredFlags = VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT |
+                        VK_MEMORY_PROPERTY_LAZILY_ALLOCATED_BIT,
+  };
+  vmaAllocateMemoryForImage(vk_state->allocator, image, &ci_alloc, alloc, nullptr);
 
-  VkDeviceSize ofs = 0;
-  for (int i = 0; i < count; ++i) {
-    r = vkBindImageMemory(device, images[i], *mem, ofs);
-    if (r != VK_SUCCESS) {
-      BOOST_LOG_TRIVIAL(error) << std::format("Failed to bind image memory: {}",
-                                              VkResultToString(r));
-      return false;
-    }
-    ofs += Aligned(mem_req.size, mem_req.alignment);
-    VkImageViewCreateInfo ci_image_view = {
-        .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
-        .image = images[i],
-        .viewType = VK_IMAGE_VIEW_TYPE_2D,
-        .format = format,
-        .components = {
-            .r = VK_COMPONENT_SWIZZLE_R,
-            .g = VK_COMPONENT_SWIZZLE_G,
-            .b = VK_COMPONENT_SWIZZLE_B,
-            .a = VK_COMPONENT_SWIZZLE_A
-        },
-        .subresourceRange = {
-            .aspectMask = aspect_mask,
-            .levelCount = 1,
-            .layerCount = 1
-        }
-    };
-    r = vkCreateImageView(device, &ci_image_view, nullptr, views + i);
-    if (r != VK_SUCCESS) {
-      BOOST_LOG_TRIVIAL(error) <<
-          std::format("Failed to create image view: {}", VkResultToString(r));
-      return false;
-    }
+  r = vmaBindImageMemory(vk_state->allocator, *alloc, image);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) << std::format("Failed to bind image memory: {}",
+                                            VkResultToString(r));
+    return false;
+  }
+
+  VkImageViewCreateInfo ci_image_view = {
+      .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
+      .image = image,
+      .viewType = VK_IMAGE_VIEW_TYPE_2D,
+      .format = format,
+      .components = {
+          .r = VK_COMPONENT_SWIZZLE_R,
+          .g = VK_COMPONENT_SWIZZLE_G,
+          .b = VK_COMPONENT_SWIZZLE_B,
+          .a = VK_COMPONENT_SWIZZLE_A
+      },
+      .subresourceRange = {
+          .aspectMask = aspect_mask,
+          .levelCount = 1,
+          .layerCount = 1
+      }
+  };
+  r = vkCreateImageView(device, &ci_image_view, nullptr, &view);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(error) <<
+        std::format("Failed to create image view: {}", VkResultToString(r));
+    return false;
   }
 
   return true;
@@ -1159,21 +1109,17 @@ bool SceneRes::InitImages() {
   if (r != VK_SUCCESS) return false;
   if (image_count > MAX_NUM_IMAGES) return false;
 
-  std::vector<VkImage> msaaImages(image_count, VK_NULL_HANDLE);
-  std::vector<VkImageView> msaaViews(image_count, VK_NULL_HANDLE);
   bool msaa = (vk_state->sample_count != VK_SAMPLE_COUNT_1_BIT);
-  if (msaa) {
-    CreateTransientImage(
-        this, vk_state->image_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-        VK_IMAGE_ASPECT_COLOR_BIT, msaaImages.data(), &msaa_image_mem,
-        msaaViews.data(), image_count);
-  }
 
   for (size_t i = 0; i < image_count; ++i) {
     ImageRes* image_res = &image_res_array[i];
     image_res->image = swapchainImages[i];
-    image_res->msaa_image = msaaImages[i];
-    image_res->msaa_image_view = msaaViews[i];
+    if (msaa) {
+      CreateTransientImage(
+          this, vk_state->image_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+          VK_IMAGE_ASPECT_COLOR_BIT, image_res->msaa_image,
+          &image_res->alloc_msaa_image, image_res->msaa_image_view);
+    }
 
     VkImageViewCreateInfo ci_imageView{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
@@ -1251,11 +1197,8 @@ void SceneRes::ReleaseSwapchain() {
 
   ReleaseImages();
 
-  vkFreeMemory(vk_state->device, msaa_image_mem, nullptr);
-
   vkDestroyImageView(vk_state->device, depth_stencil_view, nullptr);
-  vkDestroyImage(vk_state->device, depth_stencil_image, nullptr);
-  vkFreeMemory(vk_state->device, depth_stencil_mem, nullptr);
+  vmaDestroyImage(vk_state->allocator, depth_stencil_image, alloc_depth_stencil);
 }
 
 bool SceneRes::RecreateSwapchain(VkExtent2D extent) {
@@ -1341,8 +1284,8 @@ bool SceneRes::RecreateSwapchain(VkExtent2D extent) {
   CreateTransientImage(this, vk_state->depth_stencil_format,
                        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
                        VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                       &depth_stencil_image, &depth_stencil_mem,
-                       &depth_stencil_view, 1);
+                       depth_stencil_image, &alloc_depth_stencil,
+                       depth_stencil_view);
 
   InitImages();
   return true;

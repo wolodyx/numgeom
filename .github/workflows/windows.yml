@@ -95,12 +95,23 @@ jobs:
           wix extension add --global WixToolset.UI.wixext/4.0.4
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-vcpkg
+      - name: Rename artifacts for release (strip version)
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}" -replace '^v', ''
+          Push-Location build/windows-vcpkg
+          $exe = Get-Item "numgeom-${version}-win64.exe" -ErrorAction Stop
+          $msi = Get-Item "numgeom-${version}-win64.msi" -ErrorAction Stop
+          Copy-Item $exe.FullName "numgeom-win64.exe"
+          Copy-Item $msi.FullName "numgeom-win64.msi"
+          Pop-Location
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
           working_directory: build/windows-vcpkg
           files: |
-            numgeom-*-win64.exe
-            numgeom-*.msi
+            numgeom-win64.exe
+            numgeom-win64.msi
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

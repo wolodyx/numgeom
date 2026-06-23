@@ -11,6 +11,7 @@
 #include "qfileinfo.h"
 #include "qmenu.h"
 #include "qmenubar.h"
+#include "qmessagebox.h"
 #include "qresource.h"
 #include "qscreen.h"
 
@@ -32,6 +33,7 @@
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
 #include "scenemdisubwindow.h"
+#include "version.h"
 
 MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updating_window_menu_(false) {
   app_ = app;
@@ -127,6 +129,7 @@ void MainWindow::createActions() {
   this->createViewMenu();
   this->createSceneMenu();
   this->createWindowMenu();
+  this->createHelpMenu();
 }
 
 void MainWindow::createFileMenu() {
@@ -361,6 +364,32 @@ void MainWindow::createWindowMenu() {
 
   connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
           this, SLOT(updateWindowMenu()));
+}
+
+void MainWindow::createHelpMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&Help"));
+
+  { // About
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/about-16.png"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("About"), this);
+    act->setStatusTip(tr("About application"));
+    connect(act, SIGNAL(triggered()), this, SLOT(onAbout()));
+    menu->addAction(act);
+  }
+}
+
+void MainWindow::onAbout() {
+  QString version = QString::fromUtf8(NUMGEOM_APPQT_VERSION);
+  QString text = tr("Demo app for NumGeom framework") + "\n";
+  text += tr("Version: ") + version;
+  QMessageBox message_box;
+  message_box.setWindowTitle(tr("About demo app"));
+  message_box.setText(text);
+  message_box.setIcon(QMessageBox::Information);
+  message_box.setStandardButtons(QMessageBox::Close);
+  message_box.exec();
 }
 
 void MainWindow::onScreenshot() {

@@ -16,11 +16,15 @@ set(DIALOG_FILES
 )
 list(TRANSFORM DIALOG_FILES PREPEND "dialogs/")
 
+configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
+
 add_executable(app-qt
   ${SOURCE_FILES}
   ${DIALOG_FILES}
   ${RESOURCE_FILES}
 )
+
+target_include_directories(app-qt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(app-qt
   Qt::Core

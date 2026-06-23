@@ -29,6 +29,7 @@ class MainWindow : public QMainWindow {
   void createViewMenu();
   void createSceneMenu();
   void createWindowMenu();
+  void createHelpMenu();
   void updateRecentFilesMenu();
   void loadRecentFiles();
   void saveRecentFiles();
@@ -39,6 +40,7 @@ class MainWindow : public QMainWindow {
   SceneMdiSubWindow* CreateMdiSubWindow(const QString& scene_name);
 
  private slots:
+  void onAbout();
   void onScreenshot();
   void onOpenFile();
   void onOpenRecentFile();

@@ -41,6 +41,8 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updat
   mdi_area_ = new QMdiArea(this);
   this->setCentralWidget(mdi_area_);
   this->createActions();
+  QIcon window_icon(QString(":/resources/icons/app-24.png"));
+  this->setWindowIcon(window_icon);
 }
 
 MainWindow::~MainWindow() {}

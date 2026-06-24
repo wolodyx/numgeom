@@ -1,0 +1,19 @@
+<CPackWiXPatch>
+  <!-- Add desktop and start menu shortcuts with icon to the app-qt.exe component -->
+  <CPackWiXFragment Id="CM_CP_bin.app_qt.exe">
+    <Shortcut Id="DesktopShortcut"
+              Directory="DesktopFolder"
+              Name="numgeom"
+              WorkingDirectory="CM_DP_bin"
+              Target="[#CM_FP_bin.app_qt.exe]"
+              Icon="ProductIcon.ico"
+              Advertise="no" />
+    <Shortcut Id="StartMenuShortcut"
+              Directory="ProgramMenuFolder"
+              Name="numgeom"
+              WorkingDirectory="CM_DP_bin"
+              Target="[#CM_FP_bin.app_qt.exe]"
+              Icon="ProductIcon.ico"
+              Advertise="no" />
+  </CPackWiXFragment>
+</CPackWiXPatch>

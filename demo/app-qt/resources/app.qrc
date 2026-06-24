@@ -10,5 +10,6 @@
     <file>icons/fitscreen-16.png</file>
     <file>icons/openfile-32.png</file>
     <file>icons/screenshot-16.png</file>
+    <file>icons/app-24.png</file>
   </qresource>
 </RCC>

@@ -15,3 +15,7 @@ NumGeom is a platform for the rapid development of 3D interactive applications u
 * Use `socraticode` mcp-server to analyze the code.
 * Use `debugmcp` mcp-server to debug the code.
 * On Windows, use powershell to run the commands.
+
+## External libraries
+
+The small external libraries are located in the `/extern` directory: `glfw`, `glm`, `gtest`, `nlohmann_json`, `stb`, `volk`, `VulkanMemoryAllocator`.

@@ -85,18 +85,11 @@ elseif(WIN32)
   list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QWindowsIntegrationPlugin)
 endif()
 
-install(
-  FILES appimage/app-qt.sh
-  DESTINATION bin
-  PERMISSIONS
-    OWNER_EXECUTE OWNER_WRITE OWNER_READ
-    GROUP_EXECUTE GROUP_READ
-    WORLD_EXECUTE WORLD_READ
-)
-install(
-  FILES appimage/qt.conf
-  DESTINATION bin
-)
+if(UNIX)
+  install(PROGRAMS appimage/app-qt.sh DESTINATION bin)
+endif()
+
+install(FILES appimage/qt.conf DESTINATION bin)
 
 set(executable_files $<TARGET_FILE:app-qt>)
 foreach(plugin ${used_qt_plugins})
@@ -118,26 +111,24 @@ install(
     RESOLVED_DEPENDENCIES_VAR _r_deps
     UNRESOLVED_DEPENDENCIES_VAR _u_deps
     POST_EXCLUDE_REGEXES
-      "^C:[/\\]Windows[/\\]system32[/\\]*"
+      "^C:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss]ystem32[/\\]*"
       "^/lib/x86_64-linux-gnu/"
     DIRECTORIES "${DEPENDENCY_PATHS}"
   )
+  if(WIN32)
+    set(dest "${CMAKE_INSTALL_PREFIX}/bin")
+  else()
+    set(dest "${CMAKE_INSTALL_PREFIX}/lib")
+  endif()
   foreach(_file ${_r_deps})
-    file(INSTALL
-      DESTINATION "${CMAKE_INSTALL_PREFIX}/lib"
-      TYPE SHARED_LIBRARY
-      FOLLOW_SYMLINK_CHAIN
-      FILES "${_file}"
-    )
+    file(INSTALL "${_file}" DESTINATION "${dest}" FOLLOW_SYMLINK_CHAIN)
   endforeach()
-  # Creating the missing `libvulkan.so ` -- symbolic link to `libvulkan.so.1'.
-  if(NOT EXISTS ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so)
-    if(EXISTS ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so.1)
-      file(CREATE_LINK
-        libvulkan.so.1
-        ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so
-        SYMBOLIC
-      )
+  if(UNIX)
+    # Creating the missing `libvulkan.so ` -- symbolic link to `libvulkan.so.1'.
+    set(link_file ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so)
+    set(origin_file ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so.1)
+    if(NOT EXISTS ${link_file} AND EXISTS ${origin_file})
+      file(CREATE_LINK {origin_file} ${link_file} SYMBOLIC)
     endif()
   endif()
 ]])

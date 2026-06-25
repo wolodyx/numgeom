@@ -114,10 +114,21 @@ install(
     RESOLVED_DEPENDENCIES_VAR _r_deps
     UNRESOLVED_DEPENDENCIES_VAR _u_deps
     POST_EXCLUDE_REGEXES
-      "^C:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss]ystem32[/\\]*"
       "^/lib/x86_64-linux-gnu/"
     DIRECTORIES "${DEPENDENCY_PATHS}"
   )
+  # Exclude system libraries, except for Visual C++ runtime libraries.
+  if(WIN32)
+    set(_system32_exclude)
+    foreach(_dep ${_r_deps})
+      if(_dep MATCHES "^[Cc]:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss]ystem32[/\\]*")
+        if(NOT _dep MATCHES "msvcp[^/\\]*.dll$")
+          list(APPEND _system32_exclude ${_dep})
+        endif()
+      endif()
+    endforeach()
+    list(REMOVE_ITEM _r_deps ${_system32_exclude})
+  endif()
   if(WIN32)
     set(dest "${CMAKE_INSTALL_PREFIX}/bin")
   else()

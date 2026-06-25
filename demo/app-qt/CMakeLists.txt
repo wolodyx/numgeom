@@ -1,5 +1,6 @@
 set(SOURCE_FILES
   main.cc
+  downloaddata.cc           downloaddata.h
   loadtotrimesh.cc          loadtotrimesh.h
   mainwindow.cc             mainwindow.h
   scenewindow.cc            scenewindow.h
@@ -33,6 +34,8 @@ target_link_libraries(app-qt
   numgeom::framework
   numgeom::io
   $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
+  httplib
+  ZLIB::ZLIB
 )
 
 # Добавляем перед запуском app-qt путь к библиотекам Qt.

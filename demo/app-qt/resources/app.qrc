@@ -4,12 +4,14 @@
     <file>icons/about-16.png</file>
     <file>icons/add-foreground-image-16.png</file>
     <file>icons/add-foreground-text-16.png</file>
+    <file>icons/app.ico</file>
     <file>icons/axis-indicator-32.png</file>
     <file>icons/axis-indicator-16.png</file>
     <file>icons/closeapp-16.png</file>
+    <file>icons/download-data.ico</file>
     <file>icons/fitscreen-16.png</file>
+    <file>icons/goto-testdata.ico</file>
     <file>icons/openfile-32.png</file>
     <file>icons/screenshot-16.png</file>
-    <file>icons/app-24.png</file>
   </qresource>
 </RCC>

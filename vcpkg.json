@@ -18,6 +18,7 @@
       "name": "qtbase",
       "features": ["vulkan"]
     },
+    "zlib",
     {
       "name": "python3",
       "platform": "windows"

@@ -24,31 +24,33 @@ class MainWindow : public QMainWindow {
   Scene* GetActiveScene() const;
 
  private:
+  void addToRecentFiles(const QString& filepath);
   void createActions();
   void createFileMenu();
-  void createViewMenu();
-  void createSceneMenu();
-  void createWindowMenu();
   void createHelpMenu();
-  void updateRecentFilesMenu();
+  void createSceneMenu();
+  void createViewMenu();
+  void createWindowMenu();
   void loadRecentFiles();
-  void saveRecentFiles();
-  void addToRecentFiles(const QString& filepath);
   void openFile(const QString&);
+  void saveRecentFiles();
+  void updateRecentFilesMenu();
 
   // Создает новое MDI подокно с заданным именем сцены
   SceneMdiSubWindow* CreateMdiSubWindow(const QString& scene_name);
 
  private slots:
   void onAbout();
-  void onScreenshot();
+  void onAddAxisIndicator();
+  void onAddFgImage();
+  void onAddFgText();
+  void onDownloadData();
+  void onFitScene();
+  void onGoToTestData();
   void onOpenFile();
   void onOpenRecentFile();
   void onQuit();
-  void onFitScene();
-  void onAddFgImage();
-  void onAddFgText();
-  void onAddAxisIndicator();
+  void onScreenshot();
   void updateWindowMenu(); //!< Обновляет список окон в меню Window.
 
   // Window menu slots

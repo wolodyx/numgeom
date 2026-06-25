@@ -4,6 +4,7 @@
 
 #include "qactiongroup.h"
 #include "qapplication.h"
+#include "qdesktopservices.h"
 #include "qdir.h"
 #include "qevent.h"
 #include "qfile.h"
@@ -30,6 +31,7 @@
 #include "dialogs/addforegroundimage.h"
 #include "dialogs/addforegroundtext.h"
 
+#include "downloaddata.h"
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
 #include "scenemdisubwindow.h"
@@ -41,7 +43,7 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updat
   mdi_area_ = new QMdiArea(this);
   this->setCentralWidget(mdi_area_);
   this->createActions();
-  QIcon window_icon(QString(":/resources/icons/app-24.png"));
+  QIcon window_icon(QString(":/resources/icons/app.ico"));
   this->setWindowIcon(window_icon);
 }
 
@@ -371,6 +373,28 @@ void MainWindow::createWindowMenu() {
 void MainWindow::createHelpMenu() {
   QMenu* menu = menuBar()->addMenu(tr("&Help"));
 
+  auto test_data_menu = menu->addMenu(tr("Test data"));
+  { // Download data
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/download-data.ico"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Download data"), this);
+    act->setStatusTip(tr("Download an archive via HTTP"));
+    connect(act, SIGNAL(triggered()), this, SLOT(onDownloadData()));
+    test_data_menu->addAction(act);
+  }
+  { // Go to test data directory
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/goto-testdata.ico"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Go to test dir"), this);
+    act->setStatusTip(tr("Open test data directory"));
+    connect(act, SIGNAL(triggered()), this, SLOT(onGoToTestData()));
+    test_data_menu->addAction(act);
+  }
+
+  menu->addSeparator();
+
   { // About
     QIcon icon;
     icon.addFile(QString::fromUtf8(":/resources/icons/about-16.png"),
@@ -380,6 +404,35 @@ void MainWindow::createHelpMenu() {
     connect(act, SIGNAL(triggered()), this, SLOT(onAbout()));
     menu->addAction(act);
   }
+}
+
+void MainWindow::onDownloadData() {
+  const std::string url = "https://storage.yandexcloud.net/numgeom-storage/numgeom-testdata.zip";
+  const QString output_dir = QDir::homePath();
+  bool res = DownloadData(url, output_dir.toStdString());
+  if (!res) {
+    QMessageBox::warning(this, tr("Download failed"),
+                         tr("Failed to download archive."));
+    return;
+  }
+  const QString testdata_dir = output_dir + "/numgeom-testdata";
+  settings_.setValue("MainWindow/testDataDirectory", testdata_dir);
+  settings_.setValue("MainWindow/lastDirectory", testdata_dir);
+  QMessageBox::information(this, tr("Download complete"),
+                           tr("Archive downloaded successfully to:\n%1")
+                               .arg(output_dir),
+                           QMessageBox::Ok);
+}
+
+void MainWindow::onGoToTestData() {
+  QString testdata_dir =
+      settings_.value("MainWindow/testDataDirectory")
+               .toString();
+  if (testdata_dir.isEmpty()) {
+    qDebug() << "The directory with the test data is not specified.";
+    return;
+  }
+  QDesktopServices::openUrl(QUrl::fromLocalFile(testdata_dir));
 }
 
 void MainWindow::onAbout() {
@@ -549,9 +602,17 @@ void MainWindow::openFile(const QString& filename) {
 void MainWindow::onOpenFile() {
   QString last_directory =
     settings_.value("MainWindow/lastDirectory", QDir::homePath()).toString();
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   QString filename = QFileDialog::getOpenFileName(this, tr("Select open file"),
                                                   last_directory);
   if (filename.isEmpty()) return;
+  // NOTE: After a modal dialog (QFileDialog), QMdiArea may lose track of the
+  // active subwindow because the native dialog steals focus and triggers
+  // subWindowActivated(nullptr) during the nested event loop.
+  // Re-activate the previously known subwindow if needed.
+  if (!GetActiveMdiSubWindow() && active_sub) {
+    mdi_area_->setActiveSubWindow(active_sub);
+  }
   settings_.setValue("MainWindow/lastDirectory",
                      QFileInfo(filename).absolutePath());
   addToRecentFiles(filename);

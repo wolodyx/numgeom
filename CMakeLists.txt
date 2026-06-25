@@ -37,6 +37,7 @@ if(UNIX)
     find_package(SDL2 REQUIRED)
   endif()
 endif()
+find_package(ZLIB REQUIRED)
 
 if(ENABLE_QT)
   # Признак, что при сборке и запуске Qt будет использован общесистемный Qt:

@@ -37,7 +37,9 @@ if(UNIX)
     find_package(SDL2 REQUIRED)
   endif()
 endif()
-find_package(ZLIB REQUIRED)
+# We are trying to find the system ZLIB. If it doesn't exist,
+# then we build it from the source codes in `extern/zlib`.
+find_package(ZLIB)
 
 if(ENABLE_QT)
   # Признак, что при сборке и запуске Qt будет использован общесистемный Qt:

@@ -444,6 +444,7 @@ void MainWindow::onDownloadData() {
   const QString testdata_dir = output_dir + "/numgeom-testdata";
   settings_.setValue("MainWindow/testDataDirectory", testdata_dir);
   settings_.setValue("MainWindow/lastDirectory", testdata_dir);
+  settings_.setValue("MainWindow/lastFgImageDirectory", testdata_dir);
   QMessageBox::information(this, tr("Download complete"),
                            tr("Archive downloaded successfully to:\n%1")
                                .arg(output_dir),

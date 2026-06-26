@@ -180,7 +180,7 @@
     {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg",
-      "generators": ["NSIS", "WIX"]
+      "generators": ["NSIS", "WIX", "ZIP"]
     }
   ],
   "workflowPresets": [

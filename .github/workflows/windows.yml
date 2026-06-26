@@ -102,7 +102,9 @@ jobs:
           $version = "${{ github.ref_name }}" -replace '^v', ''
           Push-Location build/windows-vcpkg
           $msi = Get-Item "numgeom-${version}-win64.msi" -ErrorAction Stop
+          $zip = Get-Item "numgeom-${version}-win64.zip" -ErrorAction Stop
           Copy-Item $msi.FullName "numgeom-win64.msi"
+          Copy-Item $zip.FullName "numgeom-win64.zip"
           Pop-Location
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
@@ -110,5 +112,6 @@ jobs:
           working_directory: build/windows-vcpkg
           files: |
             numgeom-win64.msi
+            numgeom-win64.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

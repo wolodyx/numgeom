@@ -11,12 +11,12 @@
 #include "numgeom/vkscenerenderer.h"
 
 SceneWindow::SceneWindow(Application* app) {
+  this->setSurfaceType(QSurface::VulkanSurface);
   app_ = app;
 }
 
 bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance,
                              const QString& scene_name) {
-  this->setSurfaceType(QSurface::VulkanSurface);
   scene_ = app_->AddScene(scene_name.toStdString());
   user_input_controller_ = new UserInputController(scene_, app_->GetRenderer());
 

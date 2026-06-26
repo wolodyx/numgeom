@@ -33,6 +33,7 @@ class MainWindow : public QMainWindow {
   void createWindowMenu();
   void loadRecentFiles();
   void openFile(const QString&);
+  bool loadWelcomeModel(Scene*);
   void saveRecentFiles();
   void updateRecentFilesMenu();
 

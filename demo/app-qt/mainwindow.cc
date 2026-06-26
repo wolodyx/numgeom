@@ -15,6 +15,7 @@
 #include "qmessagebox.h"
 #include "qresource.h"
 #include "qscreen.h"
+#include "qstandardpaths.h"
 
 #include "numgeom/application.h"
 #include "numgeom/fgtext.h"
@@ -98,9 +99,7 @@ void MainWindow::initVulkan() {
     return;
   }
 
-  // Добавляем тестовый куб
-  auto trimesh = LoadToTriMesh("d:/projects/numgeom/tests/data/polydata-cube.vtk");
-  scene->AddObject<SceneObject_Mesh>(trimesh);
+  this->loadWelcomeModel(scene);
 
   //auto fg_scene = app_->AddScene("axis-indicator", scene);
   //fg_scene->AddObject<SceneWidget_AxisIndicator>();
@@ -126,6 +125,33 @@ void MainWindow::initVulkan() {
   scene->AddFgObject(fg_text, glm::ivec2(5,100));
 
   scene->FitScene();
+}
+
+bool MainWindow::loadWelcomeModel(Scene* scene) {
+  QString data_path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+  if (data_path.isEmpty())
+    return false;
+
+  QFile resource_file(":/resources/welcome-model.vtk");
+  if (!resource_file.open(QIODevice::ReadOnly))
+    return false;
+  QByteArray resource_data = resource_file.readAll();
+  resource_file.close();
+
+  QDir dir;
+  if (!dir.mkpath(data_path))
+    return false;
+
+  QString model_filename = data_path + "/welcome-model.vtk";
+  QFile model_file(model_filename);
+  if (!model_file.open(QIODevice::WriteOnly))
+    return false;
+  model_file.write(resource_data);
+  model_file.close();
+
+  auto trimesh = LoadToTriMesh(model_filename.toStdString());
+  scene->AddObject<SceneObject_Mesh>(trimesh);
+  return true;
 }
 
 void MainWindow::createActions() {

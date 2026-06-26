@@ -13,6 +13,9 @@ int main(int argc, char* argv[]) {
   Application caxApp(argc, argv);
   QApplication guiApp(argc, argv);
 
+  QCoreApplication::setOrganizationName("NumGeom");
+  QCoreApplication::setApplicationName("app-qt");
+
 #ifndef NDEBUG
   QLoggingCategory::setFilterRules(QStringLiteral("qt.vulkan=true"));
 #endif

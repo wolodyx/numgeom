@@ -1,6 +1,7 @@
 <RCC>
   <qresource prefix="/resources">
     <file>logo.png</file>
+    <file>welcome-model.vtk</file>
     <file>icons/about-16.png</file>
     <file>icons/add-foreground-image-16.png</file>
     <file>icons/add-foreground-text-16.png</file>

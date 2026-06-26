@@ -25,8 +25,8 @@ bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance,
   scene_->SetViewportSizeFunction([this]() {
     QSize sz = this->size();
     qreal r = this->devicePixelRatio();
-    uint32_t width = static_cast<uint32_t>(sz.width() * r);
-    uint32_t height = static_cast<uint32_t>(sz.height() * r);
+    uint32_t width = static_cast<uint32_t>(sz.width() * r + 0.5);
+    uint32_t height = static_cast<uint32_t>(sz.height() * r + 0.5);
     return std::make_tuple(width, height);
   });
 

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-apt update && apt upgrade
+apt update && apt upgrade -y
 apt -y install git cmake curl wget python3 gnupg2 vim build-essential bison flex ninja-build
 apt -y install libboost-all-dev
 apt -y install qtbase5-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev

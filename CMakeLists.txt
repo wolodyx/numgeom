@@ -41,27 +41,15 @@ endif()
 # then we build it from the source codes in `extern/zlib`.
 find_package(ZLIB)
 
-if(ENABLE_QT)
-  # Признак, что при сборке и запуске Qt будет использован общесистемный Qt:
-  # * разделяемые библиотеки и плагины не копируются в `CMAKE_INSTALL_PREFIX`;
-  # * Qt не поставляется вместе с дистрибутивом;
-  # * приложение при запуске компонуется с установленной в систему версией Qt.
-  # Значение актуально только для UNIX, под Windows всегда `USE_SYSTEM_QT=OFF`.
-  option(USE_SYSTEM_QT "Use system wide Qt" ON)
-  set(QtComponents Core Gui Widgets)
-  find_package(Qt6 COMPONENTS ${QtComponents} CONFIG)
-  set(NUMGEOM_QT_MAJOR_VERSION 6)
-  if(NOT Qt6_FOUND)
-    find_package(Qt5 COMPONENTS ${QtComponents} CONFIG)
-    set(NUMGEOM_QT_MAJOR_VERSION 5)
-    if(NOT Qt5_FOUND)
-      message(FATAL_ERROR "Qt package not found!")
-    endif()
-  endif()
-  set(CMAKE_AUTOMOC ON)
-  set(CMAKE_AUTORCC ON)
-  set(CMAKE_AUTOUIC ON)
-endif()
+# option(USE_SYSTEM_QT "Use system wide Qt" ON)
+# Признак, что при сборке и запуске Qt будет использован общесистемный Qt:
+# * разделяемые библиотеки и плагины не копируются в `CMAKE_INSTALL_PREFIX`;
+# * Qt не поставляется вместе с дистрибутивом;
+# * приложение при запуске компонуется с установленной в систему версией Qt.
+# Значение актуально только для UNIX, под Windows всегда `USE_SYSTEM_QT=OFF`.
+# Готовим файл `qt.conf` для связывания приложений Qt с ресурсами Qt.
+# include(QtUtils)
+# generate_qt_conf()
 
 include(GitVersionDetect)
 set(PROJECT_VERSION_MAJOR ${GITVERSIONDETECT_VERSION_MAJOR})
@@ -70,10 +58,6 @@ set(PROJECT_VERSION_PATCH ${GITVERSIONDETECT_VERSION_PATCH})
 set(PROJECT_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
 include(GenerateExportHeader)
-
-# Готовим файл `qt.conf` для связывания приложений Qt с ресурсами Qt.
-include(QtUtils)
-generate_qt_conf()
 
 add_subdirectory(extern)
 add_subdirectory(src)

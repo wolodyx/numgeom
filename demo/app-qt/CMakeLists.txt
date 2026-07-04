@@ -1,3 +1,19 @@
+cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
+
+project(DemoQt
+  LANGUAGES CXX C
+  VERSION 1.0.0
+  DESCRIPTION "NumGeom demo Qt application"
+)
+
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
+
+find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Core CONFIG)
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets CONFIG)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+set(CMAKE_AUTOUIC ON)
+
 set(SOURCE_FILES
   main.cc
   downloaddata.cc           downloaddata.h
@@ -17,49 +33,37 @@ set(DIALOG_FILES
 )
 list(TRANSFORM DIALOG_FILES PREPEND "dialogs/")
 
-configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
-
 add_executable(app-qt
   ${SOURCE_FILES}
   ${DIALOG_FILES}
   ${RESOURCE_FILES}
 )
 
+configure_file(version.h.in ${CMAKE_CURRENT_BINARY_DIR}/version.h)
 target_include_directories(app-qt PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 target_link_libraries(app-qt
-  Qt::Core
-  Qt::Widgets
-  Qt::Gui
-  numgeom::framework
-  numgeom::io
-  $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
-  httplib
-  ZLIB::ZLIB
+  PRIVATE
+    Qt::Core
+    Qt::Widgets
+    Qt::Gui
+    numgeom::framework
+    numgeom::io
+    $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
+    httplib
+    ZLIB::ZLIB
 )
 
-# Добавляем перед запуском app-qt путь к библиотекам Qt.
-include(QtUtils)
-if(WIN32)
-  get_qt_binary_dir(NUMGEOM_QT_BIN_DIR)
-  set_target_properties(app-qt PROPERTIES
-    VS_DEBUGGER_ENVIRONMENT "PATH=${NUMGEOM_QT_BIN_DIR};$ENV{PATH}"
-  )
-endif()
+include(DeployApp)
+create_qt_conf()
 
-# List of env variables to run application from vscode.
 if(UNIX)
+  # List of env variables to run application from vscode.
   file(GENERATE
     OUTPUT "${CMAKE_BINARY_DIR}/app-qt.env"
-    CONTENT
-[===[
-LD_LIBRARY_PATH=${env:VCPKG_ROOT}/installed/x64-linux/debug/lib
-QT_QPA_PLATFORM=xcb
-]===]
+    CONTENT "QT_QPA_PLATFORM=xcb"
   )
-endif()
-
-if(UNIX)
+  # Add custom target to build appimage.
   add_custom_target(appimage-app-qt
     COMMAND
       ${CMAKE_CURRENT_SOURCE_DIR}/appimage/make-appimage.sh
@@ -70,86 +74,8 @@ if(UNIX)
   add_dependencies(appimage-app-qt app-qt)
 endif()
 
-install(TARGETS app-qt)
-
-install(FILES
-  ${PROJECT_SOURCE_DIR}/tests/data/one-side-rounded-cube.step
-  ${PROJECT_SOURCE_DIR}/tests/data/polydata-cube.vtk
-  ${PROJECT_SOURCE_DIR}/tests/data/rounded-cube.step
-  DESTINATION doc
+install(TARGETS app-qt
+  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-set(used_qt_plugins
-  Qt${NUMGEOM_QT_MAJOR_VERSION}::QJpegPlugin
-)
-if(LINUX)
-  list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QXcbIntegrationPlugin)
-elseif(WIN32)
-  list(APPEND used_qt_plugins Qt${NUMGEOM_QT_MAJOR_VERSION}::QWindowsIntegrationPlugin)
-endif()
-
-if(UNIX)
-  install(PROGRAMS appimage/app-qt.sh DESTINATION bin)
-endif()
-
-install(FILES appimage/qt.conf DESTINATION bin)
-
-set(executable_files $<TARGET_FILE:app-qt>)
-foreach(plugin ${used_qt_plugins})
-  get_target_property(loc ${plugin} LOCATION)
-  list(APPEND executable_files ${loc})
-endforeach()
-
-install(
-  CODE "set(executable_files ${executable_files})"
-  CODE [[
-  if(POLICY CMP0207)
-    cmake_policy(SET CMP0207 NEW)
-  endif()
-  if(DEFINED VCPKG_INSTALLED_DIR AND NOT ${VCPKG_INSTALLED_DIR} STREQUAL "")
-    set(DEPENDENCY_PATHS "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib")
-  endif()
-  file(GET_RUNTIME_DEPENDENCIES
-    EXECUTABLES ${executable_files}
-    RESOLVED_DEPENDENCIES_VAR _r_deps
-    UNRESOLVED_DEPENDENCIES_VAR _u_deps
-    POST_EXCLUDE_REGEXES
-      "^/lib/x86_64-linux-gnu/"
-    DIRECTORIES "${DEPENDENCY_PATHS}"
-  )
-  # Exclude system libraries, except for Visual C++ runtime libraries.
-  if(WIN32)
-    set(_system32_exclude)
-    foreach(_dep ${_r_deps})
-      if(_dep MATCHES "^[Cc]:[/\\][Ww][Ii][Nn][Dd][Oo][Ww][Ss][/\\][Ss]ystem32[/\\]*")
-        if(NOT _dep MATCHES "msvcp[^/\\]*.dll$")
-          list(APPEND _system32_exclude ${_dep})
-        endif()
-      endif()
-    endforeach()
-    list(REMOVE_ITEM _r_deps ${_system32_exclude})
-  endif()
-  if(WIN32)
-    set(dest "${CMAKE_INSTALL_PREFIX}/bin")
-  else()
-    set(dest "${CMAKE_INSTALL_PREFIX}/lib")
-  endif()
-  foreach(_file ${_r_deps})
-    file(INSTALL "${_file}" DESTINATION "${dest}" FOLLOW_SYMLINK_CHAIN)
-  endforeach()
-  if(UNIX)
-    # Creating the missing `libvulkan.so ` -- symbolic link to `libvulkan.so.1'.
-    set(link_file ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so)
-    set(origin_file ${CMAKE_INSTALL_PREFIX}/lib/libvulkan.so.1)
-    if(NOT EXISTS ${link_file} AND EXISTS ${origin_file})
-      file(CREATE_LINK {origin_file} ${link_file} SYMBOLIC)
-    endif()
-  endif()
-]])
-
-foreach(plugin IN LISTS used_qt_plugins)
-  get_target_property(type ${plugin} QT_PLUGIN_TYPE)
-  install(FILES $<TARGET_FILE:${plugin}>
-    DESTINATION plugins/${type}
-  )
-endforeach()
+deploy_app(TARGET app-qt)

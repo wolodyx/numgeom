@@ -219,7 +219,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Front"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,1,0),
                   glm::vec3(0,0,1));
@@ -233,7 +233,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Top"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,-1),
                   glm::vec3(0,1,0));
@@ -247,7 +247,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Right"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(-1,0,0),
                   glm::vec3(0,0,1));
@@ -261,7 +261,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Rear"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,-1,0),
                   glm::vec3(0,0,1));
@@ -275,7 +275,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Bottom"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,1),
                   glm::vec3(0,-1,0));
@@ -289,7 +289,7 @@ void MainWindow::createViewMenu() {
   {
     QAction* act = new QAction(tr("Left"), this);
     connect(act, &QAction::triggered,
-            [=](){
+            [=, this](){
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(1,0,0),
                   glm::vec3(0,0,1));

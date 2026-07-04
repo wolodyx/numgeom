@@ -19,4 +19,4 @@ class Drawable2_PolyTriangulation : public Drawable2 {
  private:
   Handle(Poly_Triangulation) triangulation_;
 };
-#endif NUMGEOM_OCC_DRAWABLE_POLYTRIANGULATION_H
+#endif // !NUMGEOM_OCC_DRAWABLE_POLYTRIANGULATION_H

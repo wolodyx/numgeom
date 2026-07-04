@@ -9,8 +9,7 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Release",
-        "USE_SYSTEM_QT": "OFF"
+        "CMAKE_BUILD_TYPE": "Release"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
@@ -29,8 +28,7 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Debug",
-        "USE_SYSTEM_QT": "OFF"
+        "CMAKE_BUILD_TYPE": "Debug"
       },
       "environment": {
         "LD_LIBRARY_PATH": "/usr/lib64"
@@ -111,8 +109,7 @@
       "cacheVariables": {
         "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
         "VCPKG_TARGET_TRIPLET": "x64-mac",
-        "CMAKE_BUILD_TYPE": "Release",
-        "USE_SYSTEM_QT": "OFF"
+        "CMAKE_BUILD_TYPE": "Release"
       },
       "condition": {
         "type": "equals",
@@ -125,7 +122,7 @@
     {
       "name": "linux-base",
       "hidden": true,
-      "targets": ["all", "install", "appimage-app-qt"]
+      "targets": ["all", "appimage-app-qt"]
     },
     {
       "name": "linux-vcpkg-release",

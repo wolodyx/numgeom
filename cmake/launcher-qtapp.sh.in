@@ -1,10 +1,12 @@
 #!/bin/bash
 
-script_dir="$(dirname -- $0)"
+echo "Running application..."
+# Resolve symlinks to find the real script location (needed for AppImage
+# where AppRun is a symlink to this script).
+script_dir="$(dirname -- "$(realpath "$0")")"
+app_lib_dir="$(dirname -- "${script_dir}")/lib"
 export QT_QPA_PLATFORM=xcb
-if [ -x Qt*.so ]; then
-  export QT_PLUGIN_PATH="${script_dir}/plugins"
-  export LD_LIBRARY_PATH="${script_dir}"
-  export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
-fi
-"${script_dir}/@APP_EXECUTABLE@"
+export QT_PLUGIN_PATH="${script_dir}/plugins"
+export LD_LIBRARY_PATH="${app_lib_dir}"
+export VK_LAYER_PATH="${HOME}/numgeom/bld/linux-vcpkg-release/vcpkg_installed/x64-linux-dynamic/share/explicit_layer.d"
+exec "${script_dir}/@APP_EXECUTABLE@"

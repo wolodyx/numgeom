@@ -1,0 +1,80 @@
+name: Deploy SDK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sdk-windows:
+    name: SDK (Windows)
+    runs-on: windows-2022
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Initialize vcpkg submodule
+        run: git submodule update --init
+
+      - name: Bootstrap vcpkg
+        run: .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Install dependencies
+        run: .\vcpkg\vcpkg.exe install
+
+      - name: Export installed packages to ZIP archive
+        run: .\vcpkg\vcpkg.exe export --zip --output-dir=.
+
+      - name: Rename archive with triplet
+        shell: pwsh
+        run: |
+          $archive = Get-Item vcpkg-export-*.zip
+          $triplet="x64-windows"
+          $newname = $archive.Name -replace 'vcpkg-export', "vcpkg-export-$triplet"
+          Rename-Item -Path $archive.FullName -NewName $newname
+
+      - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-windows
+          path: vcpkg-export-*.zip
+          if-no-files-found: error
+
+  sdk-ubuntu:
+    name: SDK (Ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+          submodules: false
+
+      - name: Initialize vcpkg submodule
+        run: git submodule update --init
+
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Install dependencies
+        run: ./vcpkg/vcpkg install
+
+      - name: Export installed packages to ZIP archive
+        run: ./vcpkg/vcpkg export --zip --output-dir=.
+
+      - name: Rename archive with triplet
+        shell: bash
+        run: |
+          archive=$(ls vcpkg-export-*.zip)
+          triplet="x64-linux-dynamic"
+          newname="${archive/vcpkg-export/vcpkg-export-${triplet}}"
+          mv "$archive" "$newname"
+
+      - name: Upload SDK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: sdk-ubuntu
+          path: vcpkg-export-*.zip
+          if-no-files-found: error
+

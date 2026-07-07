@@ -8,4 +8,8 @@
         "vcpkg/": true
     },
     "files.trimTrailingWhitespace": true,
+    "files.encoding": "utf8",
+
+    "terminal.integrated.defaultProfile.windows": "Windows PowerShell",
+    "terminal.integrated.defaultProfile.linux": "bash"
 }

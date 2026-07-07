@@ -102,6 +102,23 @@
       }
     },
     {
+      "name": "windows-sdk",
+      "displayName": "Build with local SDK (.sdk)",
+      "description": "Uses pre-built dependencies from `.sdk` dir (vcpkg export)",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
+        "VCPKG_MANIFEST_MODE": "OFF"
+      },
+      "toolchainFile": "${sourceDir}/.sdk/scripts/buildsystems/vcpkg.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      }
+    },
+    {
       "name": "mac-vcpkg-release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
@@ -145,6 +162,11 @@
       "configuration": "Debug"
     },
     {
+      "name": "windows-sdk-release",
+      "configurePreset": "windows-sdk",
+      "configuration": "Release"
+    },
+    {
       "name": "windows-system-release",
       "configurePreset": "windows-system",
       "configuration": "Release"
@@ -166,6 +188,10 @@
     {
       "name": "windows-system-release",
       "configurePreset": "windows-system"
+    },
+    {
+      "name": "windows-sdk-release",
+      "configurePreset": "windows-sdk"
     }
   ],
   "packagePresets": [
@@ -177,6 +203,11 @@
     {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg",
+      "generators": ["NSIS", "WIX", "ZIP"]
+    },
+    {
+      "name": "windows-sdk-release",
+      "configurePreset": "windows-sdk",
       "generators": ["NSIS", "WIX", "ZIP"]
     }
   ],
@@ -254,6 +285,27 @@
         {
           "type": "package",
           "name": "windows-vcpkg-release"
+        }
+      ]
+    },
+    {
+      "name": "ci-windows-sdk",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "windows-sdk"
+        },
+        {
+          "type": "build",
+          "name": "windows-sdk-release"
+        },
+        {
+          "type": "test",
+          "name": "windows-sdk-release"
+        },
+        {
+          "type": "package",
+          "name": "windows-sdk-release"
         }
       ]
     }

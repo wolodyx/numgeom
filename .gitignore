@@ -2,3 +2,4 @@
 /vcpkg_installed/
 /CMakeUserPresets.json
 /.vscode/launch.json
+/.sdk

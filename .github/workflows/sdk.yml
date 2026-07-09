@@ -42,7 +42,7 @@ jobs:
           Rename-Item -Path $archive.FullName -NewName $newname
 
       - name: Upload SDK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sdk-windows
           path: vcpkg-export-*.zip
@@ -116,7 +116,7 @@ jobs:
           mv "$archive" "$newname"
 
       - name: Upload SDK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: sdk-ubuntu
           path: vcpkg-export-*.zip

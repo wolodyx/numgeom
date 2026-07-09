@@ -154,6 +154,7 @@ jobs:
           name: sdk-ubuntu
           path: ${{ runner.temp }}/sdk-artifact
           run-id: 28868178989
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract vcpkg export archive to /.sdk
         run: |
           unzip -o "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"

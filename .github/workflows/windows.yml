@@ -92,8 +92,8 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
       - uses: lukka/get-cmake@latest
-      - name: Download and extract vcpkg SDK
-        uses: actions/download-artifact@v4
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v8
         with:
           name: sdk-windows
           path: ${{ runner.temp }}/sdk-artifact

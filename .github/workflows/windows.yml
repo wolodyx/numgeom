@@ -81,7 +81,30 @@ jobs:
           fetch-depth: 0
           fetch-tags: true
           submodules: recursive
+      - name: Build, test and package
+        run: cmake --workflow --preset ci-windows-vcpkg
+
+  build-with-sdk:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - uses: lukka/get-cmake@latest
+      - name: Download and extract vcpkg SDK
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-windows
+          path: ${{ runner.temp }}/sdk-artifact
+      - name: Extract vcpkg export archive to /.sdk
+        shell: pwsh
+        run: |
+          $archive = Get-Item "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
+          Expand-Archive -Path "$archive.FullName" -DestinationPath "${{ github.workspace }}"
+          Remove-Item -Path "${{ runner.temp }}/sdk-artifact" -Recurse -Force
+          $extracted_dir = Get-Item "${{ github.workspace }}/vcpkg-export-*"
+          Rename-Item -Path "$extracted_dir.FullName" -NewName "${{ github.workspace }}/.sdk"
       - name: Install NSIS
         uses: negrutiu/nsis-install@v2
         with:
@@ -94,13 +117,13 @@ jobs:
           dotnet tool install --global wix --version 4.0.4
           wix extension add --global WixToolset.UI.wixext/4.0.4
       - name: Build, test and package
-        run: cmake --workflow --preset ci-windows-vcpkg
+        run: cmake --workflow --preset ci-windows-sdk
       - name: Rename artifacts for release (strip version)
         if: github.ref_type == 'tag'
         shell: pwsh
         run: |
           $version = "${{ github.ref_name }}" -replace '^v', ''
-          Push-Location build/windows-vcpkg
+          Push-Location build/windows-sdk
           $msi = Get-Item "numgeom-${version}-win64.msi" -ErrorAction Stop
           $zip = Get-Item "numgeom-${version}-win64.zip" -ErrorAction Stop
           Copy-Item $msi.FullName "numgeom-win64.msi"
@@ -109,7 +132,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          working_directory: build/windows-vcpkg
+          working_directory: build/windows-sdk
           files: |
             numgeom-win64.msi
             numgeom-win64.zip

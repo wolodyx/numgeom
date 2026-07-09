@@ -107,6 +107,56 @@ jobs:
             libxrandr-dev         \
             libltdl-dev
       - uses: lukka/get-cmake@latest
+      - name: Build, test and package
+        run: cmake --workflow --preset ci-linux-vcpkg
+
+  # Сборка проекта с внешними зависимостями из sdk.
+  build-with-sdk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Install system dependencies and tools
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install \
+            pkg-config            \
+            autoconf              \
+            autoconf-archive      \
+            automake              \
+            libtool               \
+            wayland-protocols     \
+            libwayland-dev        \
+            libwayland-client0    \
+            libxtst-dev           \
+            libxinerama-dev       \
+            libxcursor-dev        \
+            '^libxcb.*-dev'       \
+            libx11-xcb-dev        \
+            libgl1-mesa-dev       \
+            libxrender-dev        \
+            libxi-dev             \
+            libxkbcommon-dev      \
+            libxkbcommon-x11-dev  \
+            libegl1-mesa-dev      \
+            libglu1-mesa-dev      \
+            libsm-dev             \
+            libsystemd-dev        \
+            libarchive-dev        \
+            libxrandr-dev         \
+            libltdl-dev
+      - uses: lukka/get-cmake@latest
+      - name: Download SDK artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: sdk-ubuntu
+          path: ${{ runner.temp }}/sdk-artifact
+      - name: Extract vcpkg export archive to /.sdk
+        run: |
+          unzip -o "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
+          mv vcpkg-export-*/ .sdk
       - name: Install linuxdeploy
         run: |
           mkdir ${{ runner.temp }}/bin
@@ -114,11 +164,11 @@ jobs:
           chmod +x ${{ runner.temp }}/bin/linuxdeploy
           echo "${{ runner.temp }}/bin" >> $GITHUB_PATH
       - name: Build, test and package
-        run: cmake --workflow --preset ci-linux-vcpkg
+        run: cmake --workflow --preset ci-linux-sdk
       - uses: softprops/action-gh-release@v2
         if: github.ref_type == 'tag'
         with:
-          working_directory: build/linux-vcpkg-release/demo/app-qt
+          working_directory: build/linux-sdk-release/demo/app-qt
           files: 'numgeom-*.AppImage'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

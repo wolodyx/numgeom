@@ -98,6 +98,7 @@ jobs:
           name: sdk-windows
           path: ${{ runner.temp }}/sdk-artifact
           run-id: 28868178989
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract vcpkg export archive to /.sdk
         shell: pwsh
         run: |

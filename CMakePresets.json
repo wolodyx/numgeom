@@ -119,6 +119,25 @@
       }
     },
     {
+      "name": "linux-sdk-release",
+      "displayName": "Build with local SDK (.sdk)",
+      "description": "Uses pre-built dependencies from `.sdk` dir (vcpkg export)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
+        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
+        "VCPKG_MANIFEST_MODE": "OFF"
+      },
+      "toolchainFile": "${sourceDir}/.sdk/scripts/buildsystems/vcpkg.cmake",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      }
+    },
+    {
       "name": "mac-vcpkg-release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
@@ -152,6 +171,11 @@
       "configurePreset": "linux-system-release"
     },
     {
+      "name": "linux-sdk-release",
+      "inherits": ["linux-base"],
+      "configurePreset": "linux-sdk-release"
+    },
+    {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg",
       "configuration": "Release"
@@ -182,6 +206,10 @@
       "configurePreset": "linux-system-release"
     },
     {
+      "name": "linux-sdk-release",
+      "configurePreset": "linux-sdk-release"
+    },
+    {
       "name": "windows-vcpkg-release",
       "configurePreset": "windows-vcpkg"
     },
@@ -199,6 +227,10 @@
       "name": "linux-system-release",
       "configurePreset": "linux-system-release",
       "generators": ["DEB"]
+    },
+    {
+      "name": "linux-sdk-release",
+      "configurePreset": "linux-sdk-release"
     },
     {
       "name": "windows-vcpkg-release",
@@ -247,6 +279,27 @@
         {
           "type": "package",
           "name": "linux-system-release"
+        }
+      ]
+    },
+    {
+      "name": "ci-linux-sdk",
+      "steps": [
+        {
+          "type": "configure",
+          "name": "linux-sdk-release"
+        },
+        {
+          "type": "build",
+          "name": "linux-sdk-release"
+        },
+        {
+          "type": "test",
+          "name": "linux-sdk-release"
+        },
+        {
+          "type": "package",
+          "name": "linux-sdk-release"
         }
       ]
     },

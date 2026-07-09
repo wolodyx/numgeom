@@ -158,7 +158,8 @@ jobs:
       - name: Extract vcpkg export archive to /.sdk
         run: |
           unzip -o "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
-          mv vcpkg-export-*/ .sdk
+          mv "${{ github.workspace }}/vcpkg-export-*/" "${{ github.workspace }}/.sdk"
+          ls ${{ github.workspace }}/.sdk
       - name: Install linuxdeploy
         run: |
           mkdir ${{ runner.temp }}/bin

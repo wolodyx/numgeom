@@ -103,10 +103,10 @@ jobs:
         shell: pwsh
         run: |
           $archive = Get-Item "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
-          Expand-Archive -Path "$archive.FullName" -DestinationPath "${{ github.workspace }}"
+          Expand-Archive -Path $archive.FullName -DestinationPath "${{ github.workspace }}"
           Remove-Item -Path "${{ runner.temp }}/sdk-artifact" -Recurse -Force
           $extracted_dir = Get-Item "${{ github.workspace }}/vcpkg-export-*"
-          Rename-Item -Path "$extracted_dir.FullName" -NewName "${{ github.workspace }}/.sdk"
+          Rename-Item -Path $extracted_dir.FullName -NewName "${{ github.workspace }}/.sdk"
       - name: Install NSIS
         uses: negrutiu/nsis-install@v2
         with:

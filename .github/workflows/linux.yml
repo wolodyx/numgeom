@@ -159,6 +159,9 @@ jobs:
         run: |
           unzip -o "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
           mv vcpkg-export-*/ .sdk
+          echo "ls ." && ls .
+          echo "ls ./.sdk" && ls ./.sdk
+          echo "ls -laR ./.sdk" && ls -laR ./.sdk
       - name: Install linuxdeploy
         run: |
           mkdir ${{ runner.temp }}/bin

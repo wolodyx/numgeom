@@ -156,23 +156,17 @@
   ],
   "buildPresets": [
     {
-      "name": "linux-base",
-      "hidden": true,
-      "targets": ["all", "appimage-app-qt"]
-    },
-    {
       "name": "linux-vcpkg-release",
-      "inherits": ["linux-base"],
       "configurePreset": "linux-vcpkg-release"
     },
     {
       "name": "linux-system-release",
-      "inherits": ["linux-base"],
       "configurePreset": "linux-system-release"
     },
     {
       "name": "linux-sdk-release",
       "inherits": ["linux-base"],
+      "targets": ["all", "appimage-app-qt"],
       "configurePreset": "linux-sdk-release"
     },
     {
@@ -231,11 +225,6 @@
     {
       "name": "linux-sdk-release",
       "configurePreset": "linux-sdk-release"
-    },
-    {
-      "name": "windows-vcpkg-release",
-      "configurePreset": "windows-vcpkg",
-      "generators": ["NSIS", "WIX", "ZIP"]
     },
     {
       "name": "windows-sdk-release",
@@ -333,10 +322,6 @@
         },
         {
           "type": "test",
-          "name": "windows-vcpkg-release"
-        },
-        {
-          "type": "package",
           "name": "windows-vcpkg-release"
         }
       ]

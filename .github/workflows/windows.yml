@@ -95,9 +95,9 @@ jobs:
       - name: Download SDK artifact
         uses: actions/download-artifact@v4
         with:
-          name: sdk-windows
+          name: sdk-windows2022
           path: ${{ runner.temp }}/sdk-artifact
-          run-id: 28868178989
+          run-id: 29037024002
           github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Extract vcpkg export archive to /.sdk
         shell: pwsh

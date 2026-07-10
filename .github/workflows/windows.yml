@@ -86,19 +86,24 @@ jobs:
 
   build-with-sdk:
     runs-on: windows-2022
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
       - uses: lukka/get-cmake@latest
-      - name: Download SDK artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sdk-windows2022
-          path: ${{ runner.temp }}/sdk-artifact
-          run-id: 29037024002
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download SDK from GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path "${{ runner.temp }}/sdk-artifact"
+          gh release download "sdk-windows2022" `
+            --repo ${{ github.repository }} `
+            --dir "${{ runner.temp }}/sdk-artifact" `
+            --pattern "vcpkg-export-*.zip"
       - name: Extract vcpkg export archive to /.sdk
         shell: pwsh
         run: |

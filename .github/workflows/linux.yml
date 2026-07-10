@@ -113,6 +113,8 @@ jobs:
   # Сборка проекта с внешними зависимостями из sdk.
   build-with-sdk:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -148,13 +150,15 @@ jobs:
             libxrandr-dev         \
             libltdl-dev
       - uses: lukka/get-cmake@latest
-      - name: Download SDK artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: sdk-ubuntu24.04
-          path: ${{ runner.temp }}/sdk-artifact
-          run-id: 29037024002
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download SDK from GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p "${{ runner.temp }}/sdk-artifact"
+          gh release download "sdk-ubuntu24.04" \
+            --repo ${{ github.repository }} \
+            --dir "${{ runner.temp }}/sdk-artifact" \
+            --pattern "vcpkg-export-*.zip"
       - name: Extract vcpkg export archive to /.sdk
         run: |
           unzip -o "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"

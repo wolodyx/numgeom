@@ -165,7 +165,6 @@
     },
     {
       "name": "linux-sdk-release",
-      "inherits": ["linux-base"],
       "targets": ["all", "appimage-app-qt"],
       "configurePreset": "linux-sdk-release"
     },

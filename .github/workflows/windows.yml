@@ -86,30 +86,27 @@ jobs:
 
   build-with-sdk:
     runs-on: windows-2022
-    permissions:
-      contents: read
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
+      AWS_ENDPOINT_URL: https://storage.yandexcloud.net
+      AWS_DEFAULT_BUCKET: ${{ secrets.YC_BUCKET_NAME }}
+      AWS_DEFAULT_REGION: ru-central1
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           fetch-tags: true
       - uses: lukka/get-cmake@latest
-      - name: Download SDK from GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Download SDK from Yandex Cloud Bucket
         shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path "${{ runner.temp }}/sdk-artifact"
-          gh release download "sdk-windows2022" `
-            --repo ${{ github.repository }} `
-            --dir "${{ runner.temp }}/sdk-artifact" `
-            --pattern "vcpkg-export-*.zip"
+          aws s3 cp "s3://${{ secrets.YC_BUCKET_NAME }}/sdk/windows2022" "${{ runner.temp }}/sdk.zip"
       - name: Extract vcpkg export archive to /.sdk
         shell: pwsh
         run: |
-          $archive = Get-Item "${{ runner.temp }}/sdk-artifact/vcpkg-export-*.zip"
-          Expand-Archive -Path $archive.FullName -DestinationPath "${{ github.workspace }}"
-          Remove-Item -Path "${{ runner.temp }}/sdk-artifact" -Recurse -Force
+          Expand-Archive -Path "${{ runner.temp }}/sdk.zip" -DestinationPath "${{ github.workspace }}"
+          Remove-Item -Path "${{ runner.temp }}/sdk.zip" -Recurse -Force
           $extracted_dir = Get-Item "${{ github.workspace }}/vcpkg-export-*"
           Rename-Item -Path $extracted_dir.FullName -NewName "${{ github.workspace }}/.sdk"
       - name: Install NSIS

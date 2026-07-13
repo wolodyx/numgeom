@@ -44,21 +44,28 @@ jobs:
           $newname = $archive.Name -replace 'vcpkg-export', "vcpkg-export-$triplet"
           Rename-Item -Path $archive.FullName -NewName $newname
 
-      - name: Upload SDK to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload SDK to GitHub Release
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   shell: pwsh
+      #   run: |
+      #     $tag = "sdk-windows2022"
+      #     $archive = Get-Item vcpkg-export-*.zip
+      #     gh release delete "$tag" --yes --repo ${{ github.repository }}
+      #     gh release create "$tag" `
+      #       --repo ${{ github.repository }} `
+      #       --title "SDK (Windows)" `
+      #       --notes "Pre-built vcpkg dependencies for Windows-2022 (x64-windows)." `
+      #       --latest=false `
+      #       --verify-tag=false
+      #     gh release upload "$tag" "$($archive.FullName)" --repo ${{ github.repository }} --clobber
+
+      - name: Upload SDK to Yandex Cloud Bucket
         shell: pwsh
         run: |
-          $tag = "sdk-windows2022"
           $archive = Get-Item vcpkg-export-*.zip
-          gh release delete "$tag" --yes --repo ${{ github.repository }}
-          gh release create "$tag" `
-            --repo ${{ github.repository }} `
-            --title "SDK (Windows)" `
-            --notes "Pre-built vcpkg dependencies for Windows-2022 (x64-windows)." `
-            --latest=false `
-            --verify-tag=false
-          gh release upload "$tag" "$($archive.FullName)" --repo ${{ github.repository }} --clobber
+          $objectKey = "sdk/windows2022"
+          aws s3 cp "$($archive.FullName)" "s3://${{ secrets.YC_BUCKET_NAME }}/$objectKey" --endpoint-url https://storage.yandexcloud.net
 
   sdk-ubuntu:
     name: SDK (Ubuntu)
@@ -127,18 +134,25 @@ jobs:
           newname="${archive/vcpkg-export/vcpkg-export-${triplet}}"
           mv "$archive" "$newname"
 
-      - name: Upload SDK to GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # - name: Upload SDK to GitHub Release
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #   shell: bash
+      #   run: |
+      #     tag="sdk-ubuntu24.04"
+      #     archive=$(ls vcpkg-export-*.zip)
+      #     gh release delete "$tag" --yes --repo ${{ github.repository }} || true
+      #     gh release create "$tag" \
+      #       --repo ${{ github.repository }} \
+      #       --title "SDK (Ubuntu)" \
+      #       --notes "Pre-built vcpkg dependencies for Ubuntu-24.04 (x64-linux-dynamic)." \
+      #       --latest=false \
+      #       --verify-tag=false
+      #     gh release upload "$tag" "$archive" --repo ${{ github.repository }} --clobber
+
+      - name: Upload SDK to Yandex Cloud Bucket
         shell: bash
         run: |
-          tag="sdk-ubuntu24.04"
           archive=$(ls vcpkg-export-*.zip)
-          gh release delete "$tag" --yes --repo ${{ github.repository }} || true
-          gh release create "$tag" \
-            --repo ${{ github.repository }} \
-            --title "SDK (Ubuntu)" \
-            --notes "Pre-built vcpkg dependencies for Ubuntu-24.04 (x64-linux-dynamic)." \
-            --latest=false \
-            --verify-tag=false
-          gh release upload "$tag" "$archive" --repo ${{ github.repository }} --clobber
+          objectKey="sdk/ubuntu24.04"
+          aws s3 cp "${archive}" "s3://${{ secrets.YC_BUCKET_NAME }}/${objectKey}" --endpoint-url https://storage.yandexcloud.net

@@ -46,6 +46,7 @@ set(SOURCE_FILES
   userinputcontroller.cc
   vkscenerenderer.cc
   vkutilities.cc            vkutilities.h
+  volk_impl.cc
 )
 
 set(SHADER_FILES
@@ -66,7 +67,7 @@ add_library(numgeom::framework ALIAS framework)
 
 target_link_libraries(framework
   PUBLIC
-    volk::volk
+    volk::volk_headers
     Boost::log
     numgeom::core
   PRIVATE

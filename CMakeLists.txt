@@ -37,9 +37,15 @@ if(UNIX)
     find_package(SDL2 REQUIRED)
   endif()
 endif()
-# We are trying to find the system ZLIB. If it doesn't exist,
-# then we build it from the source codes in `extern/zlib`.
-find_package(ZLIB)
+# We are trying to find the system <package>. If it doesn't exist,
+# then we build it from the source codes in `extern/<package>`.
+find_package(glfw3 CONFIG)
+find_package(glm CONFIG)
+find_package(GTest CONFIG)
+find_package(nlohmann_json CONFIG)
+find_package(volk CONFIG)
+find_package(vulkan-memory-allocator CONFIG)
+find_package(ZLIB CONFIG)
 
 include(GitVersionDetect)
 set(PROJECT_VERSION_MAJOR ${GITVERSIONDETECT_VERSION_MAJOR})

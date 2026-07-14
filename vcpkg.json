@@ -31,7 +31,8 @@
     "gtest",
     "nlohmann-json",
     "volk",
-    "vulkan-memory-allocator"
+    "vulkan-memory-allocator",
+    "zlib"
   ],
   "vcpkg-configuration": {
     "overlay-ports": [

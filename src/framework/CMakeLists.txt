@@ -66,7 +66,7 @@ add_library(numgeom::framework ALIAS framework)
 
 target_link_libraries(framework
   PUBLIC
-    volk
+    volk::volk
     Boost::log
     numgeom::core
   PRIVATE

@@ -71,7 +71,7 @@ target_link_libraries(framework
     Boost::log
     numgeom::core
   PRIVATE
-    VulkanMemoryAllocator
+    GPUOpen::VulkanMemoryAllocator
     stb_image
     stb_truetype
 )

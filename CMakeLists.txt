@@ -44,7 +44,7 @@ find_package(glm CONFIG)
 find_package(GTest CONFIG)
 find_package(nlohmann_json CONFIG)
 find_package(volk CONFIG)
-find_package(vulkan-memory-allocator CONFIG)
+find_package(VulkanMemoryAllocator CONFIG)
 find_package(ZLIB)
 
 include(GitVersionDetect)

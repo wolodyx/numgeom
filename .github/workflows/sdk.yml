@@ -34,15 +34,9 @@ jobs:
         run: .\vcpkg\vcpkg.exe install --triplet=x64-windows
 
       - name: Export installed packages to ZIP archive
-        run: .\vcpkg\vcpkg.exe export --zip --output-dir=.
-
-      - name: Rename archive with triplet
-        shell: pwsh
         run: |
-          $archive = Get-Item vcpkg-export-*.zip
-          $triplet="x64-windows"
-          $newname = $archive.Name -replace 'vcpkg-export', "vcpkg-export-$triplet"
-          Rename-Item -Path $archive.FullName -NewName $newname
+          .\vcpkg\vcpkg.exe export --raw --output-dir=. --output=.sdk
+          Compress-Archive -Path ".sdk" -DestinationPath "sdk.zip"
 
       # - name: Upload SDK to GitHub Release
       #   env:
@@ -63,9 +57,8 @@ jobs:
       - name: Upload SDK to Yandex Cloud Bucket
         shell: pwsh
         run: |
-          $archive = Get-Item vcpkg-export-*.zip
           $objectKey = "sdk/windows2022"
-          aws s3 cp "$($archive.FullName)" "s3://${{ secrets.YC_BUCKET_NAME }}/$objectKey" --endpoint-url https://storage.yandexcloud.net
+          aws s3 cp sdk.zip "s3://${{ secrets.YC_BUCKET_NAME }}/$objectKey" --endpoint-url https://storage.yandexcloud.net
 
   sdk-ubuntu:
     name: SDK (Ubuntu)
@@ -124,15 +117,9 @@ jobs:
         run: ./vcpkg/vcpkg install --triplet=x64-linux-dynamic
 
       - name: Export installed packages to ZIP archive
-        run: ./vcpkg/vcpkg export --zip --output-dir=.
-
-      - name: Rename archive with triplet
-        shell: bash
         run: |
-          archive=$(ls vcpkg-export-*.zip)
-          triplet="x64-linux-dynamic"
-          newname="${archive/vcpkg-export/vcpkg-export-${triplet}}"
-          mv "$archive" "$newname"
+          ./vcpkg/vcpkg export --raw --output-dir=. --output=.sdk
+          zip -r sdk.zip .sdk
 
       # - name: Upload SDK to GitHub Release
       #   env:
@@ -153,6 +140,6 @@ jobs:
       - name: Upload SDK to Yandex Cloud Bucket
         shell: bash
         run: |
-          archive=$(ls vcpkg-export-*.zip)
+          archive=sdk.zip
           objectKey="sdk/ubuntu24.04"
           aws s3 cp "${archive}" "s3://${{ secrets.YC_BUCKET_NAME }}/${objectKey}" --endpoint-url https://storage.yandexcloud.net

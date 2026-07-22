@@ -3,3 +3,4 @@
 /CMakeUserPresets.json
 /.vscode/launch.json
 /.sdk
+/worktree*

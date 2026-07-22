@@ -36,6 +36,8 @@
 #include "sceneiterators.h"
 #include "vkutilities.h"
 
+static_assert(VK_NULL_HANDLE == nullptr);
+
 // Количество изображений в обращении.
 #define MAX_NUM_IMAGES 5
 // Количество фреймов -- одновременно обрабатываемых GPU изображений.
@@ -57,7 +59,7 @@ struct ImageRes {
   VkImageView image_view = VK_NULL_HANDLE;
 
   //! Сэмплированное изображение, создается только при
-  //! `VulkanState::sampleCount != VK_SAMPLE_COUNT_1_BIT`.
+  //! `VulkanGlobalState::sample_count != VK_SAMPLE_COUNT_1_BIT`.
   VkImage msaa_image = VK_NULL_HANDLE;
 
   VmaAllocation alloc_msaa_image = VK_NULL_HANDLE;
@@ -101,7 +103,7 @@ struct FragmentBufferObject {
 };
 
 //! Состояние vulkan и его объектов.
-struct VulkanState {
+struct VulkanGlobalState {
   VkInstance instance = VK_NULL_HANDLE;
   VkDebugUtilsMessengerEXT debug_messenger;
   VkPhysicalDevice physical_device = VK_NULL_HANDLE;
@@ -113,9 +115,9 @@ struct VulkanState {
 
   VkFormat image_format = VK_FORMAT_UNDEFINED;
   VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-  VkFormat depth_stencil_format = VK_FORMAT_D24_UNORM_S8_UINT;
+  VkFormat depth_stencil_format = VK_FORMAT_UNDEFINED;
   VkPresentModeKHR present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  uint32_t min_image_count = 2;
+  uint32_t min_image_count = 0;
   VkSampleCountFlagBits sample_count = VK_SAMPLE_COUNT_1_BIT;
   uint32_t frame_count = MAX_NUM_FRAMES;
 
@@ -138,7 +140,7 @@ struct VulkanState {
 
 //! Ресурсы Vulkan для представления текстуры.
 struct TextureRes : public LruPool::Consumer {
-  TextureRes(VulkanState* vk_global_state)
+  TextureRes(VulkanGlobalState* vk_global_state)
     : LruPool::Consumer(vk_global_state->textures_desc_pool) {
   }
   bool ConfiscateResource() {
@@ -157,24 +159,23 @@ struct TextureRes : public LruPool::Consumer {
   VkDescriptorSet desc_set = VK_NULL_HANDLE;
 
   bool operator!() const { return image == VK_NULL_HANDLE; }
-  bool Initialize(VulkanState*, const FgObject*);
-  void Release(VulkanState*);
+  bool Initialize(VulkanGlobalState*, const FgObject*);
+  void Release(VulkanGlobalState*);
 };
 
 class SceneRes {
  public:
-  SceneRes(VulkanState*, VkSurfaceKHR, Scene*);
+  SceneRes(VulkanGlobalState*, VkSurfaceKHR, Scene*);
+  bool RestoreInvalidated();
+  void InvalidateSwapchain();
   void Release();
-  bool RecreateSwapchain(VkExtent2D extent);
  private:
   bool InitImages();
   void ReleaseImages();
   void InitFrames();
-  void ReleaseFrames();
-  void ReleaseSwapchain();
 
  public:
-  VulkanState* vk_state;
+  VulkanGlobalState* vk_state;
 
   VkSurfaceKHR surface = VK_NULL_HANDLE;
   bool is_external_surface = false;
@@ -185,8 +186,12 @@ class SceneRes {
   size_t current_frame_index = 0;
 
   VkSwapchainKHR swapchain = VK_NULL_HANDLE;
+  VkSwapchainKHR old_swapchain = VK_NULL_HANDLE;
   uint32_t image_count = 0;
-  VkExtent2D image_extent;
+  VkExtent2D image_extent = {
+    .width = static_cast<uint32_t>(-1),
+    .height = static_cast<uint32_t>(-1)
+  };
   std::array<ImageRes, MAX_NUM_IMAGES> image_res_array;
   VkImage depth_stencil_image = VK_NULL_HANDLE;
   VmaAllocation alloc_depth_stencil = VK_NULL_HANDLE;
@@ -209,9 +214,16 @@ class SceneRes {
   uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
 };
 
+struct VulkanObjects {
+  VulkanGlobalState global_state;
+  std::map<Scene*, SceneRes*> scene_res_array;
+  std::map<const FgObject*, TextureRes*> fg_res_array;
+  bool RestoreInvalidated(VkSurfaceKHR);
+};
+
 //! Prototypes
 //! \{
-bool InitInstance(VulkanState*);
+bool InitInstance(VulkanGlobalState*);
 //! \}
 }  // namespace
 
@@ -224,9 +236,7 @@ struct VkSceneRenderer::Impl {
   };
   Xcb xcb;
 #endif
-  VulkanState vk_global_state;
-  std::map<Scene*, SceneRes*> scene_res_array;
-  std::map<const FgObject*, TextureRes*> fg_res_array;
+  VulkanObjects vk_objects; //!< Иерархия Vulkan-объектов.
 };
 
 VkSceneRenderer::VkSceneRenderer(Application* app) {
@@ -236,12 +246,12 @@ VkSceneRenderer::VkSceneRenderer(Application* app) {
       .app = app,
   };
 
-  if (!InitInstance(&impl_->vk_global_state)) return;
+  if (!InitInstance(&impl_->vk_objects.global_state)) return;
 }
 
 namespace
 {
-void Finalize(VulkanState* state) {
+void Finalize(VulkanGlobalState* state) {
   state->textures_desc_pool = LruPool::PoolPtr();
 
   if (state->composite_sampler != VK_NULL_HANDLE) {
@@ -283,15 +293,15 @@ void Finalize(VulkanState* state) {
 }
 
 VkSceneRenderer::~VkSceneRenderer() {
-  for (const auto [fg, res] : impl_->fg_res_array) {
-    res->Release(&impl_->vk_global_state);
+  for (const auto [fg, res] : impl_->vk_objects.fg_res_array) {
+    res->Release(&impl_->vk_objects.global_state);
     delete res;
   }
-  for (const auto [scene, res] : impl_->scene_res_array) {
+  for (const auto [scene, res] : impl_->vk_objects.scene_res_array) {
     res->Release();
     delete res;
   }
-  ::Finalize(&impl_->vk_global_state);
+  ::Finalize(&impl_->vk_objects.global_state);
   delete impl_;
 }
 
@@ -314,7 +324,19 @@ VkSampleCountFlagBits GetMaxUsableSampleCount(VkPhysicalDevice device) {
   return VK_SAMPLE_COUNT_1_BIT;
 }
 
-bool CreateRenderPass(VulkanState* state) {
+bool ChooseSampleCountOfMSAA(VulkanGlobalState* state) {
+  if (!IsValidSampleCount(state->sample_count)) {
+    state->sample_count = GetMaxUsableSampleCount(state->physical_device);
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Selected MSAA sample count: {}",
+        static_cast<size_t>(state->sample_count));
+  }
+  return true;
+}
+
+bool CreateGraphicsRenderPass(VulkanGlobalState* state) {
+  if (state->graphics_renderpass) return true;
+
   bool msaa = (state->sample_count != VK_SAMPLE_COUNT_1_BIT);
 
   std::vector<VkAttachmentDescription> attachments = {
@@ -407,7 +429,9 @@ bool CreateRenderPass(VulkanState* state) {
   return true;
 }
 
-bool CreateCompositeRenderPass(VulkanState* state) {
+bool CreateCompositeRenderPass(VulkanGlobalState* state) {
+  if (state->composite_renderpass) return true;
+
   // Single color attachment, no depth/stencil, no multisampling.
   // LoadOp = LOAD to preserve the already-rendered scene.
   VkAttachmentDescription color_attachment = {
@@ -458,54 +482,60 @@ bool CreateCompositeRenderPass(VulkanState* state) {
   return true;
 }
 
-bool CreateCompositePipeline(VulkanState* state) {
+bool CreateCompositePipeline(VulkanGlobalState* state) {
   VkResult r;
 
-  // Создаем макеты набора дескрипторов.
-  std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings {
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      }
-  };
-  VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
-      .pBindings = desc_set_layout_bindings.data()};
-  r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
-                                  nullptr, &state->composite_desc_layout);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Descriptor set layout creation error ({}).", VkResultToString(r));
-    return false;
+  if (!state->composite_desc_layout) {
+    // Создаем макеты набора дескрипторов.
+    std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings {
+        VkDescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        }
+    };
+    VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
+        .pBindings = desc_set_layout_bindings.data()};
+    r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
+                                    nullptr, &state->composite_desc_layout);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Descriptor set layout creation error ({}).", VkResultToString(r));
+      return false;
+    }
   }
 
   // Создаем макет конвейера.
-  std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
-    state->composite_desc_layout
-  };
-  // Push constant range for foreground image quad parameters
-  VkPushConstantRange push_constant_range {
-      .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      .offset = 0,
-      .size = 6 * sizeof(float),  // position (2) + size (2) + screenSize (2)
-  };
-  VkPipelineLayoutCreateInfo ci_pipeline_layout {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
-      .pSetLayouts = descriptor_set_layouts.data(),
-      .pushConstantRangeCount = 1,
-      .pPushConstantRanges = &push_constant_range,
-  };
-  r = vkCreatePipelineLayout(state->device, &ci_pipeline_layout, nullptr,
-                             &state->composite_pipeline_layout);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Pipeline layout creation error ({}).", VkResultToString(r));
-    return false;
+  if (!state->composite_pipeline_layout) {
+    std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
+      state->composite_desc_layout
+    };
+    // Push constant range for foreground image quad parameters
+    VkPushConstantRange push_constant_range {
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        .offset = 0,
+        .size = 6 * sizeof(float),  // position (2) + size (2) + screenSize (2)
+    };
+    VkPipelineLayoutCreateInfo ci_pipeline_layout {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
+        .pSetLayouts = descriptor_set_layouts.data(),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_constant_range,
+    };
+    r = vkCreatePipelineLayout(state->device, &ci_pipeline_layout, nullptr,
+                               &state->composite_pipeline_layout);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Pipeline layout creation error ({}).", VkResultToString(r));
+      return false;
+    }
   }
+
+  if (state->composite_pipeline) return true;
 
   // Shader modules are the same as fgimage pipeline.
   static uint32_t vs_spirv_source[] = {
@@ -665,235 +695,241 @@ bool CreateCompositePipeline(VulkanState* state) {
   return true;
 }
 
-bool CreateGraphicsPipeline(VulkanState* state) {
+bool CreateGraphicsPipeline(VulkanGlobalState* state) {
   VkResult r;
 
   // Создаем макеты набора дескрипторов.
-  std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings{
-      VkDescriptorSetLayoutBinding{
-          .binding = 0,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-      },
-      VkDescriptorSetLayoutBinding{
-          .binding = 1,
-          .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-          .descriptorCount = 1,
-          .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-      },
-  };
-  VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
-      .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
-      .pBindings = desc_set_layout_bindings.data()};
-  r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
-                                  nullptr, &state->graphics_desc_layout);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Descriptor set layout creation error ({}).", VkResultToString(r));
-    return false;
+  if (!state->graphics_desc_layout) {
+    std::vector<VkDescriptorSetLayoutBinding> desc_set_layout_bindings{
+        VkDescriptorSetLayoutBinding{
+            .binding = 0,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+        },
+        VkDescriptorSetLayoutBinding{
+            .binding = 1,
+            .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+            .descriptorCount = 1,
+            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+        },
+    };
+    VkDescriptorSetLayoutCreateInfo ci_desc_set_layout {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
+        .bindingCount = static_cast<uint32_t>(desc_set_layout_bindings.size()),
+        .pBindings = desc_set_layout_bindings.data()};
+    r = vkCreateDescriptorSetLayout(state->device, &ci_desc_set_layout,
+                                    nullptr, &state->graphics_desc_layout);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Descriptor set layout creation error ({}).", VkResultToString(r));
+      return false;
+    }
   }
 
   // Создаем макет конвейера.
-  std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
-    state->graphics_desc_layout
-  };
-  VkPipelineLayoutCreateInfo ci_pipelineLayout{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-      .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
-      .pSetLayouts = descriptor_set_layouts.data(),
-  };
-  r = vkCreatePipelineLayout(state->device, &ci_pipelineLayout, nullptr,
-                             &state->graphics_pipeline_layout);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Pipeline layout creation error ({}).", VkResultToString(r));
-    return false;
+  if (!state->graphics_pipeline_layout) {
+    std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts {
+      state->graphics_desc_layout
+    };
+    VkPipelineLayoutCreateInfo ci_pipelineLayout{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
+        .pSetLayouts = descriptor_set_layouts.data(),
+    };
+    r = vkCreatePipelineLayout(state->device, &ci_pipelineLayout, nullptr,
+                               &state->graphics_pipeline_layout);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Pipeline layout creation error ({}).", VkResultToString(r));
+      return false;
+    }
   }
 
   // Подготавливаем шейдерные модули (вершинный и фрагментный).
 
-  static uint32_t vs_spirv_source[] = {
-#include "app.vert.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_vsModule{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(vs_spirv_source),
-      .pCode = (uint32_t*)vs_spirv_source,
-  };
-  VkShaderModule vsModule = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_vsModule, nullptr, &vsModule);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Vertex shader creation error ({}).", VkResultToString(r));
-    return false;
+  if (!state->graphics_pipeline) {
+    static uint32_t vs_spirv_source[] = {
+#     include "app.vert.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_vsModule{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(vs_spirv_source),
+        .pCode = (uint32_t*)vs_spirv_source,
+    };
+    VkShaderModule vsModule = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_vsModule, nullptr, &vsModule);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Vertex shader creation error ({}).", VkResultToString(r));
+      return false;
+    }
+
+    static uint32_t fs_spirv_source[] = {
+#     include "app.frag.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_fsModule{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(fs_spirv_source),
+        .pCode = (uint32_t*)fs_spirv_source,
+    };
+    VkShaderModule fsModule = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_fsModule, nullptr, &fsModule);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Fragment shader creation error ({}).", VkResultToString(r));
+      return false;
+    }
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vsModule,
+            .pName = "main",
+        },
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fsModule,
+            .pName = "main",
+        },
+    };
+
+    std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
+        VkVertexInputBindingDescription{
+          .binding = 0,
+          .stride = 3 * sizeof(float),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+        },
+        VkVertexInputBindingDescription{
+          .binding = 1,
+          .stride = 3 * sizeof(float),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+        },
+        VkVertexInputBindingDescription{
+          .binding = 2,
+          .stride = 3 * sizeof(float),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+        },
+    };
+    std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+        VkVertexInputAttributeDescription{
+          .location = 0,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = 0
+        },
+        VkVertexInputAttributeDescription{
+          .location = 1,
+          .binding = 1,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = 0
+        },
+        VkVertexInputAttributeDescription{
+          .location = 2,
+          .binding = 2,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = 0
+        },
+    };
+    VkPipelineVertexInputStateCreateInfo ci_vertexInputState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+        .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
+        .pVertexBindingDescriptions = vertex_binding_descs.data(),
+        .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
+        .pVertexAttributeDescriptions = vertex_attr_descs.data()
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo ci_inputAssemblyState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+        .primitiveRestartEnable = false,
+    };
+
+    VkPipelineViewportStateCreateInfo ci_viewportState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+        .viewportCount = 1,
+        .scissorCount = 1,
+    };
+
+    VkPipelineRasterizationStateCreateInfo ci_rasterizationState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+        .rasterizerDiscardEnable = false,
+        .polygonMode = VK_POLYGON_MODE_FILL,
+        .cullMode = VK_CULL_MODE_BACK_BIT,
+        .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+        .lineWidth = 1.0f,
+    };
+
+    VkPipelineMultisampleStateCreateInfo ci_multisampleState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+        .rasterizationSamples = state->sample_count,
+    };
+
+    VkPipelineDepthStencilStateCreateInfo ci_depthStencilState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+        .depthTestEnable = VK_TRUE,
+        .depthWriteEnable = VK_TRUE,
+        .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+    };
+
+    VkPipelineColorBlendAttachmentState attachmentStates[] = {
+        {.colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                           VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT},
+    };
+    VkPipelineColorBlendStateCreateInfo ci_colorBlendState{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+        .attachmentCount = 1,
+        .pAttachments = attachmentStates};
+
+    VkDynamicState dynamicStates[] = {
+        VK_DYNAMIC_STATE_VIEWPORT,
+        VK_DYNAMIC_STATE_SCISSOR,
+    };
+    VkPipelineDynamicStateCreateInfo ci_pipelineDynamicState = {
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+        .dynamicStateCount = 2,
+        .pDynamicStates = dynamicStates,
+    };
+
+    VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(ci_stages.size()),
+        .pStages = ci_stages.data(),
+        .pVertexInputState = &ci_vertexInputState,
+        .pInputAssemblyState = &ci_inputAssemblyState,
+        .pViewportState = &ci_viewportState,
+        .pRasterizationState = &ci_rasterizationState,
+        .pMultisampleState = &ci_multisampleState,
+        .pDepthStencilState = &ci_depthStencilState,
+        .pColorBlendState = &ci_colorBlendState,
+        .pDynamicState = &ci_pipelineDynamicState,
+        .layout = state->graphics_pipeline_layout,
+        .renderPass = state->graphics_renderpass,
+        .subpass = 0,
+    }};
+    VkPipeline pipelines[] = {VK_NULL_HANDLE};
+    r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                  nullptr, pipelines);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Graphics pipeline creation error ({}).", VkResultToString(r));
+      return false;
+    }
+    state->graphics_pipeline = pipelines[0];
+
+    vkDestroyShaderModule(state->device, vsModule, nullptr);
+    vkDestroyShaderModule(state->device, fsModule, nullptr);
+
+    if (state->graphics_pipeline == VK_NULL_HANDLE) {
+      BOOST_LOG_TRIVIAL(trace) << "Graphics pipeline creation error.";
+      return false;
+    }
+    BOOST_LOG_TRIVIAL(trace) <<
+        std::format("Graphics pipeline {} is created.",
+                    static_cast<void*>(state->graphics_pipeline));
   }
-
-  static uint32_t fs_spirv_source[] = {
-#include "app.frag.spv.h"
-  };
-  VkShaderModuleCreateInfo ci_fsModule{
-      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
-      .codeSize = sizeof(fs_spirv_source),
-      .pCode = (uint32_t*)fs_spirv_source,
-  };
-  VkShaderModule fsModule = VK_NULL_HANDLE;
-  r = vkCreateShaderModule(state->device, &ci_fsModule, nullptr, &fsModule);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Fragment shader creation error ({}).", VkResultToString(r));
-    return false;
-  }
-
-  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_VERTEX_BIT,
-          .module = vsModule,
-          .pName = "main",
-      },
-      VkPipelineShaderStageCreateInfo{
-          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-          .module = fsModule,
-          .pName = "main",
-      },
-  };
-
-  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
-      VkVertexInputBindingDescription{
-        .binding = 0,
-        .stride = 3 * sizeof(float),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-      VkVertexInputBindingDescription{
-        .binding = 1,
-        .stride = 3 * sizeof(float),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-      VkVertexInputBindingDescription{
-        .binding = 2,
-        .stride = 3 * sizeof(float),
-        .inputRate = VK_VERTEX_INPUT_RATE_VERTEX
-      },
-  };
-  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
-      VkVertexInputAttributeDescription{
-        .location = 0,
-        .binding = 0,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 1,
-        .binding = 1,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-      VkVertexInputAttributeDescription{
-        .location = 2,
-        .binding = 2,
-        .format = VK_FORMAT_R32G32B32_SFLOAT,
-        .offset = 0
-      },
-  };
-  VkPipelineVertexInputStateCreateInfo ci_vertexInputState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-      .vertexBindingDescriptionCount = static_cast<uint32_t>(vertex_binding_descs.size()),
-      .pVertexBindingDescriptions = vertex_binding_descs.data(),
-      .vertexAttributeDescriptionCount = static_cast<uint32_t>(vertex_attr_descs.size()),
-      .pVertexAttributeDescriptions = vertex_attr_descs.data()
-  };
-
-  VkPipelineInputAssemblyStateCreateInfo ci_inputAssemblyState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
-      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
-      .primitiveRestartEnable = false,
-  };
-
-  VkPipelineViewportStateCreateInfo ci_viewportState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
-      .viewportCount = 1,
-      .scissorCount = 1,
-  };
-
-  VkPipelineRasterizationStateCreateInfo ci_rasterizationState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
-      .rasterizerDiscardEnable = false,
-      .polygonMode = VK_POLYGON_MODE_FILL,
-      .cullMode = VK_CULL_MODE_BACK_BIT,
-      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
-      .lineWidth = 1.0f,
-  };
-
-  VkPipelineMultisampleStateCreateInfo ci_multisampleState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-      .rasterizationSamples = state->sample_count,
-  };
-
-  VkPipelineDepthStencilStateCreateInfo ci_depthStencilState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
-      .depthTestEnable = VK_TRUE,
-      .depthWriteEnable = VK_TRUE,
-      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
-  };
-
-  VkPipelineColorBlendAttachmentState attachmentStates[] = {
-      {.colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
-                         VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT},
-  };
-  VkPipelineColorBlendStateCreateInfo ci_colorBlendState{
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
-      .attachmentCount = 1,
-      .pAttachments = attachmentStates};
-
-  VkDynamicState dynamicStates[] = {
-      VK_DYNAMIC_STATE_VIEWPORT,
-      VK_DYNAMIC_STATE_SCISSOR,
-  };
-  VkPipelineDynamicStateCreateInfo ci_pipelineDynamicState = {
-      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
-      .dynamicStateCount = 2,
-      .pDynamicStates = dynamicStates,
-  };
-
-  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
-      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
-      .stageCount = static_cast<uint32_t>(ci_stages.size()),
-      .pStages = ci_stages.data(),
-      .pVertexInputState = &ci_vertexInputState,
-      .pInputAssemblyState = &ci_inputAssemblyState,
-      .pViewportState = &ci_viewportState,
-      .pRasterizationState = &ci_rasterizationState,
-      .pMultisampleState = &ci_multisampleState,
-      .pDepthStencilState = &ci_depthStencilState,
-      .pColorBlendState = &ci_colorBlendState,
-      .pDynamicState = &ci_pipelineDynamicState,
-      .layout = state->graphics_pipeline_layout,
-      .renderPass = state->graphics_renderpass,
-      .subpass = 0,
-  }};
-  VkPipeline pipelines[] = {VK_NULL_HANDLE};
-  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
-                                nullptr, pipelines);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Graphics pipeline creation error ({}).", VkResultToString(r));
-    return false;
-  }
-  state->graphics_pipeline = pipelines[0];
-
-  if (state->graphics_pipeline == VK_NULL_HANDLE) {
-    BOOST_LOG_TRIVIAL(trace) << "Graphics pipeline creation error.";
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) <<
-      std::format("Graphics pipeline {} is created.",
-                  static_cast<void*>(state->graphics_pipeline));
-
-  vkDestroyShaderModule(state->device, vsModule, nullptr);
-  vkDestroyShaderModule(state->device, fsModule, nullptr);
 
   return true;
 }
@@ -905,37 +941,45 @@ void SceneRes::InitFrames() {
 
   for (uint32_t i = 0; i < vk_state->frame_count; ++i) {
     FrameRes& frame = frame_res_array[i];
-    VkFenceCreateInfo ci_fence{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
-                               .flags = VK_FENCE_CREATE_SIGNALED_BIT};
-    r = vkCreateFence(vk_state->device, &ci_fence, nullptr, &frame.cmd_fence);
-    assert(r == VK_SUCCESS);
-    frame.cmd_fence_waitable = true;
+    if (!frame.cmd_fence) {
+      VkFenceCreateInfo ci_fence{.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO,
+                                .flags = VK_FENCE_CREATE_SIGNALED_BIT};
+      r = vkCreateFence(vk_state->device, &ci_fence, nullptr, &frame.cmd_fence);
+      assert(r == VK_SUCCESS);
+      frame.cmd_fence_waitable = true;
+    }
 
-    VkCommandBufferAllocateInfo commandBufferAllocateInfo{
-        .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-        .commandPool = vk_state->cmd_pool,
-        .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-        .commandBufferCount = 1,
-    };
-    r = vkAllocateCommandBuffers(vk_state->device, &commandBufferAllocateInfo,
-                                 &frame.cmd_buf);
-    assert(r == VK_SUCCESS);
+    if (!frame.cmd_buf) {
+      VkCommandBufferAllocateInfo commandBufferAllocateInfo{
+          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+          .commandPool = vk_state->cmd_pool,
+          .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+          .commandBufferCount = 1,
+      };
+      r = vkAllocateCommandBuffers(vk_state->device, &commandBufferAllocateInfo,
+                                  &frame.cmd_buf);
+      assert(r == VK_SUCCESS);
+    }
 
-    VkSemaphoreCreateInfo semaphoreCreateInfo{
-        .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
-    };
-    r = vkCreateSemaphore(vk_state->device, &semaphoreCreateInfo, nullptr,
-                          &frame.acquire_semaphore);
-    assert(r == VK_SUCCESS);
+    if (!frame.acquire_semaphore) {
+      VkSemaphoreCreateInfo semaphoreCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+      };
+      r = vkCreateSemaphore(vk_state->device, &semaphoreCreateInfo, nullptr,
+                            &frame.acquire_semaphore);
+      assert(r == VK_SUCCESS);
+    }
 
-    VkDescriptorSetAllocateInfo descSetAllocInfo{
-        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-        .descriptorPool = descriptor_pool,
-        .descriptorSetCount = 1,
-        .pSetLayouts = &vk_state->graphics_desc_layout};
-    r = vkAllocateDescriptorSets(vk_state->device, &descSetAllocInfo,
-                                 &frame.graphics_desc_set);
-    assert(r == VK_SUCCESS);
+    if (!frame.graphics_desc_set) {
+      VkDescriptorSetAllocateInfo descSetAllocInfo{
+          .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+          .descriptorPool = descriptor_pool,
+          .descriptorSetCount = 1,
+          .pSetLayouts = &vk_state->graphics_desc_layout};
+      r = vkAllocateDescriptorSets(vk_state->device, &descSetAllocInfo,
+                                  &frame.graphics_desc_set);
+      assert(r == VK_SUCCESS);
+    }
   }
 }
 
@@ -964,25 +1008,6 @@ void SceneRes::ReleaseImages() {
 
     vkDestroySemaphore(vk_state->device, res->submit_semaphore, nullptr);
     res->submit_semaphore = VK_NULL_HANDLE;
-  }
-}
-
-void SceneRes::ReleaseFrames() {
-  BOOST_LOG_TRIVIAL(trace) << "Finalize frame resources ...";
-  for (int i = 0; i < vk_state->frame_count; ++i) {
-    FrameRes* frame = &frame_res_array[i];
-
-    vkFreeCommandBuffers(vk_state->device, vk_state->cmd_pool, 1, &frame->cmd_buf);
-
-    vkDestroyFence(vk_state->device, frame->cmd_fence, nullptr);
-    frame->cmd_fence = VK_NULL_HANDLE;
-    frame->cmd_fence_waitable = false;
-
-    vkDestroySemaphore(vk_state->device, frame->acquire_semaphore, nullptr);
-    frame->acquire_semaphore = VK_NULL_HANDLE;
-
-    vkFreeDescriptorSets(vk_state->device, descriptor_pool, 1,
-                         &frame->graphics_desc_set);
   }
 }
 
@@ -1025,7 +1050,7 @@ bool CreateTransientImage(SceneRes* scene_res, VkFormat format,
                           VkImageUsageFlags usage,
                           VkImageAspectFlags aspect_mask, VkImage& image,
                           VmaAllocation* alloc, VkImageView& view) {
-  VulkanState* vk_state = scene_res->vk_state;
+  VulkanGlobalState* vk_state = scene_res->vk_state;
   VkDevice device = vk_state->device;
   VkSampleCountFlagBits sample_count = vk_state->sample_count;
 
@@ -1192,110 +1217,11 @@ bool SceneRes::InitImages() {
   return true;
 }
 
-void SceneRes::ReleaseSwapchain() {
-  vkDestroySwapchainKHR(vk_state->device, swapchain, nullptr);
-
-  ReleaseImages();
-
-  vkDestroyImageView(vk_state->device, depth_stencil_view, nullptr);
-  vmaDestroyImage(vk_state->allocator, depth_stencil_image, alloc_depth_stencil);
-}
-
-bool SceneRes::RecreateSwapchain(VkExtent2D extent) {
-  // Защита от вырождения окна в нулевой размер.
-  image_extent = extent;
-  if (extent.width == 0 || extent.height == 0) {
-    BOOST_LOG_TRIVIAL(debug) << "Degenerated Window";
-    return true;
-  }
-
-  VkResult r;
-
-  r = vkDeviceWaitIdle(vk_state->device);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(fatal) << std::format("vkDeviceWaitIdle returned {}",
-                                            VkResultToString(r));
-    std::abort();
-  }
-
-  VkSurfaceCapabilitiesKHR surfaceCaps;
-  r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_state->physical_device,
-                                                surface, &surfaceCaps);
-  assert(r == VK_SUCCESS);
-
-  // Выбираем размер изображений.
-  assert(surfaceCaps.currentExtent.width == static_cast<uint32_t>(-1) ||
-         surfaceCaps.currentExtent.width == extent.width &&
-             surfaceCaps.currentExtent.height == extent.height);
-
-  VkSurfaceTransformFlagBitsKHR preTransform =
-      (surfaceCaps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
-          ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
-          : surfaceCaps.currentTransform;
-
-  assert(vk_state->graphics_family_index == vk_state->present_family_index);
-  std::array<uint32_t, 1> queueFamilyIndices = {
-      vk_state->graphics_family_index.value()};
-
-  VkSwapchainKHR oldSwapchain = swapchain;
-
-  VkSwapchainCreateInfoKHR ci_swapchain{
-      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
-      .surface = surface,
-      .minImageCount = vk_state->min_image_count,
-      .imageFormat = vk_state->image_format,
-      .imageColorSpace = vk_state->color_space,
-      .imageExtent = image_extent,
-      .imageArrayLayers = 1,
-      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
-      .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
-      .queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size()),
-      .pQueueFamilyIndices = queueFamilyIndices.data(),
-      .preTransform = preTransform,
-      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-      .presentMode = vk_state->present_mode,
-      .oldSwapchain = oldSwapchain};
-  VkSwapchainKHR newSwapchain;
-  r = vkCreateSwapchainKHR(vk_state->device, &ci_swapchain, nullptr,
-                           &newSwapchain);
-  if (r != VK_SUCCESS) {
-    BOOST_LOG_TRIVIAL(trace) << std::format(
-        "Swapchain object creation error ({}).", VkResultToString(r));
-    return false;
-  }
-  BOOST_LOG_TRIVIAL(trace) << std::format(
-      "Success of create swapchain object ({}).",
-      static_cast<void*>(newSwapchain));
-
-  if (oldSwapchain != VK_NULL_HANDLE) {
-    ReleaseSwapchain();
-  }
-
-  swapchain = newSwapchain;
-
-  r = vkGetSwapchainImagesKHR(vk_state->device, swapchain,
-                              &image_count, nullptr);
-  if (r != VK_SUCCESS) return false;
-  if (image_count == 0) return false;
-  BOOST_LOG_TRIVIAL(trace) << std::format("Count of images in swapchain is {}.",
-                                          image_count);
-
-  // Создаем изображение буфера глубины.
-  CreateTransientImage(this, vk_state->depth_stencil_format,
-                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-                       VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
-                       depth_stencil_image, &alloc_depth_stencil,
-                       depth_stencil_view);
-
-  InitImages();
-  return true;
-}
-
 void Render(
     Scene* scene, SceneRes* scene_res,
     ImageRes& image_res, FrameRes& frame,
     const std::map<const FgObject*, TextureRes*>& fg_res_array) {
-  VulkanState* state = scene_res->vk_state;
+  VulkanGlobalState* state = scene_res->vk_state;
 
   // Пересоздаем командный буфер.
   if (frame.cmd_buf != VK_NULL_HANDLE) {
@@ -1540,8 +1466,9 @@ bool CheckExtensions(const std::vector<const char*>& extensionNames) {
   return haveExtensions;
 }
 
-//! Создаем экземпляр vulkan.
-bool InitInstance(VulkanState* state) {
+bool InitInstance(VulkanGlobalState* state) {
+  if (state->instance) return true;
+
   VkResult r;
 
   r = volkInitialize();
@@ -1698,9 +1625,13 @@ bool IsDeviceSuitable(VkPhysicalDevice device, VkSurfaceKHR surface,
   return true;
 }
 
-bool SelectPhysicalDevice(VulkanState* state,
-                          VkSurfaceKHR surface,
-                          const std::vector<const char*>& extensionNames) {
+bool SelectPhysicalDevice(VulkanGlobalState* state, VkSurfaceKHR surface) {
+  if (state->physical_device) return true;
+
+  std::vector<const char*> extensionNames{
+      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+  };
+
   uint32_t devicesCount = 0;
   VkResult r =
       vkEnumeratePhysicalDevices(state->instance, &devicesCount, nullptr);
@@ -1738,7 +1669,9 @@ bool SelectPhysicalDevice(VulkanState* state,
   return true;
 }
 
-bool CreateLogicalDevice(VulkanState* state, VkSurfaceKHR surface) {
+bool CreateLogicalDevice(VulkanGlobalState* state, VkSurfaceKHR surface) {
+  if (state->device) return true;
+
   // Выбираем семейство очередей.
   FindQueueFamilies(state->physical_device, surface,
                     state->graphics_family_index, state->present_family_index);
@@ -1823,7 +1756,7 @@ bool CreateLogicalDevice(VulkanState* state, VkSurfaceKHR surface) {
 }
 
 #ifdef LINUX
-bool CreateSurface(VulkanState* state, VkSceneRenderer::Impl::Xcb* xcb) {
+bool CreateSurface(VulkanGlobalState* state, VkSceneRenderer::Impl::Xcb* xcb) {
   int screenNum = 0;
   xcb_connection_t* connection = xcb_connect(nullptr, &screenNum);
   if (xcb_connection_has_error(connection)) {
@@ -1880,79 +1813,79 @@ VkFormat SelectDepthStencilFormat(VkPhysicalDevice device) {
   return VK_FORMAT_UNDEFINED;
 }
 
-bool ChooseSwapchainSettings(VulkanState* state, VkSurfaceKHR surface) {
-  SwapChainSupportDetails swapchainSupport =
+bool ChooseSwapchainSettings(VulkanGlobalState* state, VkSurfaceKHR surface) {
+  SwapChainSupportDetails swapchain_support =
       QuerySwapChainSupport(state->physical_device, surface);
 
-  state->image_format = VK_FORMAT_UNDEFINED;
-
-  VkFormat format = VK_FORMAT_UNDEFINED;
-  VkColorSpaceKHR colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-  for (const auto& f : swapchainSupport.formats) {
-    switch (f.format) {
-      case VK_FORMAT_R8G8B8A8_SRGB:
-      case VK_FORMAT_B8G8R8A8_SRGB:
-      case VK_FORMAT_R8G8B8A8_UNORM:
-      case VK_FORMAT_B8G8R8A8_UNORM:
-        format = f.format;
-        colorSpace = f.colorSpace;
-        break;
-      case VK_FORMAT_R8G8B8_SRGB:
-      case VK_FORMAT_B8G8R8_SRGB:
-      case VK_FORMAT_R8G8B8_UNORM:
-      case VK_FORMAT_R5G6B5_UNORM_PACK16:
-      case VK_FORMAT_B5G6R5_UNORM_PACK16:
-      default:
-        continue;
-    }
-  }
-
-  state->image_format = format;
-  state->color_space = colorSpace;
   if (state->image_format == VK_FORMAT_UNDEFINED) {
-    BOOST_LOG_TRIVIAL(trace) << "Image format undefined.";
-    return false;
-  }
-
-  state->depth_stencil_format = SelectDepthStencilFormat(state->physical_device);
-  if (state->depth_stencil_format == VK_FORMAT_UNDEFINED)
-    BOOST_LOG_TRIVIAL(error)
-        << "Failed to find an optimal depth-stencil format";
-
-  BOOST_LOG_TRIVIAL(trace) << std::format(
-      "Color format: {} Depth-stencil format: {}",
-      VkFormatToString(state->image_format),
-      VkFormatToString(state->depth_stencil_format));
-
-  // Выбираем режим показа.
-  for (auto pm : swapchainSupport.present_modes) {
-    if (pm == VK_PRESENT_MODE_MAILBOX_KHR) {
-      state->present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
-      break;
+    VkFormat format = VK_FORMAT_UNDEFINED;
+    VkColorSpaceKHR color_space = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+    for (const auto& f : swapchain_support.formats) {
+      switch (f.format) {
+        case VK_FORMAT_R8G8B8A8_SRGB:
+        case VK_FORMAT_B8G8R8A8_SRGB:
+        case VK_FORMAT_R8G8B8A8_UNORM:
+        case VK_FORMAT_B8G8R8A8_UNORM:
+          format = f.format;
+          color_space = f.colorSpace;
+          break;
+        case VK_FORMAT_R8G8B8_SRGB:
+        case VK_FORMAT_B8G8R8_SRGB:
+        case VK_FORMAT_R8G8B8_UNORM:
+        case VK_FORMAT_R5G6B5_UNORM_PACK16:
+        case VK_FORMAT_B5G6R5_UNORM_PACK16:
+        default:
+          continue;
+      }
     }
+    state->image_format = format;
+    state->color_space = color_space;
+    if (state->image_format == VK_FORMAT_UNDEFINED)
+      BOOST_LOG_TRIVIAL(trace) << "Image format undefined.";
+      return false;
   }
 
-  state->min_image_count = 2;
-  if (state->min_image_count < swapchainSupport.capabilities.minImageCount) {
-    if (swapchainSupport.capabilities.minImageCount > MAX_NUM_IMAGES) {
-      BOOST_LOG_TRIVIAL(error) << std::format(
-          "VkSurfaceCapabilitiesKHR.minImageCount is too large (is: {}, max: "
-          "{})",
-          swapchainSupport.capabilities.minImageCount, MAX_NUM_IMAGES);
+  if (state->depth_stencil_format == VK_FORMAT_UNDEFINED) {
+    state->depth_stencil_format = SelectDepthStencilFormat(state->physical_device);
+    if (state->depth_stencil_format == VK_FORMAT_UNDEFINED) {
+      BOOST_LOG_TRIVIAL(error) << "Failed to find an optimal depth-stencil format";
       return false;
     }
-    state->min_image_count = swapchainSupport.capabilities.minImageCount;
   }
-  if (swapchainSupport.capabilities.maxImageCount > 0 &&
-      state->min_image_count > swapchainSupport.capabilities.maxImageCount) {
-    state->min_image_count = swapchainSupport.capabilities.maxImageCount;
+
+  // Выбираем режим показа.
+  if (state->present_mode != VK_PRESENT_MODE_MAILBOX_KHR ) {
+    for (auto pm : swapchain_support.present_modes) {
+      if (pm == VK_PRESENT_MODE_MAILBOX_KHR) {
+        state->present_mode = VK_PRESENT_MODE_MAILBOX_KHR;
+        break;
+      }
+    }
+  }
+
+  if (state->min_image_count == 0) {
+    state->min_image_count = 2;
+    if (state->min_image_count < swapchain_support.capabilities.minImageCount) {
+      if (swapchain_support.capabilities.minImageCount > MAX_NUM_IMAGES) {
+        BOOST_LOG_TRIVIAL(error) << std::format(
+            "VkSurfaceCapabilitiesKHR.minImageCount is too large (is: {}, max: "
+            "{})",
+            swapchain_support.capabilities.minImageCount, MAX_NUM_IMAGES);
+        return false;
+      }
+      state->min_image_count = swapchain_support.capabilities.minImageCount;
+    }
+    if (swapchain_support.capabilities.maxImageCount > 0 &&
+        state->min_image_count > swapchain_support.capabilities.maxImageCount) {
+      state->min_image_count = swapchain_support.capabilities.maxImageCount;
+    }
   }
 
   return true;
 }
 
-bool TextureRes::Initialize(VulkanState* state,
-                                  const FgObject* fg_object) {
+bool TextureRes::Initialize(VulkanGlobalState* state,
+                            const FgObject* fg_object) {
   this->Release(state);
 
   VkResult r = VK_SUCCESS;
@@ -2177,136 +2110,245 @@ bool TextureRes::Initialize(VulkanState* state,
   return true;
 }
 
-bool InitializeVulkanState(VulkanState* state, VkSurfaceKHR surface) {
-  if (surface == VK_NULL_HANDLE)
-    return false;
+bool VulkanObjects::RestoreInvalidated(VkSurfaceKHR surface) {
+  if (!InitInstance(&global_state)) return false;
 
-  if (state->graphics_renderpass != VK_NULL_HANDLE)
-    return true;
+  // Аргумент `surface` необходим для выбора физического устройства и семейства
+  // очередей. И аргумент может быть недоступен в момент инициализации
+  // глобального состояния Vulkan. И при повторном вызове функции surface может
+  // прийти.
+  if (!global_state.physical_device) {
+    if(!surface) return true;
+  } else {
+    if(surface) {
+      //\warning Не понятна логика передачи `surface`,
+      // если физическое устройство выбрано.
+      //assert(false);
+      //return false;
+    }
+  }
 
-  VkResult r = VK_SUCCESS;
+  if (!SelectPhysicalDevice(&global_state,surface)) return false;
+  if (!CreateLogicalDevice(&global_state,surface)) return false;
+  if (!ChooseSwapchainSettings(&global_state,surface)) return false;
+  if (!ChooseSampleCountOfMSAA(&global_state)) return false;
+  if (!CreateGraphicsRenderPass(&global_state)) return false;
+  if (!CreateGraphicsPipeline(&global_state)) return false;
+  if (!CreateCompositeRenderPass(&global_state)) return false;
+  if (!CreateCompositePipeline(&global_state)) return false;
 
-  std::vector<const char*> deviceExtensionNames{
-      VK_KHR_SWAPCHAIN_EXTENSION_NAME,
-  };
-
-  // Выбираем физическое устройство, если еще не выбрано.
-  if (state->physical_device == VK_NULL_HANDLE &&
-      !SelectPhysicalDevice(state, surface, deviceExtensionNames))
-    return false;
-
-  state->sample_count = GetMaxUsableSampleCount(state->physical_device);
-  BOOST_LOG_TRIVIAL(trace) << std::format(
-      "Selected MSAA sample count: {}",
-      static_cast<size_t>(state->sample_count));
-
-  // Создаем логическое устройство и извлекаем очередь.
-  if (state->device == VK_NULL_HANDLE && !CreateLogicalDevice(state,surface))
-    return false;
-
-  // Выбираем настройки, необходимые для последующего создания swapchain.
-  if (!ChooseSwapchainSettings(state,surface)) return false;
-
-  // Создаем объект renderpass.
-  if (!CreateRenderPass(state)) return false;
-
-  if (!CreateGraphicsPipeline(state)) return false;
-  if (!CreateCompositeRenderPass(state)) return false;
-  if (!CreateCompositePipeline(state)) return false;
-
-  VkCommandPoolCreateInfo ci_commandpool{
-      .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
-      .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-      .queueFamilyIndex = 0,  //< \warning
-  };
-  vkCreateCommandPool(state->device, &ci_commandpool, nullptr, &state->cmd_pool);
+  if (!global_state.cmd_pool) {
+    VkCommandPoolCreateInfo ci_commandpool{
+        .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
+        .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
+        .queueFamilyIndex = 0,  //< \warning
+    };
+    vkCreateCommandPool(global_state.device, &ci_commandpool, nullptr,
+                        &global_state.cmd_pool);
+  }
 
   // Create sampler
-  VkSamplerCreateInfo sampler_ci = {
-      .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-      .magFilter = VK_FILTER_LINEAR,
-      .minFilter = VK_FILTER_LINEAR,
-      .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-      .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
-      .mipLodBias = 0.0f,
-      .anisotropyEnable = VK_FALSE,
-      .maxAnisotropy = 1.0f,
-      .compareEnable = VK_FALSE,
-      .compareOp = VK_COMPARE_OP_ALWAYS,
-      .minLod = 0.0f,
-      .maxLod = 0.0f,
-      .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-      .unnormalizedCoordinates = VK_FALSE,
-  };
-  r = vkCreateSampler(state->device, &sampler_ci, nullptr, &state->composite_sampler);
-  assert(r == VK_SUCCESS);
+  if (!global_state.composite_sampler) {
+    VkSamplerCreateInfo sampler_ci = {
+        .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+        .magFilter = VK_FILTER_LINEAR,
+        .minFilter = VK_FILTER_LINEAR,
+        .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+        .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+        .mipLodBias = 0.0f,
+        .anisotropyEnable = VK_FALSE,
+        .maxAnisotropy = 1.0f,
+        .compareEnable = VK_FALSE,
+        .compareOp = VK_COMPARE_OP_ALWAYS,
+        .minLod = 0.0f,
+        .maxLod = 0.0f,
+        .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+        .unnormalizedCoordinates = VK_FALSE,
+    };
+    VkResult r = VK_SUCCESS;
+    r = vkCreateSampler(global_state.device, &sampler_ci, nullptr,
+                        &global_state.composite_sampler);
+    assert(r == VK_SUCCESS);
+  }
 
-  state->textures_desc_pool = LruPool::Make<LruDescriptorSetPool>(
-      state->device, state->composite_desc_layout, 5);
+  if (!global_state.textures_desc_pool) {
+    global_state.textures_desc_pool = LruPool::Make<LruDescriptorSetPool>(
+        global_state.device, global_state.composite_desc_layout, 5);
+  }
 
   return true;
 }
 
-SceneRes::SceneRes(VulkanState* state, VkSurfaceKHR srf, Scene* scene) {
+SceneRes::SceneRes(VulkanGlobalState* state, VkSurfaceKHR srf, Scene* scene) {
   vk_state = state;
   is_external_surface = true;
   surface = srf;
+  RestoreInvalidated();
+}
 
-  // Создаем объект swapchain.
-  glm::uvec2 screen_size = scene->GetScreenSize();
-  if (!RecreateSwapchain(VkExtent2D{screen_size.x, screen_size.y}))
-    return;
+bool SceneRes::RestoreInvalidated() {
+  VkResult r;
+  VkSurfaceCapabilitiesKHR surface_caps;
+
+  // Выбираем размер изображений.
+  if (image_extent.width == static_cast<uint32_t>(-1)) {
+    r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_state->physical_device,
+                                                  surface, &surface_caps);
+    if (r != VK_SUCCESS)
+      return false;
+    image_extent = surface_caps.currentExtent;
+  }
+
+  if (image_extent.width == static_cast<uint32_t>(-1)
+      || image_extent.height == static_cast<uint32_t>(-1))
+    return false;
+
+  // Защита от вырождения окна в нулевой размер.
+  if (image_extent.width == 0 || image_extent.height == 0) {
+    BOOST_LOG_TRIVIAL(debug) << "Degenerated Window";
+    return false;
+  }
+
+  r = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(vk_state->physical_device,
+                                                surface, &surface_caps);
+  if (r != VK_SUCCESS)
+    return false;
+  VkSurfaceTransformFlagBitsKHR preTransform =
+      (surface_caps.supportedTransforms & VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR)
+          ? VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
+          : surface_caps.currentTransform;
+
+  assert(vk_state->graphics_family_index == vk_state->present_family_index);
+  std::array<uint32_t, 1> queueFamilyIndices = {
+      vk_state->graphics_family_index.value()
+  };
+
+  VkSwapchainCreateInfoKHR ci_swapchain{
+      .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
+      .surface = surface,
+      .minImageCount = vk_state->min_image_count,
+      .imageFormat = vk_state->image_format,
+      .imageColorSpace = vk_state->color_space,
+      .imageExtent = image_extent,
+      .imageArrayLayers = 1,
+      .imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      .imageSharingMode = VK_SHARING_MODE_EXCLUSIVE,
+      .queueFamilyIndexCount = static_cast<uint32_t>(queueFamilyIndices.size()),
+      .pQueueFamilyIndices = queueFamilyIndices.data(),
+      .preTransform = preTransform,
+      .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
+      .presentMode = vk_state->present_mode,
+      .oldSwapchain = old_swapchain
+  };
+  r = vkCreateSwapchainKHR(vk_state->device, &ci_swapchain, nullptr, &swapchain);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Swapchain object creation error ({}).", VkResultToString(r));
+    return false;
+  }
+  BOOST_LOG_TRIVIAL(trace) << std::format(
+      "Success of create swapchain object ({}).",
+      static_cast<void*>(swapchain));
+
+  if (swapchain && old_swapchain) {
+    vkDestroySwapchainKHR(vk_state->device, old_swapchain, nullptr);
+  }
+
+  r = vkGetSwapchainImagesKHR(vk_state->device, swapchain,
+                              &image_count, nullptr);
+  if (r != VK_SUCCESS || image_count == 0) return false;
+  BOOST_LOG_TRIVIAL(trace) << std::format("Count of images in swapchain is {}.",
+                                          image_count);
+
+  // Создаем изображение буфера глубины.
+  CreateTransientImage(this, vk_state->depth_stencil_format,
+                       VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
+                       VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT,
+                       depth_stencil_image, &alloc_depth_stencil,
+                       depth_stencil_view);
+
+  InitImages();
 
   // Память под данные фреймов.
-  VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
-  VkDeviceSize fbo_size = Aligned(sizeof(FragmentBufferObject), 256);
-  size_t frame_memory_size = vk_state->frame_count * (vbo_size + fbo_size);
-  VkBufferCreateInfo ci_buffer {
-      .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-      .size = frame_memory_size,
-      .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
-  };
-  VmaAllocationCreateInfo ci_allocation {
-      .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-  };
-  vmaCreateBuffer(vk_state->allocator, &ci_buffer, &ci_allocation,
-                  &buffer_frame, &alloc_frame,
-                  nullptr);
+  if (!buffer_frame) {
+    assert(!alloc_frame);
+    VkDeviceSize vbo_size = Aligned(sizeof(VertexBufferObject), 256);
+    VkDeviceSize fbo_size = Aligned(sizeof(FragmentBufferObject), 256);
+    size_t frame_memory_size = vk_state->frame_count * (vbo_size + fbo_size);
+    VkBufferCreateInfo ci_buffer {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = frame_memory_size,
+        .usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+    };
+    VmaAllocationCreateInfo ci_allocation {
+        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+    };
+    vmaCreateBuffer(vk_state->allocator, &ci_buffer, &ci_allocation,
+                    &buffer_frame, &alloc_frame,
+                    nullptr);
+  }
 
-  VkResult r;
-
-  // Создаем объект пула дескрипторов.
-  std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
-      VkDescriptorPoolSize{
-        .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-        .descriptorCount = vk_state->frame_count * 3},
-      VkDescriptorPoolSize{
-        .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-        .descriptorCount = vk_state->frame_count * 2},
-  };
-  VkDescriptorPoolCreateInfo ci_descpool {
-      .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-      .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
-      .maxSets = vk_state->frame_count,
-      .poolSizeCount = static_cast<uint32_t>(descPoolSizes.size()),
-      .pPoolSizes = descPoolSizes.data()
-  };
-  r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
-                             &descriptor_pool);
+  if (!descriptor_pool) {
+    // Создаем объект пула дескрипторов.
+    std::array<VkDescriptorPoolSize, 2> descPoolSizes = {
+        VkDescriptorPoolSize{
+          .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+          .descriptorCount = vk_state->frame_count * 3},
+        VkDescriptorPoolSize{
+          .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+          .descriptorCount = vk_state->frame_count * 2},
+    };
+    VkDescriptorPoolCreateInfo ci_descpool {
+        .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+        .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+        .maxSets = vk_state->frame_count,
+        .poolSizeCount = static_cast<uint32_t>(descPoolSizes.size()),
+        .pPoolSizes = descPoolSizes.data()
+    };
+    r = vkCreateDescriptorPool(vk_state->device, &ci_descpool, nullptr,
+                               &descriptor_pool);
+    assert(r == VK_SUCCESS);
+  }
 
   InitFrames();
+  return true;
 }
+
+void SceneRes::InvalidateSwapchain() {
+  old_swapchain = std::exchange(swapchain, VK_NULL_HANDLE);
+  ReleaseImages();
+  vkDestroyImageView(vk_state->device, depth_stencil_view, nullptr);
+  vmaDestroyImage(vk_state->allocator, depth_stencil_image, alloc_depth_stencil);
+  image_extent = {
+    .width = static_cast<uint32_t>(-1),
+    .height = static_cast<uint32_t>(-1)
+  };
+
+  // The acquire semaphore may still be signaled from a previous
+  // vkAcquireNextImageKHR call that was never consumed by vkQueueSubmit
+  // (e.g. after VK_SUBOPTIMAL_KHR / VK_ERROR_OUT_OF_DATE_KHR).
+  // Destroy and recreate it to clear the signaled state.
+  // See https://docs.vulkan.org/guide/latest/swapchain_semaphore_reuse.html
+  for (uint32_t i = 0; i < vk_state->frame_count; ++i) {
+    FrameRes& frame = frame_res_array[i];
+    if (frame.acquire_semaphore != VK_NULL_HANDLE) {
+      vkDestroySemaphore(vk_state->device, frame.acquire_semaphore, nullptr);
+      frame.acquire_semaphore = VK_NULL_HANDLE;
+    }
+  }
+}
+
 } // namespace
 
 VkInstance VkSceneRenderer::GetInstance() const {
-  return impl_->vk_global_state.instance;
+  return impl_->vk_objects.global_state.instance;
 }
 
 namespace {
 void UpdateScene(const Scene* scene, SceneRes* scene_res) {
-  VulkanState* vk_global_state = scene_res->vk_state;
+  VulkanGlobalState* vk_global_state = scene_res->vk_state;
   auto allocator = vk_global_state->allocator;
 
   if (scene_res->buffer_vertex != VK_NULL_HANDLE) {
@@ -2439,7 +2481,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
 void UpdateDescriptorSets(
     Scene* scene, SceneRes* scene_res,
     const std::map<const FgObject*,TextureRes*>& fg_res_array) {
-  const VulkanState* vk_global_state = scene_res->vk_state;
+  const VulkanGlobalState* vk_global_state = scene_res->vk_state;
   FrameRes& frame = scene_res->frame_res_array[scene_res->current_frame_index];
 
   glm::mat4 model_view_matrix = scene->GetViewMatrix();
@@ -2541,16 +2583,16 @@ void UpdateDescriptorSets(
                          descWrites.data(), 0, nullptr);
 }
 
-bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
+bool Synchronize(Application* app, VulkanObjects* vk_objects, Scene* scene) {
   // Обновление данных -- это критическая секция.
   static std::mutex mtx;
   std::lock_guard<std::mutex> lock(mtx);
 
-  auto vk_global_state = &render_state->vk_global_state;
+  auto vk_global_state = &vk_objects->global_state;
   // Доинициализируем глобальное состояние Vulkan,
   // потому что для этого была нужна поверхность Vulkan.
   auto surface = reinterpret_cast<VkSurfaceKHR>(scene->GetVulkanSurface());
-  if (!InitializeVulkanState(vk_global_state,surface))
+  if (!vk_objects->RestoreInvalidated(surface))
     return false;
 
   // Ожидаем завершения всех заданий в очередях.
@@ -2558,20 +2600,20 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
 
   std::list<Scene*> scenes_for_update;
   scenes_for_update.push_back(scene);
-  for (Scene* fg_scene : render_state->app->GetForegroundScenes(scene))
+  for (Scene* fg_scene : app->GetForegroundScenes(scene))
     scenes_for_update.push_back(fg_scene);
 
   for (Scene* scene : scenes_for_update) {
-    auto it = render_state->scene_res_array.find(scene);
+    auto it = vk_objects->scene_res_array.find(scene);
     auto scene_res =
-        (it != render_state->scene_res_array.end() ? it->second : nullptr);
+        (it != vk_objects->scene_res_array.end() ? it->second : nullptr);
     switch (scene->GetState()) {
     case TrackedObject::State::Clean:
       break;
     case TrackedObject::State::New:
       assert(scene_res == nullptr);
       scene_res = new SceneRes(vk_global_state, surface, scene);
-      render_state->scene_res_array.insert(std::make_pair(scene,scene_res));
+      vk_objects->scene_res_array.insert(std::make_pair(scene,scene_res));
       // Проваливаемся в следующую ветку `case` осознанно!
     case TrackedObject::State::Dirty:
       assert(scene_res != nullptr);
@@ -2579,7 +2621,7 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
       break;
     case TrackedObject::State::Removed:
       scene_res->Release();
-      render_state->scene_res_array.erase(it);
+      vk_objects->scene_res_array.erase(it);
       delete scene_res;
       break;
     }
@@ -2590,8 +2632,8 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
 
   // Синхронизируем связку `FgObject -> TextureRes`.
   for (FgObject* fg : scene->GetFgObjects()) {
-    auto it = render_state->fg_res_array.find(fg);
-    auto fg_res = it != render_state->fg_res_array.end()
+    auto it = vk_objects->fg_res_array.find(fg);
+    auto fg_res = it != vk_objects->fg_res_array.end()
                           ? it->second
                           : nullptr;
     auto state = fg->GetState();
@@ -2600,7 +2642,7 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
       assert(fg_res == nullptr);
       fg_res = new TextureRes(vk_global_state);
       fg_res->Initialize(vk_global_state, fg);
-      render_state->fg_res_array[fg] = fg_res;
+      vk_objects->fg_res_array[fg] = fg_res;
       break;
     case TrackedObject::State::Clean:
       break;
@@ -2610,7 +2652,7 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
     case TrackedObject::State::Delete:
       fg_res->Release(vk_global_state);
       delete fg_res;
-      render_state->fg_res_array.erase(it);
+      vk_objects->fg_res_array.erase(it);
       break;
     default:
       std::abort();
@@ -2618,8 +2660,8 @@ bool Synchronize(VkSceneRenderer::Impl* render_state, Scene* scene) {
     fg->Sync();
   }
 
-  auto scene_res = render_state->scene_res_array.at(scene);
-  UpdateDescriptorSets(scene, scene_res, render_state->fg_res_array);
+  auto scene_res = vk_objects->scene_res_array.at(scene);
+  UpdateDescriptorSets(scene, scene_res, vk_objects->fg_res_array);
 
   return true;
 }
@@ -2632,21 +2674,16 @@ bool VkSceneRenderer::Update(Scene* scene) {
 
   assert(!scene->IsDeleted());
 
-  if (!Synchronize(impl_,scene))
+  if (!Synchronize(impl_->app,&impl_->vk_objects,scene))
     return false;
 
-  SceneRes* scene_res = impl_->scene_res_array.at(scene);
+  SceneRes* scene_res = impl_->vk_objects.scene_res_array.at(scene);
 
   auto screen_size = scene->GetScreenSize();
   if (screen_size.x == 0 || screen_size.y == 0)
     return false;
-  VkExtent2D current_extent(screen_size.x, screen_size.y);
-  if (scene_res->image_extent.width != current_extent.width ||
-      scene_res->image_extent.height != current_extent.height) {
-    if (!scene_res->RecreateSwapchain(current_extent)) return false;
-  }
 
-  VulkanState* state = scene_res->vk_state;
+  VulkanGlobalState* state = scene_res->vk_state;
   FrameRes& frame = scene_res->frame_res_array[scene_res->current_frame_index];
 
   // Ожидаем освобождения последнего фрейма.
@@ -2663,11 +2700,9 @@ bool VkSceneRenderer::Update(Scene* scene) {
                               UINT64_MAX, frame.acquire_semaphore,
                               VK_NULL_HANDLE, &index);
     if (r == VK_SUBOPTIMAL_KHR || r == VK_ERROR_OUT_OF_DATE_KHR) {
-      auto screen_size = scene->GetScreenSize();
-      if (screen_size.x == 0 || screen_size.y == 0)
+      scene_res->InvalidateSwapchain();
+      if (!scene_res->RestoreInvalidated())
         return false;
-      VkExtent2D extent(screen_size.x,screen_size.y);
-      scene_res->RecreateSwapchain(extent);
       continue;
     }
     if (r == VK_NOT_READY || r == VK_TIMEOUT) continue;
@@ -2676,7 +2711,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
     // Рендеринг основной сцены и наложение текстур переднего плана.
     assert(index <= MAX_NUM_IMAGES);
     ImageRes& image_res = scene_res->image_res_array[index];
-    Render(scene, scene_res, image_res, frame, impl_->fg_res_array);
+    Render(scene, scene_res, image_res, frame, impl_->vk_objects.fg_res_array);
 
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
@@ -2698,7 +2733,7 @@ bool VkSceneRenderer::Update(Scene* scene) {
 }
 
 namespace {
-void TextureRes::Release(VulkanState* state) {
+void TextureRes::Release(VulkanGlobalState* state) {
   if (desc_set != VK_NULL_HANDLE) {
     state->textures_desc_pool->Free(this);
     desc_set = VK_NULL_HANDLE;
@@ -2719,8 +2754,29 @@ void TextureRes::Release(VulkanState* state) {
 void SceneRes::Release() {
   vkDeviceWaitIdle(vk_state->device);
 
-  ReleaseSwapchain();
-  ReleaseFrames();
+  vkDestroySwapchainKHR(vk_state->device, swapchain, nullptr);
+
+  ReleaseImages();
+
+  vkDestroyImageView(vk_state->device, depth_stencil_view, nullptr);
+  vmaDestroyImage(vk_state->allocator, depth_stencil_image, alloc_depth_stencil);
+
+  // Release frames.
+  for (int i = 0; i < vk_state->frame_count; ++i) {
+    FrameRes* frame = &frame_res_array[i];
+
+    vkFreeCommandBuffers(vk_state->device, vk_state->cmd_pool, 1, &frame->cmd_buf);
+
+    vkDestroyFence(vk_state->device, frame->cmd_fence, nullptr);
+    frame->cmd_fence = VK_NULL_HANDLE;
+    frame->cmd_fence_waitable = false;
+
+    vkDestroySemaphore(vk_state->device, frame->acquire_semaphore, nullptr);
+    frame->acquire_semaphore = VK_NULL_HANDLE;
+
+    vkFreeDescriptorSets(vk_state->device, descriptor_pool, 1,
+                         &frame->graphics_desc_set);
+  }
 
   vkDestroyDescriptorPool(vk_state->device, descriptor_pool, nullptr);
 

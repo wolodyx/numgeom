@@ -184,6 +184,11 @@
       "configuration": "Release"
     },
     {
+      "name": "windows-sdk-debug",
+      "configurePreset": "windows-sdk",
+      "configuration": "Debug"
+    },
+    {
       "name": "windows-system-release",
       "configurePreset": "windows-system",
       "configuration": "Release"

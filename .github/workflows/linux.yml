@@ -158,11 +158,8 @@ jobs:
         run: |
           aws s3 cp "s3://${{ secrets.YC_BUCKET_NAME }}/sdk/ubuntu24.04" \
                     "${{ runner.temp }}/sdk.zip"
-      - name: Extract vcpkg export archive to /.sdk
-        run: |
           unzip -o "${{ runner.temp }}/sdk.zip"
           rm -f "${{ runner.temp }}/sdk.zip"
-          mv vcpkg-export-*/ .sdk
       - name: Install linuxdeploy
         run: |
           mkdir ${{ runner.temp }}/bin

@@ -102,13 +102,8 @@ jobs:
         shell: pwsh
         run: |
           aws s3 cp "s3://${{ secrets.YC_BUCKET_NAME }}/sdk/windows2022" "${{ runner.temp }}/sdk.zip"
-      - name: Extract vcpkg export archive to /.sdk
-        shell: pwsh
-        run: |
           Expand-Archive -Path "${{ runner.temp }}/sdk.zip" -DestinationPath "${{ github.workspace }}"
-          Remove-Item -Path "${{ runner.temp }}/sdk.zip" -Recurse -Force
-          $extracted_dir = Get-Item "${{ github.workspace }}/vcpkg-export-*"
-          Rename-Item -Path $extracted_dir.FullName -NewName "${{ github.workspace }}/.sdk"
+          Remove-Item -Path "${{ runner.temp }}/sdk.zip" -Force
       - name: Install NSIS
         uses: negrutiu/nsis-install@v2
         with:

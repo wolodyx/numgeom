@@ -10,6 +10,10 @@
     "files.trimTrailingWhitespace": true,
     "files.encoding": "utf8",
 
-    "terminal.integrated.defaultProfile.windows": "Windows PowerShell",
-    "terminal.integrated.defaultProfile.linux": "bash"
+    "terminal.integrated.defaultProfile.windows": "PowerShell",
+    "terminal.integrated.defaultProfile.linux": "bash",
+
+    "files.exclude": {
+        "worktree*/": true
+    }
 }

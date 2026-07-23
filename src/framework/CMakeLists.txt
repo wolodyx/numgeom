@@ -7,6 +7,7 @@ set(PUBLIC_HEADERS
   include/numgeom/drawable_sphere.h
   include/numgeom/fgobject.h
   include/numgeom/fgtext.h
+  include/numgeom/framework_enums.h
   include/numgeom/lrupool.h
   include/numgeom/pixelbuffer.h
   include/numgeom/scene.h

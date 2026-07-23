@@ -48,6 +48,7 @@ class MainWindow : public QMainWindow {
   void onDownloadData();
   void onFitScene();
   void onGoToTestData();
+  void onMsaa(QAction* action);
   void onOpenFile();
   void onOpenRecentFile();
   void onQuit();

@@ -4,6 +4,7 @@
 #include <functional>
 #include <string>
 
+#include "numgeom/framework_enums.h"
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
 #include "numgeom/trimesh.h"
@@ -64,6 +65,9 @@ class FRAMEWORK_EXPORT Application {
   bool Remove(Scene*, const FgObject*);
 
   VkSceneRenderer* GetRenderer();
+
+  SampleCount GetSampleCount() const;
+  bool SetSampleCount(SampleCount);
 
   void Sync();
 

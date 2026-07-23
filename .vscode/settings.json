@@ -14,6 +14,7 @@
     "terminal.integrated.defaultProfile.linux": "bash",
 
     "files.exclude": {
-        "worktree*/": true
+        "worktree*/": true,
+        "vcpkg/": true,
     }
 }

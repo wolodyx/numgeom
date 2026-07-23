@@ -329,6 +329,39 @@ void MainWindow::createSceneMenu() {
     connect(act, SIGNAL(triggered()), this, SLOT(onAddFgText()));
     menu->addAction(act);
   }
+
+  menu->addSeparator();
+
+  // MSAA submenu
+  {
+    QMenu* msaa_menu = menu->addMenu(tr("MSAA"));
+    QActionGroup* msaa_group = new QActionGroup(this);
+    msaa_group->setExclusive(true);
+
+    struct MsaaEntry {
+      const char* label;
+      SampleCount sample_count;
+    };
+    const MsaaEntry entries[] = {
+      {"Disable", SampleCount::Bits_1},
+      {"2 bit",   SampleCount::Bits_2},
+      {"4 bit",   SampleCount::Bits_4},
+      {"8 bit",   SampleCount::Bits_8},
+      {"16 bit",  SampleCount::Bits_16},
+      {"32 bit",  SampleCount::Bits_32},
+      {"64 bit",  SampleCount::Bits_64},
+    };
+
+    for (const auto& entry : entries) {
+      QAction* act = new QAction(tr(entry.label), this);
+      act->setCheckable(true);
+      act->setChecked(entry.sample_count == app_->GetSampleCount());
+      act->setData(static_cast<int>(entry.sample_count));
+      msaa_group->addAction(act);
+      msaa_menu->addAction(act);
+    }
+    connect(msaa_group, &QActionGroup::triggered, this, &MainWindow::onMsaa);
+  }
 }
 
 void MainWindow::createWindowMenu() {
@@ -652,6 +685,28 @@ void MainWindow::onFitScene() {
   Scene* scene = active_sub->GetScene();
   if (!scene) return;
   scene->FitScene();
+  app_->Update(scene);
+}
+
+void MainWindow::onMsaa(QAction* action) {
+  if (!action) return;
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+  SampleCount count = static_cast<SampleCount>(action->data().toInt());
+  if (!app_->SetSampleCount(count)) {
+    qWarning() << "Error of sample count setting";
+    // Revert the action's checked state to the current sample count
+    SampleCount current = app_->GetSampleCount();
+    for (QAction* act : action->actionGroup()->actions()) {
+      if (static_cast<SampleCount>(act->data().toInt()) == current) {
+        act->setChecked(true);
+        break;
+      }
+    }
+    return;
+  }
   app_->Update(scene);
 }
 

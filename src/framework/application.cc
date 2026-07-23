@@ -15,6 +15,7 @@
 #include "fgimage.h"
 #include "trackedobjectlist.h"
 #include "trackedobjectdict.h"
+#include "vkutilities.h"
 
 class ApplicationImpl {
  public:
@@ -229,4 +230,20 @@ bool Application::Remove(Scene*, const FgObject*) {
 void Application::Sync() {
   impl_->scenes_.Synch();
   impl_->fg_objects_.Synch();
+}
+
+bool Application::SetSampleCount(SampleCount count) {
+  if (count == SampleCount::Bits_None)
+    return false;
+  VkSampleCountFlagBits max_count = impl_->renderer_->GetMaxUsableSampleCount();
+  VkSampleCountFlagBits desired_count = ToVkSampleCountFlagBits(count);
+  bool in_the_range = static_cast<int>(desired_count) <= static_cast<int>(max_count);
+  if (!in_the_range)
+    return false;
+  VkSampleCountFlagBits next_count = (in_the_range ? desired_count : max_count);
+  return impl_->renderer_->SetSampleCount(next_count);
+}
+
+SampleCount Application::GetSampleCount() const {
+  return ToSampleCount(impl_->renderer_->GetSampleCount());
 }

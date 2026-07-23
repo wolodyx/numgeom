@@ -32,6 +32,10 @@ class VkSceneRenderer {
   //! существующий или, если отсутствует, то вновь созданный.
   VkInstance GetInstance() const;
 
+  VkSampleCountFlagBits GetMaxUsableSampleCount() const;
+  VkSampleCountFlagBits GetSampleCount() const;
+  bool SetSampleCount(VkSampleCountFlagBits);
+
  private:
   VkSceneRenderer(const VkSceneRenderer&) = delete;
   VkSceneRenderer& operator=(const VkSceneRenderer&) = delete;

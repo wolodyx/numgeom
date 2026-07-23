@@ -623,3 +623,29 @@ const char* VkFormatToString(VkFormat f) {
   sprintf(message, "VK code %d", static_cast<int>(f));
   return message;
 }
+
+VkSampleCountFlagBits ToVkSampleCountFlagBits(SampleCount sample_count) {
+  switch (sample_count) {
+    case SampleCount::Bits_1:  return VK_SAMPLE_COUNT_1_BIT;
+    case SampleCount::Bits_2:  return VK_SAMPLE_COUNT_2_BIT;
+    case SampleCount::Bits_4:  return VK_SAMPLE_COUNT_4_BIT;
+    case SampleCount::Bits_8:  return VK_SAMPLE_COUNT_8_BIT;
+    case SampleCount::Bits_16: return VK_SAMPLE_COUNT_16_BIT;
+    case SampleCount::Bits_32: return VK_SAMPLE_COUNT_32_BIT;
+    case SampleCount::Bits_64: return VK_SAMPLE_COUNT_64_BIT;
+  }
+  return VK_SAMPLE_COUNT_FLAG_BITS_MAX_ENUM;
+}
+
+SampleCount ToSampleCount(VkSampleCountFlagBits sample_count) {
+  switch (sample_count) {
+    case VK_SAMPLE_COUNT_1_BIT:  return SampleCount::Bits_1;
+    case VK_SAMPLE_COUNT_2_BIT:  return SampleCount::Bits_2;
+    case VK_SAMPLE_COUNT_4_BIT:  return SampleCount::Bits_4;
+    case VK_SAMPLE_COUNT_8_BIT:  return SampleCount::Bits_8;
+    case VK_SAMPLE_COUNT_16_BIT: return SampleCount::Bits_16;
+    case VK_SAMPLE_COUNT_32_BIT: return SampleCount::Bits_32;
+    case VK_SAMPLE_COUNT_64_BIT: return SampleCount::Bits_64;
+  }
+  return SampleCount::Bits_None;
+}

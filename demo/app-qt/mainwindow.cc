@@ -176,21 +176,10 @@ void MainWindow::createFileMenu() {
     menu->addAction(act);
   }
 
-  menu->addSeparator();
-
   recent_files_menu_ = menu->addMenu(tr("Open &Recent"));
   updateRecentFilesMenu();
 
   menu->addSeparator();
-
-  {
-    QIcon icon;
-    icon.addFile(QString::fromUtf8(":/resources/icons/screenshot-16.png"),
-                 QSize(), QIcon::Normal, QIcon::Off);
-    QAction* act = new QAction(icon, tr("Screenshot"), this);
-    connect(act, SIGNAL(triggered()), this, SLOT(onScreenshot()));
-    menu->addAction(act);
-  }
 
   {
     QIcon icon;
@@ -307,30 +296,40 @@ void MainWindow::createSceneMenu() {
 
   {
     QIcon icon;
-    icon.addFile(QString::fromUtf8(":/resources/icons/axis-indicator-16.png"),
+    icon.addFile(QString::fromUtf8(":/resources/icons/screenshot-16.png"),
                  QSize(), QIcon::Normal, QIcon::Off);
-    QAction* act = new QAction(icon, tr("Add axis indicator"), this);
-    connect(act, SIGNAL(triggered()), this, SLOT(onAddAxisIndicator()));
-    menu->addAction(act);
-  }
-  {
-    QIcon icon;
-    icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-image-16.png"),
-                 QSize(), QIcon::Normal, QIcon::Off);
-    QAction* act = new QAction(icon, tr("Add foreground image"), this);
-    connect(act, SIGNAL(triggered()), this, SLOT(onAddFgImage()));
-    menu->addAction(act);
-  }
-  {
-    QIcon icon;
-    icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-text-16.png"),
-                 QSize(), QIcon::Normal, QIcon::Off);
-    QAction* act = new QAction(icon, tr("Add foreground text"), this);
-    connect(act, SIGNAL(triggered()), this, SLOT(onAddFgText()));
+    QAction* act = new QAction(icon, tr("Screenshot"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onScreenshot()));
     menu->addAction(act);
   }
 
-  menu->addSeparator();
+  {
+    QMenu* add_menu = menu->addMenu(tr("Add"));
+    {
+      QIcon icon;
+      icon.addFile(QString::fromUtf8(":/resources/icons/axis-indicator-16.png"),
+                   QSize(), QIcon::Normal, QIcon::Off);
+      QAction* act = new QAction(icon, tr("Axis indicator"), this);
+      connect(act, SIGNAL(triggered()), this, SLOT(onAddAxisIndicator()));
+      add_menu->addAction(act);
+    }
+    {
+      QIcon icon;
+      icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-image-16.png"),
+                   QSize(), QIcon::Normal, QIcon::Off);
+      QAction* act = new QAction(icon, tr("Foreground image"), this);
+      connect(act, SIGNAL(triggered()), this, SLOT(onAddFgImage()));
+      add_menu->addAction(act);
+    }
+    {
+      QIcon icon;
+      icon.addFile(QString::fromUtf8(":/resources/icons/add-foreground-text-16.png"),
+                   QSize(), QIcon::Normal, QIcon::Off);
+      QAction* act = new QAction(icon, tr("Foreground text"), this);
+      connect(act, SIGNAL(triggered()), this, SLOT(onAddFgText()));
+      add_menu->addAction(act);
+    }
+  }
 
   // MSAA submenu
   {
@@ -451,8 +450,6 @@ void MainWindow::createHelpMenu() {
     connect(act, SIGNAL(triggered()), this, SLOT(onGoToTestData()));
     test_data_menu->addAction(act);
   }
-
-  menu->addSeparator();
 
   { // About
     QIcon icon;

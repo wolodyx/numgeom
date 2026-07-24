@@ -8,8 +8,10 @@ layout (std140, set = 0, binding = 1) uniform FragmentBufferObject{
 layout(location = 0) in vec3 in_position;
 layout(location = 1) in vec3 in_normal;
 layout(location = 2) in vec4 in_color;
+layout(location = 3) flat in uint in_object_id;
 
 layout(location = 0) out vec4 out_color;
+layout(location = 1) out uint out_object_id;
 
 void main() {
   float ambient = 0.1;
@@ -25,4 +27,5 @@ void main() {
   }
   vec3 color = (ambient + diffuse + specular) * in_color.xyz;
   out_color = vec4(color, in_color.w);
+  out_object_id = in_object_id;
 }

@@ -12,6 +12,7 @@
 class QWindow;
 
 class ApplicationImpl;
+class Drawable;
 class FgObject;
 class FgText;
 class Scene;
@@ -70,6 +71,8 @@ class FRAMEWORK_EXPORT Application {
   bool SetSampleCount(SampleCount);
 
   void Sync();
+
+  Drawable* Pick(Scene*, int x, int y) const;
 
  private:
   Application(const Application&) = delete;

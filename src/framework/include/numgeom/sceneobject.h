@@ -21,6 +21,13 @@ class FRAMEWORK_EXPORT SceneObject : public TrackedObject {
   SceneObject(Scene*);
   virtual ~SceneObject();
 
+  bool IsVisible() const;
+  void SetVisible(bool visible = true);
+
+  bool IsPickable() const;
+  void DisablePicking();
+  void EnablePicking();
+
   AlignedBoundBox GetBoundBox() const;
 
   size_t DrawablesCount() const;

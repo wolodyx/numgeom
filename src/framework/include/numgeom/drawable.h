@@ -21,6 +21,23 @@ class FRAMEWORK_EXPORT Drawable : public TrackedObject {
  public:
   Drawable(SceneObject* parent);
   virtual ~Drawable();
+
+  bool IsVisible() const;
+  void SetVisibility(bool visible = true);
+
+  bool IsPickable() const;
+  void DisablePicking();
+  void EnablePicking();
+
+  bool IsSelected() const;
+  void Select();
+  void Deselect();
+
+  bool IsHighlighted() const;
+  void Highlight(bool on = true);
+
+  uint32_t GetId() const;
+
   virtual PrimitiveType Type() const = 0;
   virtual size_t GetVertsCount() const = 0;
   virtual size_t GetCellsCount() const = 0;
@@ -42,7 +59,12 @@ class FRAMEWORK_EXPORT Drawable : public TrackedObject {
 
  private:
   SceneObject* parent_;
+  uint32_t id_;
   glm::vec3 color_;
+  bool is_pickable_;
+  bool is_selected_;
+  bool is_visible_;
+  bool is_highlighted_;
 };
 
 class FRAMEWORK_EXPORT Drawable0 : public Drawable {

@@ -28,6 +28,8 @@ class VkSceneRenderer {
   //! Запрос на обновление связанного со сценой изображения.
   bool Update(Scene*);
 
+  uint32_t GetObjectId(Scene* scene, int x, int y) const;
+
   //! Возвращает экземпляр vulkan:
   //! существующий или, если отсутствует, то вновь созданный.
   VkInstance GetInstance() const;

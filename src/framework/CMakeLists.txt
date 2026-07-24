@@ -55,6 +55,8 @@ set(SHADER_FILES
   app.frag
   compositing.vert
   compositing.frag
+  selection.vert
+  selection.frag
   text.vert
   text.frag
 )

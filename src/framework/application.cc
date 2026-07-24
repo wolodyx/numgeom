@@ -5,6 +5,7 @@
 #include <map>
 
 #include "numgeom/alignedboundbox.h"
+#include "numgeom/drawable.h"
 #include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
@@ -246,4 +247,16 @@ bool Application::SetSampleCount(SampleCount count) {
 
 SampleCount Application::GetSampleCount() const {
   return ToSampleCount(impl_->renderer_->GetSampleCount());
+}
+
+Drawable* Application::Pick(Scene* scene, int x, int y) const {
+  auto id = impl_->renderer_->GetObjectId(scene, x, y);
+  if (id == 0) return nullptr;
+  for (auto o : scene->Objects()) {
+    for (auto d : o->Drawables()) {
+      if (d->GetId() == id)
+        return d;
+    }
+  }
+  return nullptr;
 }

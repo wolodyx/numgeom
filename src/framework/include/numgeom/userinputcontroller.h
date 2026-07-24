@@ -3,12 +3,19 @@
 
 #include "glm/glm.hpp"
 
+class Application;
 class Scene;
-class VkSceneRenderer;
 
+/**
+\class UserInputController
+\brief Контроллер ввода пользователя.
+
+Контроллер преобразует ввод пользователя в перемещение камеры и подсветку
+объектов в сцене.
+ */
 class UserInputController {
  public:
-  UserInputController(Scene*, VkSceneRenderer*);
+  UserInputController(Application*, Scene*);
 
   ~UserInputController();
 

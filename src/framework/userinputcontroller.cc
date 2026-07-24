@@ -88,22 +88,18 @@ void UserInputController::mouseLeftButtonUp(int x, int y) {
   bool beClicked = impl_->mouseLeftButtonState.xDown == x &&
                    impl_->mouseLeftButtonState.yDown == y;
 
-  // The event of a left-click on the scene, not on the object.
-  if (beClicked && !impl_->mouseLeftButtonState.selected_item) {
-    return;
-  }
+  Drawable* selected_item = impl_->mouseLeftButtonState.selected_item;
 
   // The event of a left-click on an object.
   std::vector<Drawable*> selected_objs, deselected_objs;
   if (beClicked) {
     auto it = std::find(impl_->selected_items.begin(),
-                        impl_->selected_items.end(),
-                        impl_->mouseLeftButtonState.selected_item);
+                        impl_->selected_items.end(), selected_item);
 
     if (it != impl_->selected_items.end()) {
       impl_->selected_items.erase(it);
-      impl_->mouseLeftButtonState.selected_item->Deselect();
-      deselected_objs.push_back(impl_->mouseLeftButtonState.selected_item);
+      selected_item->Deselect();
+      deselected_objs.push_back(selected_item);
     }
     else {
       if (impl_->picking_mode.sel_mode == SelectionMode::Single) {
@@ -113,11 +109,10 @@ void UserInputController::mouseLeftButtonUp(int x, int y) {
         impl_->selected_items.clear();
       }
 
-      auto picked_item = impl_->mouseLeftButtonState.selected_item;
-      if (picked_item && impl_->picking_mode.sel_mode != SelectionMode::DraggingOnly) {
-        picked_item->Select();
-        impl_->selected_items.push_back(picked_item);
-        selected_objs.push_back(picked_item);
+      if (selected_item && impl_->picking_mode.sel_mode != SelectionMode::DraggingOnly) {
+        selected_item->Select();
+        impl_->selected_items.push_back(selected_item);
+        selected_objs.push_back(selected_item);
       }
     }
 

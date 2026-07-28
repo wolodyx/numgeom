@@ -17,7 +17,7 @@ jobs:
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-sdk
 
-  Ubuntu-24.04:
+  Ubuntu-2404:
     runs-on: self-hosted-ubuntu24.04
     steps:
       - uses: actions/checkout@v4

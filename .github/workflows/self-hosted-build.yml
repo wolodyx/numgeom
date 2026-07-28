@@ -3,8 +3,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  job:
-    name: "Windows-2022"
+  Windows-2022:
     runs-on: self-hosted-windows2022
     steps:
       - uses: actions/checkout@v4
@@ -18,8 +17,7 @@ jobs:
       - name: Build, test and package
         run: cmake --workflow --preset ci-windows-sdk
 
-  job:
-    name: "Ubuntu-24.04"
+  Ubuntu-24.04:
     runs-on: self-hosted-ubuntu24.04
     steps:
       - uses: actions/checkout@v4

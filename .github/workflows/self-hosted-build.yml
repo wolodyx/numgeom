@@ -1,0 +1,20 @@
+name: self-hosted-build
+on:
+  workflow_dispatch:
+
+jobs:
+  job:
+    name: ${{ matrix.os }}-${{ github.workflow }}
+    runs-on: self-hosted
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          submodules: recursive
+      - name: Install dependencies
+        shell: pwsh
+        run: New-Item -ItemType SymbolicLink -Path "${{ github.workspace }}\.sdk" -Target "$env:USERPROFILE\.sdk"
+      - name: Build, test and package
+        run: cmake --workflow --preset ci-windows-sdk

@@ -1,31 +1,6 @@
 name: Linux Build
 on:
   workflow_dispatch:
-  push:
-    branches: ['main']
-    tags: ['v*']
-    paths-ignore:
-      - '.codeassistant'
-      - '.devcontainer'
-      - '.github/**'
-      - '!.github/workflows/linux.yml'
-      - '.vscode'
-      - 'devops/**'
-      - 'docs/**'
-      - 'vcpkg/**'
-      - '**.md'
-  pull_request:
-    types: [opened]
-    paths-ignore:
-      - '.codeassistant'
-      - '.devcontainer'
-      - '.github/**'
-      - '!.github/workflows/windows.yml'
-      - '.vscode'
-      - 'devops/**'
-      - 'docs/**'
-      - 'vcpkg/**'
-      - '**.md'
 
 jobs:
   # Сборка проекта с внешними зависимостями, уже установленными в систему.

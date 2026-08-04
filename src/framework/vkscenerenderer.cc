@@ -3167,8 +3167,11 @@ void UpdateDescriptorSets(
   // -- each array element is padded to 16 bytes (vec4 alignment)
   // -- followed by selected_count at offset 64*16 = 1024.
   struct SelectionDataStd140 {
-    uint32_t ids[64];  // Each element occupies 16 bytes (only first 4 used)
-    uint32_t padding[3 * 64];  // explicit padding to match std140 array stride
+    struct IdEntry {
+      uint32_t id;
+      uint32_t pad[3];  // pad each element to 16 bytes to match std140 stride
+    };
+    IdEntry ids[64];  // 64 * 16 = 1024 bytes
     uint32_t selected_count;
   };
   SelectionDataStd140 selection_data{};
@@ -3177,7 +3180,7 @@ void UpdateDescriptorSets(
     for (Drawable* d : o->Drawables()) {
       if (d->IsSelected()) {
         if (selection_count < 64) {
-          selection_data.ids[selection_count++] = d->GetId();
+          selection_data.ids[selection_count++].id = d->GetId();
         }
       }
     }

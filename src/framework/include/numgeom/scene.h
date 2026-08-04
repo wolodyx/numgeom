@@ -7,6 +7,7 @@
 #include "glm/glm.hpp"
 
 #include "numgeom/alignedboundbox.h"
+#include "numgeom/framework_enums.h"
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
 #include "numgeom/orthobasis.h"
@@ -76,6 +77,9 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
 
   void SetVulkanSurface(uint64_t);
   uint64_t GetVulkanSurface() const;
+
+  void SetSelectionMode(SelectionMode);
+  SelectionMode GetSelectionMode() const;
 
  private:
   Scene(const Scene&) = delete;

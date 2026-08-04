@@ -1,5 +1,6 @@
 #include "trackedobjectdict.h"
 
+#include "numgeom/iteratorimpl.hpp"
 #include "numgeom/trackedobject.h"
 
 TrackedObjectDict::TrackedObjectDict() {
@@ -50,7 +51,8 @@ bool TrackedObjectDict::Remove(TrackedObject* object) {
 
 void TrackedObjectDict::Clear() {
   for (auto& [key,object] : objects_) {
-    if (object->GetState() != TrackedObject::State::Delete)
+    auto s = object->GetState();
+    if (s != TrackedObject::State::Delete && s != TrackedObject::State::Removed)
       object->MarkForDeletion();
   }
 }
@@ -65,4 +67,19 @@ void TrackedObjectDict::Synch() {
       objects_.erase(it_current);
     }
   }
+}
+
+Iterator<TrackedObject*> TrackedObjectDict::GetObjects() const {
+  auto it_impl = new IteratorImpl_StdMapValue<std::string,TrackedObject*>(
+      objects_.begin(), objects_.end());
+  struct NonDeletedObjectFilter {
+    bool operator()(const TrackedObject* o) const {
+      auto s = o->GetState();
+      return s != TrackedObject::State::Removed &&
+             s != TrackedObject::State::Delete;
+    }
+  };
+  auto it_filter_impl = new IteratorImpl_Filter<TrackedObject*,
+                                                NonDeletedObjectFilter>(it_impl);
+  return Iterator<TrackedObject*>(it_filter_impl);
 }

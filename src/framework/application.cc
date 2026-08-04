@@ -7,6 +7,7 @@
 #include "numgeom/alignedboundbox.h"
 #include "numgeom/drawable.h"
 #include "numgeom/fgtext.h"
+#include "numgeom/iteratorimpl.hpp"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
@@ -30,6 +31,7 @@ class ApplicationImpl {
   Scene* active_scene_ = nullptr;
   TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
+  SelectionMode selection_mode_ = SelectionMode::Disable;
 };
 
 namespace {
@@ -103,6 +105,7 @@ Scene* Application::AddScene(const std::string& new_scene_name,
     impl_->foreground2background_.insert(std::make_pair(new_scene,background_scene));
   if (!impl_->active_scene_)
     impl_->active_scene_ = new_scene;
+  new_scene->SetSelectionMode(impl_->selection_mode_);
   return new_scene;
 }
 
@@ -259,4 +262,15 @@ Drawable* Application::Pick(Scene* scene, int x, int y) const {
     }
   }
   return nullptr;
+}
+
+SelectionMode Application::GetSelectionMode() const {
+  return impl_->selection_mode_;
+}
+
+void Application::SetSelectionMode(SelectionMode selection_mode) {
+  impl_->selection_mode_ = selection_mode;
+  for (Scene* s : GetObjects<Scene>(impl_->scenes_)) {
+    s->SetSelectionMode(selection_mode);
+  }
 }

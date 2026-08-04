@@ -1,6 +1,13 @@
 #ifndef NUMGEOM_FRAMEWORK_FRAMEWORK_ENUMS_H
 #define NUMGEOM_FRAMEWORK_FRAMEWORK_ENUMS_H
 
+enum class SelectionMode {
+  Disable,
+  Single,
+  Multiple,
+  DraggingOnly
+};
+
 enum class SampleCount {
   Bits_None = 0x00000000,
   Bits_1    = 0x00000001,

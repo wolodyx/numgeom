@@ -19,25 +19,25 @@ class UserInputController {
 
   ~UserInputController();
 
-  void keyPressed(int key);
+  void KeyPressed(int key);
 
-  void keyReleased(int key);
+  void KeyReleased(int key);
 
-  void mouseLeftButtonDown(int x, int y);
+  void MouseLeftButtonDown(int x, int y);
 
-  void mouseLeftButtonUp(int x, int y);
+  void MouseLeftButtonUp(int x, int y);
 
-  void mouseMiddleButtonDown(int x, int y);
+  void MouseMiddleButtonDown(int x, int y);
 
-  void mouseMiddleButtonUp(int x, int y);
+  void MouseMiddleButtonUp(int x, int y);
 
-  void mouseRightButtonDown(int x, int y);
+  void MouseRightButtonDown(int x, int y);
 
-  void mouseRightButtonUp(int x, int y);
+  void MouseRightButtonUp(int x, int y);
 
-  void mouseMove(int x, int y);
+  void MouseMove(int x, int y);
 
-  void mouseWheelRotate(int count);
+  void MouseWheelRotate(int count);
 
  private:
   UserInputController(const UserInputController&) = delete;

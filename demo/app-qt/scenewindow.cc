@@ -47,24 +47,24 @@ SceneWindow::~SceneWindow() {
 
 void SceneWindow::keyPressEvent(QKeyEvent* event) {
   int key = event->key();
-  user_input_controller_->keyPressed(key);
+  user_input_controller_->KeyPressed(key);
   QWindow::keyPressEvent(event);
 }
 
 void SceneWindow::keyReleaseEvent(QKeyEvent* event) {
   int key = event->key();
-  user_input_controller_->keyReleased(key);
+  user_input_controller_->KeyReleased(key);
   QWindow::keyPressEvent(event);
 }
 
 void SceneWindow::mousePressEvent(QMouseEvent* event) {
   QPoint pt = event->pos();
   if (event->button() == Qt::LeftButton)
-    user_input_controller_->mouseLeftButtonDown(pt.x(), pt.y());
+    user_input_controller_->MouseLeftButtonDown(pt.x(), pt.y());
   else if (event->button() == Qt::RightButton)
-    user_input_controller_->mouseRightButtonDown(pt.x(), pt.y());
+    user_input_controller_->MouseRightButtonDown(pt.x(), pt.y());
   else if (event->button() == Qt::MiddleButton)
-    user_input_controller_->mouseMiddleButtonDown(pt.x(), pt.y());
+    user_input_controller_->MouseMiddleButtonDown(pt.x(), pt.y());
   else {
     event->ignore();
     return;
@@ -76,11 +76,11 @@ void SceneWindow::mousePressEvent(QMouseEvent* event) {
 void SceneWindow::mouseReleaseEvent(QMouseEvent* event) {
   QPoint pt = event->pos();
   if (event->button() == Qt::LeftButton)
-    user_input_controller_->mouseLeftButtonUp(pt.x(), pt.y());
+    user_input_controller_->MouseLeftButtonUp(pt.x(), pt.y());
   else if (event->button() == Qt::RightButton)
-    user_input_controller_->mouseRightButtonUp(pt.x(), pt.y());
+    user_input_controller_->MouseRightButtonUp(pt.x(), pt.y());
   else if (event->button() == Qt::MiddleButton)
-    user_input_controller_->mouseMiddleButtonUp(pt.x(), pt.y());
+    user_input_controller_->MouseMiddleButtonUp(pt.x(), pt.y());
   else {
     event->ignore();
     return;
@@ -91,14 +91,14 @@ void SceneWindow::mouseReleaseEvent(QMouseEvent* event) {
 
 void SceneWindow::mouseMoveEvent(QMouseEvent* event) {
   QPoint pt = event->pos();
-  user_input_controller_->mouseMove(pt.x(), pt.y());
+  user_input_controller_->MouseMove(pt.x(), pt.y());
   event->accept();
 }
 
 void SceneWindow::wheelEvent(QWheelEvent* event) {
   QPoint angleDelta = event->angleDelta();
   int numDegrees = angleDelta.y() / 8;
-  user_input_controller_->mouseWheelRotate(numDegrees);
+  user_input_controller_->MouseWheelRotate(numDegrees);
   event->accept();
 }
 

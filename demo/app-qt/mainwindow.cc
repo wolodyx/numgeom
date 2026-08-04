@@ -21,6 +21,7 @@
 #include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
+#include "numgeom/scenewidget_arrow.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/vkscenerenderer.h"
 #ifdef USE_NUMGEOM_MODULE_OCC
@@ -158,6 +159,7 @@ void MainWindow::createActions() {
   this->createFileMenu();
   this->createViewMenu();
   this->createSceneMenu();
+  this->createPickingMenu();
   this->createWindowMenu();
   this->createHelpMenu();
 }
@@ -307,6 +309,14 @@ void MainWindow::createSceneMenu() {
     QMenu* add_menu = menu->addMenu(tr("Add"));
     {
       QIcon icon;
+      icon.addFile(QString::fromUtf8(":/resources/icons/add-arrow.ico"),
+                   QSize(), QIcon::Normal, QIcon::Off);
+      QAction* act = new QAction(icon, tr("Arrow"), this);
+      connect(act, SIGNAL(triggered()), this, SLOT(onAddArrow()));
+      add_menu->addAction(act);
+    }
+    {
+      QIcon icon;
       icon.addFile(QString::fromUtf8(":/resources/icons/axis-indicator-16.png"),
                    QSize(), QIcon::Normal, QIcon::Off);
       QAction* act = new QAction(icon, tr("Axis indicator"), this);
@@ -361,6 +371,34 @@ void MainWindow::createSceneMenu() {
     }
     connect(msaa_group, &QActionGroup::triggered, this, &MainWindow::onMsaa);
   }
+}
+
+void MainWindow::createPickingMenu() {
+  QMenu* menu = menuBar()->addMenu(tr("&Picking"));
+
+  QActionGroup* picking_group = new QActionGroup(this);
+  picking_group->setExclusive(true);
+
+  struct PickingEntry {
+    const char* label;
+    SelectionMode mode;
+  };
+  const PickingEntry entries[] = {
+    {"Disable",          SelectionMode::Disable},
+    {"Single selection", SelectionMode::Single},
+    {"Multiple selection", SelectionMode::Multiple},
+  };
+
+  SelectionMode current_selection_mode = app_->GetSelectionMode();
+  for (const auto& entry : entries) {
+    QAction* act = new QAction(tr(entry.label), this);
+    act->setCheckable(true);
+    act->setChecked(entry.mode == current_selection_mode);
+    act->setData(static_cast<int>(entry.mode));
+    picking_group->addAction(act);
+    menu->addAction(act);
+  }
+  connect(picking_group, &QActionGroup::triggered, this, &MainWindow::onPickingMode);
 }
 
 void MainWindow::createWindowMenu() {
@@ -707,6 +745,14 @@ void MainWindow::onMsaa(QAction* action) {
   app_->Update(scene);
 }
 
+void MainWindow::onPickingMode(QAction* action) {
+  bool ok;
+  int mode = action->data().toInt(&ok);
+  if (!ok) return;
+  SelectionMode selection_mode = static_cast<SelectionMode>(mode);
+  app_->SetSelectionMode(selection_mode);
+}
+
 void MainWindow::onAddAxisIndicator() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
@@ -714,6 +760,17 @@ void MainWindow::onAddAxisIndicator() {
   if (!scene) return;
   scene->Clear();
   scene->AddObject<SceneWidget_AxisIndicator>();
+  scene->FitScene();
+  app_->Update(scene);
+}
+
+void MainWindow::onAddArrow() {
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+  scene->Clear();
+  scene->AddObject<SceneWidget_Arrow>();
   scene->FitScene();
   app_->Update(scene);
 }

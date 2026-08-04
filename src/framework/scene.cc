@@ -15,6 +15,7 @@ class SceneImpl {
   Camera camera_;
   TrackedObjectList objects_;
   uint64_t vulkan_surface_ = 0;
+  SelectionMode selection_mode_ = SelectionMode::Disable;
 };
 
 Scene::Scene(const std::string& name) {
@@ -139,4 +140,12 @@ void Scene::SetVulkanSurface(uint64_t surface) {
 
 uint64_t Scene::GetVulkanSurface() const {
   return impl_->vulkan_surface_;
+}
+
+void Scene::SetSelectionMode(SelectionMode mode) {
+  impl_->selection_mode_ = mode;
+}
+
+SelectionMode Scene::GetSelectionMode() const {
+  return impl_->selection_mode_;
 }

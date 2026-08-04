@@ -10,11 +10,11 @@ class TrackedObjectList;
 class TrackedObject {
  public:
   enum class State {
-    New,
-    Clean,
-    Dirty,
-    Removed,
-    Delete
+    New,     //< Только что добавлен.
+    Clean,   //< Не изменился с последней синхронизации.
+    Dirty,   //< Внесены изменения.
+    Removed, //< Отмечен удаленным, но еще не синхронизирован.
+    Delete   //< В очереди на удаление (отмечен на удаление и синхронизирован).
   };
 
  public:

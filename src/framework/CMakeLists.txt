@@ -14,6 +14,7 @@ set(PUBLIC_HEADERS
   include/numgeom/sceneobject.h
   include/numgeom/sceneobject_mesh.h
   include/numgeom/scenewidget.h
+  include/numgeom/scenewidget_arrow.h
   include/numgeom/scenewidget_axisindicator.h
   include/numgeom/trackedobject.h
   include/numgeom/userinputcontroller.h
@@ -40,6 +41,7 @@ set(SOURCE_FILES
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc
+  scenewidget_arrow.cc
   scenewidget_axisindicator.cc
   trackedobject.cc
   trackedobjectdict.cc      trackedobjectdict.h

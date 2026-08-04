@@ -70,6 +70,9 @@ class FRAMEWORK_EXPORT Application {
   SampleCount GetSampleCount() const;
   bool SetSampleCount(SampleCount);
 
+  SelectionMode GetSelectionMode() const;
+  void SetSelectionMode(SelectionMode);
+
   void Sync();
 
   Drawable* Pick(Scene*, int x, int y) const;

@@ -28,6 +28,7 @@ class MainWindow : public QMainWindow {
   void createActions();
   void createFileMenu();
   void createHelpMenu();
+  void createPickingMenu();
   void createSceneMenu();
   void createViewMenu();
   void createWindowMenu();
@@ -42,6 +43,7 @@ class MainWindow : public QMainWindow {
 
  private slots:
   void onAbout();
+  void onAddArrow();
   void onAddAxisIndicator();
   void onAddFgImage();
   void onAddFgText();
@@ -51,6 +53,7 @@ class MainWindow : public QMainWindow {
   void onMsaa(QAction* action);
   void onOpenFile();
   void onOpenRecentFile();
+  void onPickingMode(QAction* action);
   void onQuit();
   void onScreenshot();
   void updateWindowMenu(); //!< Обновляет список окон в меню Window.

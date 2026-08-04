@@ -9,22 +9,6 @@
 
 #include "glm/gtc/matrix_inverse.hpp"
 
-enum class SelectionMode { Single, Multiple, DraggingOnly };
-
-struct PickingMode
-{
-  static inline const std::function<bool(const Drawable*)> EmptyFilter =
-    [](const Drawable*) { return false; };
-
-  PickingMode() {
-    sel_mode = SelectionMode::Single;
-    filter = EmptyFilter;
-  }
-
-  SelectionMode sel_mode;
-  std::function<bool(const Drawable*)> filter;
-};
-
 struct MouseButtonState {
   bool down = false;
   int xDown = 0, yDown = 0;
@@ -36,13 +20,16 @@ struct MouseButtonState {
 };
 
 struct UserInputController::Impl {
+  static inline const std::function<bool(const Drawable*)> EmptyFilter =
+    [](const Drawable*) { return false; };
+
   Application* app;
   Scene* scene;
   MouseButtonState mouseLeftButtonState;
   MouseButtonState mouseMiddleButtonState;
   MouseButtonState mouseRightButtonState;
   std::vector<Drawable*> selected_items;
-  PickingMode picking_mode;
+  std::function<bool(const Drawable*)> filter = EmptyFilter;
 };
 
 UserInputController::UserInputController(Application* app, Scene* scene) {
@@ -54,7 +41,7 @@ UserInputController::UserInputController(Application* app, Scene* scene) {
 
 UserInputController::~UserInputController() {}
 
-void UserInputController::mouseLeftButtonDown(int x, int y) {
+void UserInputController::MouseLeftButtonDown(int x, int y) {
   impl_->mouseLeftButtonState.down = true;
   impl_->mouseLeftButtonState.xDown = x;
   impl_->mouseLeftButtonState.yDown = y;
@@ -64,7 +51,7 @@ void UserInputController::mouseLeftButtonDown(int x, int y) {
   impl_->mouseLeftButtonState.selected_item = item;
 }
 
-void UserInputController::mouseMiddleButtonDown(int x, int y) {
+void UserInputController::MouseMiddleButtonDown(int x, int y) {
   impl_->mouseMiddleButtonState.down = true;
   impl_->mouseMiddleButtonState.xDown = x;
   impl_->mouseMiddleButtonState.yDown = y;
@@ -72,7 +59,7 @@ void UserInputController::mouseMiddleButtonDown(int x, int y) {
   impl_->mouseMiddleButtonState.yPrev = y;
 }
 
-void UserInputController::mouseRightButtonDown(int x, int y) {
+void UserInputController::MouseRightButtonDown(int x, int y) {
   impl_->mouseRightButtonState.down = true;
   impl_->mouseRightButtonState.xDown = x;
   impl_->mouseRightButtonState.yDown = y;
@@ -80,48 +67,66 @@ void UserInputController::mouseRightButtonDown(int x, int y) {
   impl_->mouseRightButtonState.yPrev = y;
 }
 
-void UserInputController::mouseLeftButtonUp(int x, int y) {
+void UserInputController::MouseLeftButtonUp(int x, int y) {
   if (!impl_->mouseLeftButtonState.down) return;
 
   impl_->mouseLeftButtonState.down = false;
 
-  bool beClicked = impl_->mouseLeftButtonState.xDown == x &&
+  bool be_clicked = impl_->mouseLeftButtonState.xDown == x &&
                    impl_->mouseLeftButtonState.yDown == y;
 
-  Drawable* selected_item = impl_->mouseLeftButtonState.selected_item;
+  if (!be_clicked) return;
 
   // The event of a left-click on an object.
+
+  Drawable* selected_item = impl_->mouseLeftButtonState.selected_item;
+  SelectionMode selection_mode = impl_->scene->GetSelectionMode();
   std::vector<Drawable*> selected_objs, deselected_objs;
-  if (beClicked) {
+
+  if (!selected_item) {
+    for(auto item : impl_->selected_items)
+      item->Deselect();
+    deselected_objs = impl_->selected_items;
+    impl_->selected_items.clear();
+  } else if (selection_mode == SelectionMode::Disable) {
+    for(auto item : impl_->selected_items)
+      item->Deselect();
+    deselected_objs = impl_->selected_items;
+    impl_->selected_items.clear();
+  } else if (selection_mode == SelectionMode::Single) {
     auto it = std::find(impl_->selected_items.begin(),
                         impl_->selected_items.end(), selected_item);
-
     if (it != impl_->selected_items.end()) {
       impl_->selected_items.erase(it);
       selected_item->Deselect();
       deselected_objs.push_back(selected_item);
+    } else {
+      deselected_objs = impl_->selected_items;
+      selected_objs = {selected_item};
+      for(auto item : impl_->selected_items)
+        item->Deselect();
+      impl_->selected_items.clear();
+      selected_item->Select();
+      impl_->selected_items.push_back(selected_item);
     }
-    else {
-      if (impl_->picking_mode.sel_mode == SelectionMode::Single) {
-        for(auto item : impl_->selected_items)
-          item->Deselect();
-        deselected_objs = impl_->selected_items;
-        impl_->selected_items.clear();
-      }
-
-      if (selected_item && impl_->picking_mode.sel_mode != SelectionMode::DraggingOnly) {
-        selected_item->Select();
-        impl_->selected_items.push_back(selected_item);
-        selected_objs.push_back(selected_item);
-      }
+  } else if (selection_mode == SelectionMode::Multiple) {
+    auto it = std::find(impl_->selected_items.begin(),
+                        impl_->selected_items.end(), selected_item);
+    if (it != impl_->selected_items.end()) {
+      impl_->selected_items.erase(it);
+      selected_item->Deselect();
+      deselected_objs.push_back(selected_item);
+    } else {
+      selected_item->Select();
+      impl_->selected_items.push_back(selected_item);
+      selected_objs.push_back(selected_item);
     }
-
-    VkSceneRenderer* renderer = impl_->app->GetRenderer();
-    renderer->Update(impl_->scene);
   }
+  VkSceneRenderer* renderer = impl_->app->GetRenderer();
+  renderer->Update(impl_->scene);
 }
 
-void UserInputController::mouseMiddleButtonUp(int x, int y) {
+void UserInputController::MouseMiddleButtonUp(int x, int y) {
   if (!impl_->mouseMiddleButtonState.down) return;
 
   impl_->mouseMiddleButtonState.down = false;
@@ -130,7 +135,7 @@ void UserInputController::mouseMiddleButtonUp(int x, int y) {
                    impl_->mouseMiddleButtonState.yDown == y;
 }
 
-void UserInputController::mouseRightButtonUp(int x, int y) {
+void UserInputController::MouseRightButtonUp(int x, int y) {
   if (!impl_->mouseRightButtonState.down) return;
 
   impl_->mouseRightButtonState.down = false;
@@ -139,7 +144,7 @@ void UserInputController::mouseRightButtonUp(int x, int y) {
                    impl_->mouseRightButtonState.yDown == y;
 }
 
-void UserInputController::mouseMove(int x, int y) {
+void UserInputController::MouseMove(int x, int y) {
   VkSceneRenderer* renderer = impl_->app->GetRenderer();
 
   if (impl_->mouseLeftButtonState.down) {
@@ -171,12 +176,12 @@ void UserInputController::mouseMove(int x, int y) {
   }
 }
 
-void UserInputController::mouseWheelRotate(int numDegrees) {
+void UserInputController::MouseWheelRotate(int numDegrees) {
   VkSceneRenderer* renderer = impl_->app->GetRenderer();
   impl_->scene->ZoomCamera(numDegrees / 30.0f);
   renderer->Update(impl_->scene);
 }
 
-void UserInputController::keyPressed(int key) {}
+void UserInputController::KeyPressed(int key) {}
 
-void UserInputController::keyReleased(int key) {}
+void UserInputController::KeyReleased(int key) {}

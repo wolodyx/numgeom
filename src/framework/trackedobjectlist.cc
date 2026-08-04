@@ -18,7 +18,8 @@ bool TrackedObjectList::IsEmpty() const {
 size_t TrackedObjectList::GetObjectsCount() const {
   size_t count = 0;
   for (TrackedObject* o : objects_) {
-    if (o->GetState() != TrackedObject::State::Delete)
+    auto s = o->GetState();
+    if (s != TrackedObject::State::Removed && s == TrackedObject::State::Delete)
       ++count;
   }
   return count;
@@ -30,7 +31,9 @@ Iterator<TrackedObject*> TrackedObjectList::GetObjects() const {
                                                                objects_.end());
   struct NonDeletedObjectFilter {
     bool operator()(const TrackedObject* o) const {
-      return o->GetState() != TrackedObject::State::Delete;
+      auto s = o->GetState();
+      return s != TrackedObject::State::Removed &&
+             s != TrackedObject::State::Delete;
     }
   };
   auto it_filter_impl = new IteratorImpl_Filter<TrackedObject*,
@@ -69,7 +72,8 @@ bool TrackedObjectList::Remove(TrackedObject* object) {
 
 void TrackedObjectList::Clear() {
   for (TrackedObject* o : objects_) {
-    if (o->GetState() != TrackedObject::State::Delete)
+    auto s = o->GetState();
+    if (s != TrackedObject::State::Delete && s != TrackedObject::State::Removed)
       o->MarkForDeletion();
   }
 }

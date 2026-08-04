@@ -3,9 +3,9 @@
 NumGeom is a platform for the rapid development of 3D interactive applications using C++, Qt, Vulkan, Vcpkg, CMake, OpenCascade.
 
 * Code style: `Google C++ style Guide`
-* Configure project: `cmake --preset windows-vcpkg`
-* Build project: `cmake --build build/windows-vcpkg`
-* Test project: `ctest --test-dir build/windows-vcpkg -C Release`
+* Configure project: `cmake --preset windows-sdk`
+* Build project: `cmake --build build/windows-sdk`
+* Test project: `ctest --test-dir build/windows-sdk -C Release`
 * Unit tests use `Google Testing Framework`
 * CMake targets: `core`, `app-qt`, `framework`, `io`, `unittests`, `occ`.
 * The name of the target matches the name of the directory where it is hosted.

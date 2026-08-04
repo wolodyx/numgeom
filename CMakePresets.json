@@ -2,44 +2,6 @@
   "version": 8,
   "configurePresets": [
     {
-      "name": "linux-vcpkg-release",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Release"
-      },
-      "environment": {
-        "LD_LIBRARY_PATH": "/usr/lib64"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      }
-    },
-    {
-      "name": "linux-vcpkg-debug",
-      "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
-        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic",
-        "CMAKE_BUILD_TYPE": "Debug"
-      },
-      "environment": {
-        "LD_LIBRARY_PATH": "/usr/lib64"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      }
-    },
-    {
       "name": "linux-system-release",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
@@ -71,34 +33,6 @@
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
-      }
-    },
-    {
-      "name": "windows-vcpkg",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "toolchainFile": "vcpkg/scripts/buildsystems/vcpkg.cmake",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install",
-        "VCPKG_TARGET_TRIPLET": "x64-windows"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      }
-    },
-    {
-      "name": "windows-system",
-      "generator": "Visual Studio 17 2022",
-      "binaryDir": "${sourceDir}/build/${presetName}",
-      "cacheVariables": {
-        "CMAKE_INSTALL_PREFIX": "${sourceDir}/build/${presetName}/install"
-      },
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
       }
     },
     {
@@ -156,10 +90,6 @@
   ],
   "buildPresets": [
     {
-      "name": "linux-vcpkg-release",
-      "configurePreset": "linux-vcpkg-release"
-    },
-    {
       "name": "linux-system-release",
       "configurePreset": "linux-system-release"
     },
@@ -167,16 +97,6 @@
       "name": "linux-sdk-release",
       "targets": ["all", "appimage-app-qt"],
       "configurePreset": "linux-sdk-release"
-    },
-    {
-      "name": "windows-vcpkg-release",
-      "configurePreset": "windows-vcpkg",
-      "configuration": "Release"
-    },
-    {
-      "name": "windows-vcpkg-debug",
-      "configurePreset": "windows-vcpkg",
-      "configuration": "Debug"
     },
     {
       "name": "windows-sdk-release",
@@ -187,18 +107,9 @@
       "name": "windows-sdk-debug",
       "configurePreset": "windows-sdk",
       "configuration": "Debug"
-    },
-    {
-      "name": "windows-system-release",
-      "configurePreset": "windows-system",
-      "configuration": "Release"
     }
   ],
   "testPresets": [
-    {
-      "name": "linux-vcpkg-release",
-      "configurePreset": "linux-vcpkg-release"
-    },
     {
       "name": "linux-system-release",
       "configurePreset": "linux-system-release"
@@ -206,14 +117,6 @@
     {
       "name": "linux-sdk-release",
       "configurePreset": "linux-sdk-release"
-    },
-    {
-      "name": "windows-vcpkg-release",
-      "configurePreset": "windows-vcpkg"
-    },
-    {
-      "name": "windows-system-release",
-      "configurePreset": "windows-system"
     },
     {
       "name": "windows-sdk-release",
@@ -237,23 +140,6 @@
     }
   ],
   "workflowPresets": [
-    {
-      "name": "ci-linux-vcpkg",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "linux-vcpkg-release"
-        },
-        {
-          "type": "build",
-          "name": "linux-vcpkg-release"
-        },
-        {
-          "type": "test",
-          "name": "linux-vcpkg-release"
-        }
-      ]
-    },
     {
       "name": "ci-linux-system",
       "steps": [
@@ -293,40 +179,6 @@
         {
           "type": "package",
           "name": "linux-sdk-release"
-        }
-      ]
-    },
-    {
-      "name": "ci-windows-system",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "windows-system"
-        },
-        {
-          "type": "build",
-          "name": "windows-system-release"
-        },
-        {
-          "type": "test",
-          "name": "windows-system-release"
-        }
-      ]
-    },
-    {
-      "name": "ci-windows-vcpkg",
-      "steps": [
-        {
-          "type": "configure",
-          "name": "windows-vcpkg"
-        },
-        {
-          "type": "build",
-          "name": "windows-vcpkg-release"
-        },
-        {
-          "type": "test",
-          "name": "windows-vcpkg-release"
         }
       ]
     },

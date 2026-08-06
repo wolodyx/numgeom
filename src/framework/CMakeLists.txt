@@ -33,6 +33,7 @@ set(SOURCE_FILES
   fgimage.cc                fgimage.h
   fgobject.cc
   fgtext.cc
+  intersection.cc           intersection.h
   lrudescriptorsetpool.cc   lrudescriptorsetpool.h
   lrupool.cc
   pixelbuffer.cc
@@ -82,6 +83,7 @@ target_link_libraries(framework
     GPUOpen::VulkanMemoryAllocator
     stb_image
     stb_truetype
+    gtmathematics
 )
 
 # Use VK_NO_PROTOTYPES to disable the use of prototypes in the Vulkan header.

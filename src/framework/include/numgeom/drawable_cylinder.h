@@ -5,6 +5,7 @@
 
 class Drawable2_Cylinder : public Drawable2 {
  public:
+  Drawable2_Cylinder(SceneObject*);
   Drawable2_Cylinder(SceneObject*, const glm::vec3& bottom_center,
                      const glm::vec3& top_center, float radius, int segments);
   virtual ~Drawable2_Cylinder();
@@ -14,6 +15,11 @@ class Drawable2_Cylinder : public Drawable2 {
   AlignedBoundBox GetBoundBox() const override;
   Iterator<glm::u32vec3> GetTriangles() const override;
   Iterator<glm::vec3> GetNormals() const override;
+
+  void SetSegments(int segments);
+  void UpdateParams(const glm::vec3& bottom_center, const glm::vec3& top_center,
+                   float radius);
+
  private:
   glm::vec3 bottom_center_;
   glm::vec3 top_center_;

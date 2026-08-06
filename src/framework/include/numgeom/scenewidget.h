@@ -8,5 +8,6 @@ class FRAMEWORK_EXPORT SceneWidget : public SceneObject {
  public:
   SceneWidget(Scene*);
   virtual ~SceneWidget();
+  virtual void Drag(Drawable*, const glm::vec3& dir) {};
 };
 #endif // !NUMGEOM_FRAMEWORK_SCENEWIDGET_H

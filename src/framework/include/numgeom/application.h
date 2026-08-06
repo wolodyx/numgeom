@@ -73,7 +73,7 @@ class FRAMEWORK_EXPORT Application {
 
   void Sync();
 
-  Drawable* Pick(Scene*, int x, int y) const;
+  Drawable* Pick(Scene*, int x, int y, glm::vec3* picked_point = nullptr) const;
 
   const WorkplaneAttributes* GetWorkplaneAttributes() const;
 

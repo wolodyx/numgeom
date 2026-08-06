@@ -8,6 +8,7 @@
 #include "numgeom/drawable.h"
 #include "numgeom/fgtext.h"
 #include "numgeom/iteratorimpl.hpp"
+#include "numgeom/ray.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
@@ -15,6 +16,7 @@
 #include "numgeom/vkscenerenderer.h"
 
 #include "fgimage.h"
+#include "intersection.h"
 #include "trackedobjectlist.h"
 #include "trackedobjectdict.h"
 #include "vkutilities.h"
@@ -254,16 +256,62 @@ SampleCount Application::GetSampleCount() const {
   return ToSampleCount(impl_->renderer_->GetSampleCount());
 }
 
-Drawable* Application::Pick(Scene* scene, int x, int y) const {
+namespace {
+Ray ScreenPosToRay(const Scene* scene, const glm::ivec2& screen_pos) {
+  const glm::mat4 view = scene->GetViewMatrix();
+  const glm::mat4 proj = scene->GetProjectionMatrix();
+  const glm::uvec2 screen_size = scene->GetScreenSize();
+
+  if (screen_size.x <= 0 || screen_size.y <= 0)
+    return Ray(scene->CameraPosition(), glm::vec3(0.0f, 0.0f, 1.0f));
+
+  const float fx = static_cast<float>(screen_pos.x);
+  const float fy = static_cast<float>(screen_pos.y);
+  const float width = static_cast<float>(screen_size.x);
+  const float height = static_cast<float>(screen_size.y);
+  // Mind: Vulkan clip space Y points down (top-left origin), so window fy=0
+  // (top) maps to NDC y = +1. This must match GetWorldPointOnViewParallelPlane
+  // in userinputcontroller.cc so a picked/clicked point lands on the same
+  // view-parallel plane used while dragging.
+  const glm::vec4 ndc_near{
+      (2.0f * fx) / width - 1.0f,
+      (2.0f * fy) / height - 1.0f,
+      0.0f,
+      1.0f};
+  const glm::vec4 ndc_far{
+      (2.0f * fx) / width - 1.0f,
+      (2.0f * fy) / height - 1.0f,
+      1.0f,
+      1.0f};
+  const glm::mat4 inv_view_proj = glm::inverse(proj * view);
+  const glm::vec4 world_near4 = inv_view_proj * ndc_near;
+  const glm::vec4 world_far4 = inv_view_proj * ndc_far;
+  const glm::vec3 world_near = glm::vec3(world_near4) / world_near4.w;
+  const glm::vec3 world_far = glm::vec3(world_far4) / world_far4.w;
+  const glm::vec3 direction = glm::normalize(world_far - world_near);
+  return Ray(world_near, direction);
+}
+}
+
+Drawable* Application::Pick(Scene* scene, int x, int y,
+                            glm::vec3* picked_point) const {
   auto id = impl_->renderer_->GetObjectId(scene, x, y);
   if (id == 0) return nullptr;
+  Drawable* picked_item = nullptr;
   for (auto o : scene->Objects()) {
     for (auto d : o->Drawables()) {
-      if (d->GetId() == id)
-        return d;
+      if (d->GetId() == id) {
+        picked_item = d;
+        break;
+      }
     }
+    if (picked_item) break;
   }
-  return nullptr;
+  if (picked_item && picked_point) {
+    Ray ray = ScreenPosToRay(scene, glm::ivec2(x, y));
+    *picked_point = IntersectRayWithDrawable(ray, dynamic_cast<Drawable2*>(picked_item));
+  }
+  return picked_item;
 }
 
 SelectionMode Application::GetSelectionMode() const {

@@ -247,6 +247,14 @@ class CylinderNormalIterator : public IteratorImpl<glm::vec3> {
 
 } // namespace
 
+Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* object)
+    : Drawable2(object) {
+  bottom_center_ = glm::vec3(0.0f, 0.0f, 0.0f);
+  top_center_ = glm::vec3(0.0f, 0.0f, 0.0f);
+  radius_ = 0.0f;
+  segments_ = 0;
+}
+
 Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* object,
                                        const glm::vec3& bottom_center,
                                        const glm::vec3& top_center,
@@ -326,4 +334,20 @@ Iterator<glm::vec3> Drawable2_Cylinder::GetNormals() const {
   auto impl = new CylinderNormalIterator(bottom_center_, top_center_,
                                          radius_, segments_, 0);
   return Iterator<glm::vec3>(impl);
+}
+
+void Drawable2_Cylinder::SetSegments(int segments) {
+  if (segments_ == segments)
+    return;
+  segments_ = segments;
+  this->SetDirty();
+}
+
+void Drawable2_Cylinder::UpdateParams(const glm::vec3& bottom_center,
+                                      const glm::vec3& top_center,
+                                      float radius) {
+  bottom_center_ = bottom_center;
+  top_center_ = top_center;
+  radius_ = radius;
+  this->SetDirty();
 }

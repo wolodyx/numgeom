@@ -5,6 +5,7 @@
 
 class Drawable2_Sphere : public Drawable2 {
  public:
+  Drawable2_Sphere(SceneObject*);
   Drawable2_Sphere(SceneObject*, const glm::vec3& center, float radius,
                    int slices_num, int stacks_num);
   virtual ~Drawable2_Sphere();
@@ -14,6 +15,12 @@ class Drawable2_Sphere : public Drawable2 {
   AlignedBoundBox GetBoundBox() const override;
   Iterator<glm::u32vec3> GetTriangles() const override;
   Iterator<glm::vec3> GetNormals() const override;
+
+  glm::vec3 GetCenter() const { return center_; }
+
+  void SetSlicesAndStacks(int slices_num, int stacks_num);
+  void UpdateParams(const glm::vec3& center, float radius);
+
 private:
   int slices_num_, stacks_num_;
   glm::vec3 center_;

@@ -5,6 +5,7 @@
 
 class Drawable2_Cone : public Drawable2 {
  public:
+  Drawable2_Cone(SceneObject*);
   Drawable2_Cone(SceneObject*, const glm::vec3& base_center,
                  const glm::vec3& apex, float radius, int segments);
   virtual ~Drawable2_Cone();
@@ -14,6 +15,11 @@ class Drawable2_Cone : public Drawable2 {
   AlignedBoundBox GetBoundBox() const override;
   Iterator<glm::u32vec3> GetTriangles() const override;
   Iterator<glm::vec3> GetNormals() const override;
+
+  void SetSegments(int segments);
+  void UpdateParams(const glm::vec3& base_center, const glm::vec3& apex,
+                   float radius);
+
  private:
   glm::vec3 base_center_;
   glm::vec3 apex_;

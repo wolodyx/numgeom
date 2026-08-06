@@ -36,6 +36,9 @@ class FRAMEWORK_EXPORT Drawable : public TrackedObject {
   bool IsHighlighted() const;
   void Highlight(bool on = true);
 
+  const SceneObject* GetParent() const { return parent_; }
+  SceneObject* GetParent() { return parent_; }
+
   uint32_t GetId() const;
 
   virtual PrimitiveType Type() const = 0;

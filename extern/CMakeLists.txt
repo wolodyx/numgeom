@@ -1,5 +1,6 @@
 include(FetchContent)
 
+add_subdirectory(geometrictools)
 add_subdirectory(glfw)
 add_subdirectory(glm)
 add_subdirectory(gtest)

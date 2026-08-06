@@ -800,7 +800,6 @@ void MainWindow::onAddArrow() {
   if (!active_sub) return;
   Scene* scene = active_sub->GetScene();
   if (!scene) return;
-  scene->Clear();
   scene->AddObject<SceneWidget_Arrow>();
   scene->FitScene();
   app_->Update(scene);

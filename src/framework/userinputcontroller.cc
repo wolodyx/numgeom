@@ -1,10 +1,12 @@
 #include "numgeom/userinputcontroller.h"
 
+#include <cmath>
 #include <vector>
 
 #include "numgeom/application.h"
 #include "numgeom/drawable.h"
 #include "numgeom/scene.h"
+#include "numgeom/scenewidget.h"
 #include "numgeom/vkscenerenderer.h"
 
 #include "glm/gtc/matrix_inverse.hpp"
@@ -14,9 +16,9 @@ struct MouseButtonState {
   int xDown = 0, yDown = 0;
   int xPrev = 0, yPrev = 0;
   Drawable* selected_item = nullptr;
-  // glm::vec3 clicked_point;
-  // glm::vec3 prev_dragged_point;
-  // glm::vec3 next_dragged_point;
+  glm::vec3 clicked_point;
+  glm::vec3 prev_dragged_point;
+  glm::vec3 next_dragged_point;
 };
 
 struct UserInputController::Impl {
@@ -47,8 +49,14 @@ void UserInputController::MouseLeftButtonDown(int x, int y) {
   impl_->mouseLeftButtonState.yDown = y;
   impl_->mouseLeftButtonState.xPrev = x;
   impl_->mouseLeftButtonState.yPrev = y;
-  Drawable* item = impl_->app->Pick(impl_->scene, x, y);
+  glm::vec3 picked_point;
+  Drawable* item = impl_->app->Pick(impl_->scene, x, y, &picked_point);
   impl_->mouseLeftButtonState.selected_item = item;
+  if (item) {
+    impl_->mouseLeftButtonState.clicked_point = picked_point;
+    impl_->mouseLeftButtonState.next_dragged_point = picked_point;
+    impl_->mouseLeftButtonState.prev_dragged_point = picked_point;
+  }
 }
 
 void UserInputController::MouseMiddleButtonDown(int x, int y) {
@@ -144,24 +152,91 @@ void UserInputController::MouseRightButtonUp(int x, int y) {
                    impl_->mouseRightButtonState.yDown == y;
 }
 
+namespace {
+bool IsInteractiveItem(const Drawable* item) {
+  if (!item) return false;
+  auto w = dynamic_cast<const SceneWidget*>(item->GetParent());
+  if (!w) return false;
+  return item->IsPickable();
+}
+
+//! Вычисляет точку в мировых координатах по экранным координатам `screen_pos`
+//! такую, что вектор исходящей из `prev_point` до этой точки параллелен
+//! плоскости камеры из `scene`.
+glm::vec3 GetWorldPointOnViewParallelPlane(Scene* scene,
+                                           const glm::vec3& prev_point,
+                                           const glm::ivec2& screen_pos) {
+  const glm::mat4 view = scene->GetViewMatrix();
+  const glm::mat4 proj = scene->GetProjectionMatrix();
+  const glm::uvec2 screen_size = scene->GetScreenSize();
+
+  if (screen_size.x <= 0 || screen_size.y <= 0)
+    return prev_point;
+
+  const float fx = static_cast<float>(screen_pos.x);
+  const float fy = static_cast<float>(screen_pos.y);
+  const float width = static_cast<float>(screen_size.x);
+  const float height = static_cast<float>(screen_size.y);
+  // Vulkan clip space has Y pointing down (top-left origin), so a window
+  // coordinate fy=0 (top) maps to NDC y = +1, while a positive fov matrix
+  // (Y-up) would map it to -1. Using the Y-down mapping keeps the pick/drag
+  // math aligned with the on-screen (Vulkan) image.
+  const glm::vec4 ndc_near{
+      (2.0f * fx) / width - 1.0f,
+      (2.0f * fy) / height - 1.0f,
+      0.0f,
+      1.0f};
+  const glm::vec4 ndc_far{
+      (2.0f * fx) / width - 1.0f,
+      (2.0f * fy) / height - 1.0f,
+      1.0f,
+      1.0f};
+  const glm::mat4 inv_view_proj = glm::inverse(proj * view);
+  const glm::vec4 world_near4 = inv_view_proj * ndc_near;
+  const glm::vec4 world_far4 = inv_view_proj * ndc_far;
+  const glm::vec3 ray_origin = glm::vec3(world_near4) / world_near4.w;
+  const glm::vec3 ray_dir = glm::normalize(
+      glm::vec3(world_far4) / world_far4.w - ray_origin);
+
+  // The plane parallel to the camera view passing through `prev_point`
+  // has the camera forward direction as its normal. The forward direction
+  // is the third row of the view matrix rotation part.
+  const glm::vec3 plane_normal =
+      glm::normalize(glm::vec3(view[0][2], view[1][2], view[2][2]));
+
+  const float denom = glm::dot(plane_normal, ray_dir);
+  if (std::abs(denom) < 1e-6f)
+    return prev_point;
+
+  const float t = glm::dot(plane_normal, prev_point - ray_origin) / denom;
+  return ray_origin + t * ray_dir;
+}
+}
+
 void UserInputController::MouseMove(int x, int y) {
-  VkSceneRenderer* renderer = impl_->app->GetRenderer();
-
+  bool is_scene_dirty = false;
+  glm::ivec2 screen_pos{x, y};
   if (impl_->mouseLeftButtonState.down) {
-    const int dx = x - impl_->mouseLeftButtonState.xPrev;
-    const int dy = y - impl_->mouseLeftButtonState.yPrev;
-
-    impl_->scene->TranslateCamera(x, y, dx, dy);
-    renderer->Update(impl_->scene);
-
-    impl_->mouseLeftButtonState.xPrev = x;
-    impl_->mouseLeftButtonState.yPrev = y;
+    MouseButtonState& mbs = impl_->mouseLeftButtonState;
+    if (IsInteractiveItem(mbs.selected_item)) {
+      auto* selected_item = mbs.selected_item;
+      auto* widget = dynamic_cast<SceneWidget*>(selected_item->GetParent());
+      mbs.prev_dragged_point = mbs.next_dragged_point;
+      mbs.next_dragged_point = GetWorldPointOnViewParallelPlane(impl_->scene, mbs.prev_dragged_point, screen_pos);
+      auto dragging_dir = mbs.next_dragged_point - mbs.prev_dragged_point;
+      widget->Drag(selected_item, dragging_dir);
+    } else {
+      int dx = x - mbs.xPrev;
+      int dy = y - mbs.yPrev;
+      impl_->scene->TranslateCamera(x, y, dx, dy);
+    }
+    is_scene_dirty = true;
+    mbs.xPrev = x;
+    mbs.yPrev = y;
   } else if (impl_->mouseMiddleButtonState.down) {
     const int dx = x - impl_->mouseMiddleButtonState.xPrev;
     const int dy = y - impl_->mouseMiddleButtonState.yPrev;
-
     // ...
-
     impl_->mouseMiddleButtonState.xPrev = x;
     impl_->mouseMiddleButtonState.yPrev = y;
   } else if (impl_->mouseRightButtonState.down) {
@@ -169,10 +244,15 @@ void UserInputController::MouseMove(int x, int y) {
     const int dy = y - impl_->mouseRightButtonState.yPrev;
 
     impl_->scene->RotateCamera(x, y, dx, dy);
-    renderer->Update(impl_->scene);
+    is_scene_dirty = true;
 
     impl_->mouseRightButtonState.xPrev = x;
     impl_->mouseRightButtonState.yPrev = y;
+  }
+
+  if (is_scene_dirty) {
+  VkSceneRenderer* renderer = impl_->app->GetRenderer();
+    renderer->Update(impl_->scene);
   }
 }
 

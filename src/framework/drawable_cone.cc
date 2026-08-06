@@ -264,6 +264,14 @@ class ConeNormalIterator : public IteratorImpl<glm::vec3> {
 
 } // namespace
 
+Drawable2_Cone::Drawable2_Cone(SceneObject* object)
+    : Drawable2(object) {
+  base_center_ = glm::vec3(0.0f, 0.0f, 0.0f);
+  apex_ = glm::vec3(0.0f, 1.0f, 0.0f);
+  radius_ = 0.0f;
+  segments_ = 0;
+}
+
 Drawable2_Cone::Drawable2_Cone(SceneObject* object,
                                const glm::vec3& base_center,
                                const glm::vec3& apex,
@@ -331,4 +339,20 @@ Iterator<glm::vec3> Drawable2_Cone::GetNormals() const {
   auto impl = new ConeNormalIterator(base_center_, apex_,
                                      radius_, segments_, 0);
   return Iterator<glm::vec3>(impl);
+}
+
+void Drawable2_Cone::SetSegments(int segments) {
+  if (segments_ == segments)
+    return;
+  segments_ = segments;
+  this->SetDirty();
+}
+
+void Drawable2_Cone::UpdateParams(const glm::vec3& base_center,
+                                  const glm::vec3& apex,
+                                  float radius) {
+  base_center_ = base_center;
+  apex_ = apex;
+  radius_ = radius;
+  this->SetDirty();
 }

@@ -6,6 +6,7 @@ set(PUBLIC_HEADERS
   include/numgeom/iteratorimpl.hpp
   include/numgeom/orthobasis.h
   include/numgeom/outcome.h
+  include/numgeom/ray.h
   include/numgeom/shapes.h
   include/numgeom/staticjaggedarray.h
   include/numgeom/trimesh.h
@@ -15,6 +16,7 @@ set(PUBLIC_HEADERS
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   outcome.cc
+  ray.cc
   shapes.cc
   staticjaggedarray.cc
   trimesh.cc

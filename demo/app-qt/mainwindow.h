@@ -47,6 +47,7 @@ class MainWindow : public QMainWindow {
   void onAddAxisIndicator();
   void onAddFgImage();
   void onAddFgText();
+  void onClearScene();
   void onDownloadData();
   void onFitScene();
   void onGoToTestData();
@@ -55,6 +56,7 @@ class MainWindow : public QMainWindow {
   void onOpenRecentFile();
   void onPickingMode(QAction* action);
   void onQuit();
+  void onRedrawScene();
   void onScreenshot();
   void updateWindowMenu(); //!< Обновляет список окон в меню Window.
 

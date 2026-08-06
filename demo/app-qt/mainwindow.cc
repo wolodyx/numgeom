@@ -307,6 +307,22 @@ void MainWindow::createSceneMenu() {
     menu->addAction(act);
   }
   {
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/clear-scene.ico"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Clear"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onClearScene()));
+    menu->addAction(act);
+  }
+  {
+    QIcon icon;
+    icon.addFile(QString::fromUtf8(":/resources/icons/redraw-scene.ico"),
+                 QSize(), QIcon::Normal, QIcon::Off);
+    QAction* act = new QAction(icon, tr("Redraw"), this);
+    connect(act, SIGNAL(triggered()), this, SLOT(onRedrawScene()));
+    menu->addAction(act);
+  }
+  {
     QAction* act = new QAction(tr("Toggle workplane"), this);
     connect(act, &QAction::triggered,
             [=, this](bool checked){
@@ -774,7 +790,6 @@ void MainWindow::onAddAxisIndicator() {
   if (!active_sub) return;
   Scene* scene = active_sub->GetScene();
   if (!scene) return;
-  scene->Clear();
   scene->AddObject<SceneWidget_AxisIndicator>();
   scene->FitScene();
   app_->Update(scene);
@@ -980,4 +995,21 @@ void MainWindow::onOpenRecentFile() {
   }
   this->openFile(filename);
   addToRecentFiles(filename);
+}
+
+void MainWindow::onRedrawScene() {
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+  app_->Update(scene, true);
+}
+
+void MainWindow::onClearScene() {
+  SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
+  if (!active_sub) return;
+  Scene* scene = active_sub->GetScene();
+  if (!scene) return;
+  scene->Clear();
+  app_->Update(scene);
 }

@@ -19,7 +19,7 @@ size_t TrackedObjectList::GetObjectsCount() const {
   size_t count = 0;
   for (TrackedObject* o : objects_) {
     auto s = o->GetState();
-    if (s != TrackedObject::State::Removed && s == TrackedObject::State::Delete)
+    if (s != TrackedObject::State::Removed && s != TrackedObject::State::Delete)
       ++count;
   }
   return count;

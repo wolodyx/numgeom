@@ -70,10 +70,10 @@ Application::Application(int argc, char* argv[]) {
 
 Application::~Application() { delete impl_; }
 
-bool Application::Update(Scene* scene) {
+bool Application::Update(Scene* scene, bool force) {
   if (!scene)
     return false;
-  impl_->renderer_->Update(scene);
+  impl_->renderer_->Update(scene, force);
   return true;
 }
 

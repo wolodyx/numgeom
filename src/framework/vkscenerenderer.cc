@@ -3628,7 +3628,7 @@ bool Synchronize(Application* app, VulkanObjects* vk_objects, Scene* scene) {
 }
 }  // namespace
 
-bool VkSceneRenderer::Update(Scene* scene) {
+bool VkSceneRenderer::Update(Scene* scene, bool force) {
   // Проверяем принадлежность сцены приложению.
   if (!scene || scene != impl_->app->GetScene(scene->GetName()))
     return false;

@@ -38,11 +38,8 @@ class FRAMEWORK_EXPORT Application {
 
   Scene* AddAxisIndicator();
 
-  //!@{
-  //! Методы для управления рисованием.
-
-  bool Update(Scene*);
-  //!@}
+  //! Обновление изображения на экране.
+  bool Update(Scene*, bool force = false);
 
   //!@{
   //! Взаимодействие со сценами.

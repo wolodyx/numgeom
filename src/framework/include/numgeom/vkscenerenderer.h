@@ -26,7 +26,7 @@ class VkSceneRenderer {
   ~VkSceneRenderer();
 
   //! Запрос на обновление связанного со сценой изображения.
-  bool Update(Scene*);
+  bool Update(Scene*, bool force = false);
 
   uint32_t GetObjectId(Scene* scene, int x, int y) const;
 

@@ -16,6 +16,7 @@ class SceneImpl {
   TrackedObjectList objects_;
   uint64_t vulkan_surface_ = 0;
   SelectionMode selection_mode_ = SelectionMode::Disable;
+  bool workplane_enabled_;
 };
 
 Scene::Scene(const std::string& name) {
@@ -55,6 +56,20 @@ void Scene::Clear() {
 
 Iterator<SceneObject*> Scene::Objects() const {
   return GetObjects<SceneObject>(impl_->objects_);
+}
+
+void Scene::EnableWorkplane(bool enable) {
+  if (impl_->workplane_enabled_ == enable) return;
+  impl_->workplane_enabled_ = enable;
+  this->SetDirty();
+}
+
+void Scene::DisableWorkplane() {
+  EnableWorkplane(false);
+}
+
+bool Scene::IsWorkplaneEnabled() const {
+  return impl_->workplane_enabled_;
 }
 
 void Scene::AddObject(SceneObject* object) {

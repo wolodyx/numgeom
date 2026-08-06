@@ -56,8 +56,10 @@ glm::mat4 Camera::GetProjectionMatrix(const AlignedBoundBox& box) const {
   glm::vec3 size = box.GetSize();
   float radius = glm::length(size) * 0.5f;
   float distance = glm::length(eye_ - center);
-  float z_near = std::max(0.001f, distance - radius * 2.0f);
+  float z_near = distance - radius * 2.0f;
   float z_far = distance + radius * 2.0f;
+  z_far *= 10;
+  z_near = std::max(0.001f, 0.1f * z_near);
   float aspect = this->GetAspect();
   const float tan_half_fov_y = std::tan(fov_y_ / 2.0f);
   glm::mat4 m(0.0f);

@@ -152,6 +152,8 @@ bool MainWindow::loadWelcomeModel(Scene* scene) {
 
   auto trimesh = LoadToTriMesh(model_filename.toStdString());
   scene->AddObject<SceneObject_Mesh>(trimesh);
+  scene->EnableWorkplane();
+
   return true;
 }
 
@@ -304,7 +306,22 @@ void MainWindow::createSceneMenu() {
     connect(act, SIGNAL(triggered()), this, SLOT(onScreenshot()));
     menu->addAction(act);
   }
-
+  {
+    QAction* act = new QAction(tr("Toggle workplane"), this);
+    connect(act, &QAction::triggered,
+            [=, this](bool checked){
+              SceneMdiSubWindow* sub = GetActiveMdiSubWindow();
+              if (!sub) return;
+              Scene* scene = sub->GetScene();
+              if (!scene) return;
+              if (scene->IsWorkplaneEnabled())
+                scene->DisableWorkplane();
+              else
+                scene->EnableWorkplane();
+              app_->Update(scene);
+    });
+    menu->addAction(act);
+  }
   {
     QMenu* add_menu = menu->addMenu(tr("Add"));
     {
@@ -340,7 +357,6 @@ void MainWindow::createSceneMenu() {
       add_menu->addAction(act);
     }
   }
-
   // MSAA submenu
   {
     QMenu* msaa_menu = menu->addMenu(tr("MSAA"));

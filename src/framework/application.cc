@@ -18,6 +18,7 @@
 #include "trackedobjectlist.h"
 #include "trackedobjectdict.h"
 #include "vkutilities.h"
+#include "workplaneattributes.h"
 
 class ApplicationImpl {
  public:
@@ -32,6 +33,7 @@ class ApplicationImpl {
   TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
   SelectionMode selection_mode_ = SelectionMode::Disable;
+  WorkplaneAttributes workplane_attributes_;
 };
 
 namespace {
@@ -273,4 +275,8 @@ void Application::SetSelectionMode(SelectionMode selection_mode) {
   for (Scene* s : GetObjects<Scene>(impl_->scenes_)) {
     s->SetSelectionMode(selection_mode);
   }
+}
+
+const WorkplaneAttributes* Application::GetWorkplaneAttributes() const {
+  return &impl_->workplane_attributes_;
 }

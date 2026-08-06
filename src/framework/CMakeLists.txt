@@ -50,6 +50,7 @@ set(SOURCE_FILES
   vkscenerenderer.cc
   vkutilities.cc            vkutilities.h
   volk_impl.cc
+  workplaneattributes.cc    workplaneattributes.h
 )
 
 set(SHADER_FILES
@@ -61,6 +62,8 @@ set(SHADER_FILES
   selection.frag
   text.vert
   text.frag
+  workplane.vert
+  workplane.frag
 )
 
 set(FONT_FILES

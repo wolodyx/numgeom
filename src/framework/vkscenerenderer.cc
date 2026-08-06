@@ -1,7 +1,9 @@
 #include "numgeom/vkscenerenderer.h"
 
+#include <algorithm>
 #include <array>
 #include <cassert>
+#include <cmath>
 #include <format>
 #include <map>
 #include <mutex>
@@ -35,6 +37,7 @@
 #include "lrudescriptorsetpool.h"
 #include "sceneiterators.h"
 #include "vkutilities.h"
+#include "workplaneattributes.h"
 
 static_assert(VK_NULL_HANDLE == nullptr);
 
@@ -143,6 +146,9 @@ struct VulkanGlobalState {
 
   VkPipelineLayout graphics_pipeline_layout = VK_NULL_HANDLE;
   VkPipeline graphics_pipeline = VK_NULL_HANDLE;
+
+  VkPipelineLayout workplane_pipeline_layout = VK_NULL_HANDLE;
+  VkPipeline workplane_pipeline = VK_NULL_HANDLE;
 
   VkDescriptorSetLayout selection_desc_layout = VK_NULL_HANDLE;
   VkPipelineLayout selection_pipeline_layout = VK_NULL_HANDLE;
@@ -287,6 +293,10 @@ void Finalize(VulkanGlobalState* state) {
 
   vkDestroyPipeline(state->device, state->graphics_pipeline, nullptr);
   state->graphics_pipeline = VK_NULL_HANDLE;
+  if (state->workplane_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->workplane_pipeline, nullptr);
+    state->workplane_pipeline = VK_NULL_HANDLE;
+  }
   if (state->selection_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state->device, state->selection_pipeline, nullptr);
     state->selection_pipeline = VK_NULL_HANDLE;
@@ -297,6 +307,10 @@ void Finalize(VulkanGlobalState* state) {
   }
 
   vkDestroyPipelineLayout(state->device, state->graphics_pipeline_layout, nullptr);
+  if (state->workplane_pipeline_layout != VK_NULL_HANDLE) {
+    vkDestroyPipelineLayout(state->device, state->workplane_pipeline_layout, nullptr);
+    state->workplane_pipeline_layout = VK_NULL_HANDLE;
+  }
   vkDestroyDescriptorSetLayout(state->device, state->graphics_desc_layout, nullptr);
   vkDestroyPipelineLayout(state->device, state->selection_pipeline_layout, nullptr);
   vkDestroyDescriptorSetLayout(state->device, state->selection_desc_layout, nullptr);
@@ -1272,6 +1286,193 @@ bool CreateGraphicsPipeline(VulkanGlobalState* state) {
   return true;
 }
 
+bool CreateWorkplanePipeline(VulkanGlobalState* state) {
+  VkResult r;
+
+  // Конвейер рабочей плоскости использует тот же макет набора дескрипторов,
+  // что и основной графический конвейер (uniform-буфер VBO с матрицами).
+  // Поэтому переиспользуем `graphics_desc_layout`.
+  if (!state->workplane_pipeline_layout) {
+    std::array<VkDescriptorSetLayout, 1> descriptor_set_layouts{
+        state->graphics_desc_layout};
+    // Push-constants: grid_params, grid_color, camera_pos, background.
+    VkPushConstantRange push_constant_range{
+        .stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT,
+        .offset = 0,
+        .size = 4 * sizeof(glm::vec4),
+    };
+    VkPipelineLayoutCreateInfo ci_pipeline_layout{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
+        .setLayoutCount = static_cast<uint32_t>(descriptor_set_layouts.size()),
+        .pSetLayouts = descriptor_set_layouts.data(),
+        .pushConstantRangeCount = 1,
+        .pPushConstantRanges = &push_constant_range,
+    };
+    r = vkCreatePipelineLayout(state->device, &ci_pipeline_layout, nullptr,
+                               &state->workplane_pipeline_layout);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Workplane pipeline layout creation error ({}).", VkResultToString(r));
+      return false;
+    }
+  }
+
+  if (state->workplane_pipeline) return true;
+
+  static uint32_t vs_spirv_source[] = {
+#include "workplane.vert.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_vs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(vs_spirv_source),
+      .pCode = (uint32_t*)vs_spirv_source,
+  };
+  VkShaderModule vs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Workplane vertex shader creation error ({}).", VkResultToString(r));
+    return false;
+  }
+
+  static uint32_t fs_spirv_source[] = {
+#include "workplane.frag.spv.h"
+  };
+  VkShaderModuleCreateInfo ci_fs_module{
+      .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+      .codeSize = sizeof(fs_spirv_source),
+      .pCode = (uint32_t*)fs_spirv_source,
+  };
+  VkShaderModule fs_module = VK_NULL_HANDLE;
+  r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Workplane fragment shader creation error ({}).", VkResultToString(r));
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    return false;
+  }
+
+  std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT,
+          .module = vs_module,
+          .pName = "main",
+      },
+      VkPipelineShaderStageCreateInfo{
+          .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+          .module = fs_module,
+          .pName = "main",
+      },
+  };
+
+  // No vertex buffers -- quad data is generated in the vertex shader
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+  };
+
+  VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+      .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_NONE,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = state->sample_count,
+  };
+
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+  };
+
+  // Subpass 0 has two color attachments: scene_color (index 0) and
+  // object_id (index 1, VK_FORMAT_R32_UINT). R32_UINT does not support
+  // VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT, so blending must be
+  // explicitly disabled for both attachments. If attachmentCount were less
+  // than the subpass color attachment count, the remaining attachments would
+  // fall back to the default blend state (blendEnable = VK_TRUE), which would
+  // violate VUID-vkCmdDraw-blendEnable-04727.
+  std::array<VkPipelineColorBlendAttachmentState, 2> attachment_states = {{
+      {
+          .blendEnable = VK_FALSE,
+          .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                            VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+      },
+      {
+          .blendEnable = VK_FALSE,
+          .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                            VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+      },
+  }};
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = static_cast<uint32_t>(attachment_states.size()),
+      .pAttachments = attachment_states.data(),
+  };
+
+  VkDynamicState dynamic_states[] = {
+      VK_DYNAMIC_STATE_VIEWPORT,
+      VK_DYNAMIC_STATE_SCISSOR,
+  };
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state = {
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+      .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+      .stageCount = static_cast<uint32_t>(ci_stages.size()),
+      .pStages = ci_stages.data(),
+      .pVertexInputState = &ci_vertex_input_state,
+      .pInputAssemblyState = &ci_input_assembly_state,
+      .pViewportState = &ci_viewport_state,
+      .pRasterizationState = &ci_rasterization_state,
+      .pMultisampleState = &ci_multisample_state,
+      .pDepthStencilState = &ci_depth_stencil_state,
+      .pColorBlendState = &ci_color_blend_state,
+      .pDynamicState = &ci_pipeline_dynamic_state,
+      .layout = state->workplane_pipeline_layout,
+      .renderPass = state->graphics_renderpass,
+      .subpass = 0,
+  }};
+  VkPipeline pipelines[] = {VK_NULL_HANDLE};
+  r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1, ci_pipelines,
+                                nullptr, pipelines);
+  vkDestroyShaderModule(state->device, vs_module, nullptr);
+  vkDestroyShaderModule(state->device, fs_module, nullptr);
+  if (r != VK_SUCCESS) {
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Workplane graphics pipeline creation error ({}).", VkResultToString(r));
+    return false;
+  }
+  state->workplane_pipeline = pipelines[0];
+  BOOST_LOG_TRIVIAL(trace) << std::format(
+      "Workplane graphics pipeline {} is created.",
+      static_cast<void*>(state->workplane_pipeline));
+  return true;
+}
+
 bool SceneRes::InitFrames() {
   VkResult r;
 
@@ -1741,7 +1942,7 @@ bool SceneRes::InitImages() {
   return true;
 }
 
-void Render(Scene* scene, SceneRes* scene_res,
+void Render(Application* app, Scene* scene, SceneRes* scene_res,
             ImageRes& image_res, FrameRes& frame,
             const std::map<const FgObject*, TextureRes*>& fg_res_array) {
   VulkanGlobalState* state = scene_res->vk_state;
@@ -1802,6 +2003,89 @@ void Render(Scene* scene, SceneRes* scene_res,
       .offset = {0, 0},
       .extent = scene_res->image_extent,
   };
+
+  // Отрисовка рабочей плоскости (бесконечной сетки линий) в первом subpass.
+  // Квад генерируется в вершинном шейдере из gl_VertexIndex и всегда
+  // центрируется под камерой, образуя "бесконечную" сетку с затуханием
+  // (туманом) вдалеке. Параметры сетки, цвет, позиция камеры и цвет фона
+  // передаются через push-constants (см. shader workplane.{vert,frag}).
+  if (scene->IsWorkplaneEnabled()) {
+    const WorkplaneAttributes* wpa = app->GetWorkplaneAttributes();
+    assert(wpa && wpa->spacing > 0.0f);
+    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->workplane_pipeline);
+
+    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            state->workplane_pipeline_layout, 0, 1,
+                            &frame.graphics_desc_set, 0, nullptr);
+
+    // Push-constants: grid_params, grid_color, camera_pos, background.
+    struct WorkplanePushConstants {
+      // x -- адаптивный шаг сетки (зависит от высоты камеры), y -- полуразмер
+      // квада (покрывает весь видимый пол),
+      // z -- ближняя граница тумана, w -- дальняя граница тумана.
+      glm::vec4 grid_params;
+      // Цвет линий сетки (осей координат).
+      glm::vec4 grid_color;
+      // Позиция камеры в мире (квад центрируется под камерой).
+      glm::vec4 camera_pos;
+      // Цвет фона сцены для затухания линий туманом.
+      glm::vec4 background;
+    };
+    // Позиция камеры нужна, чтобы квад всегда был отцентрован под камерой.
+    glm::vec3 cam = scene->CameraPosition();
+    // Дальность тумана масштабируется от высоты камеры над плоскостью
+    // сетки: чем выше камера, тем дальше сетка видна до затухания. Так сетка
+    // остаётся хорошо заметной вблизи камеры и не сливается с фоном.
+    float cam_height = std::max(std::abs(cam.y), 0.1f);
+    float fog_near = cam_height * 4.0f;
+    float fog_far = cam_height * 8.0f;
+    // Полуразмер квада выбирается так, чтобы его край никогда не попадал в
+    // кадр (иначе сетка "срезалась" бы на горизонте и по бокам). Он должен
+    // покрывать весь видимый пол (дальная плоскость отсечения камеры) и с
+    // запасом превышать дальность тумана, чтобы сетка успевала полностью
+    // затухнуть до края квада.
+    glm::mat4 proj = scene->GetProjectionMatrix();
+    float z_far = -proj[3][2] / (proj[2][2] - 1.0f);
+    if (!(z_far > 0.0f)) z_far = 1000.0f;
+    float quad_half_size = std::max(2.0f * z_far, fog_far * 8.0f);
+    // Адаптивный шаг сетки: размер ячейки масштабируется от высоты камеры
+    // над плоскостью, чтобы плотность линий на экране оставалась примерно
+    // постоянной. При отдалении ячейки укрупняются и не засоряют обзор, при
+    // приближении дробятся. Значение округляется к ряду 1-2-5 (степени 10),
+    // чтобы линия сетки не дрожала (шло шэйминг) при плавном движении камеры.
+    float spacing_scale = std::max(cam_height, 1.0f);
+    // Коэффициент плотности: чем он больше, тем меньше ячейка и тем больше
+    // линий попадает на экран. Подобран так, чтобы на экране было комфортное
+    // количество ячеек (несколько десятков), а не 2-4 как ранее.
+    float spacing_density = 0.1f;
+    float spacing = wpa->spacing * spacing_scale * spacing_density;
+    float spacing_pow10 = std::pow(10.0f, std::floor(std::log10(spacing)));
+    float spacing_mantissa = spacing / spacing_pow10;
+    float spacing_snapped;
+    if (spacing_mantissa < 2.0f)
+      spacing_snapped = 1.0f * spacing_pow10;
+    else if (spacing_mantissa < 5.0f)
+      spacing_snapped = 2.0f * spacing_pow10;
+    else
+      spacing_snapped = 5.0f * spacing_pow10;
+    WorkplanePushConstants pc{
+        .grid_params =
+            glm::vec4(spacing_snapped, quad_half_size, fog_near, fog_far),
+        .grid_color = glm::vec4(wpa->color, 1.0f),
+        .camera_pos = glm::vec4(cam, 1.0f),
+        .background = glm::vec4(lavender.float32[0], lavender.float32[1],
+                                lavender.float32[2], 1.0f),
+    };
+    vkCmdPushConstants(frame.cmd_buf, state->workplane_pipeline_layout,
+                        VK_SHADER_STAGE_VERTEX_BIT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT,
+                        0, sizeof(pc), &pc);
+
+    vkCmdSetViewport(frame.cmd_buf, 0, 1, &viewport);
+    vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
+    vkCmdDraw(frame.cmd_buf, 6, 1, 0, 0);
+  }
 
   // Дальнейшие команды будут вызваны, только если сцена не пуста.
   if (scene_res->buffer_vertex) {
@@ -2721,6 +3005,7 @@ bool VulkanObjects::RestoreInvalidated(VkSurfaceKHR surface) {
   if (!ChooseSampleCountOfMSAA(&global_state)) return false;
   if (!CreateGraphicsRenderPass(&global_state)) return false;
   if (!CreateGraphicsPipeline(&global_state)) return false;
+  if (!CreateWorkplanePipeline(&global_state)) return false;
   if (!CreateSelectionPipeline(&global_state)) return false;
   if (!CreateCompositeRenderPass(&global_state)) return false;
   if (!CreateCompositePipeline(&global_state)) return false;
@@ -3388,8 +3673,8 @@ bool VkSceneRenderer::Update(Scene* scene) {
     // Рендеринг основной сцены и наложение текстур переднего плана.
     assert(index <= MAX_NUM_IMAGES);
     ImageRes& image_res = scene_res->image_res_array[index];
-    Render(scene, scene_res, image_res, frame, impl_->vk_objects.fg_res_array);
-
+    Render(impl_->app, scene, scene_res, image_res, frame,
+           impl_->vk_objects.fg_res_array);
     // Отправка полученного изображения на презентацию.
     VkPresentInfoKHR presentInfoKHR{
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
@@ -3401,7 +3686,6 @@ bool VkSceneRenderer::Update(Scene* scene) {
     };
     r = vkQueuePresentKHR(state->queue, &presentInfoKHR);
     if (r != VK_SUCCESS) return false;
-
     break;
   }
 
@@ -3541,6 +3825,10 @@ bool VkSceneRenderer::SetSampleCount(VkSampleCountFlagBits sample_count) {
   if (state.graphics_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state.device, state.graphics_pipeline, nullptr);
     state.graphics_pipeline = VK_NULL_HANDLE;
+  }
+  if (state.workplane_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state.device, state.workplane_pipeline, nullptr);
+    state.workplane_pipeline = VK_NULL_HANDLE;
   }
   if (state.selection_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state.device, state.selection_pipeline, nullptr);

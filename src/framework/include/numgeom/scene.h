@@ -38,6 +38,10 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
 
   Iterator<SceneObject*> Objects() const;
 
+  void EnableWorkplane(bool enable = true);
+  void DisableWorkplane();
+  bool IsWorkplaneEnabled() const;
+
   //!@{
   //! Манипуляции камерой и запрос ее состояния.
 

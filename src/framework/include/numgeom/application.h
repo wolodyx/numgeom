@@ -18,6 +18,7 @@ class FgText;
 class Scene;
 class SceneObject;
 class VkSceneRenderer;
+class WorkplaneAttributes;
 
 /** \class Application
 \brief Сущность, в которой содержится все состояние приложения.
@@ -76,6 +77,8 @@ class FRAMEWORK_EXPORT Application {
   void Sync();
 
   Drawable* Pick(Scene*, int x, int y) const;
+
+  const WorkplaneAttributes* GetWorkplaneAttributes() const;
 
  private:
   Application(const Application&) = delete;

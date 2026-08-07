@@ -44,9 +44,14 @@ void SceneWidget_Arrow::Drag(Drawable* item, const glm::vec3& dragging_dir) {
   if (item == base_) {
     orig_ += dragging_dir;
   } else if (item == shaft_) {
-    return;
-  } else if (item == head_) {
     length_ += glm::dot(dir_, dragging_dir);
+  } else if (item == head_) {
+    const glm::vec3 tip = orig_ + length_ * dir_ + dragging_dir;
+    const glm::vec3 new_dir = tip - orig_;
+    const float new_length = glm::length(new_dir);
+    if (new_length > 1e-6f) {
+      dir_ = new_dir / new_length;
+    }
   }
   this->Update();
 }

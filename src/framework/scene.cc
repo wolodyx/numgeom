@@ -90,6 +90,8 @@ glm::uvec2 Scene::GetScreenSize() const {
 
 void Scene::FitScene() {
   AlignedBoundBox box = this->GetBoundBox();
+  if (box.IsEmpty())
+    box = AlignedBoundBox{{-1.0f, -1.0f, -1.0f}, {1.0f, 1.0f, 1.0f}};
   box.Scale(1.3);
   impl_->camera_.FitBox(box);
 }

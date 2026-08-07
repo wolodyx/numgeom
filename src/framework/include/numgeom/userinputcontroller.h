@@ -3,6 +3,8 @@
 
 #include "glm/glm.hpp"
 
+#include "numgeom/framework_enums.h"
+
 class Application;
 class Scene;
 
@@ -38,6 +40,8 @@ class UserInputController {
   void MouseMove(int x, int y);
 
   void MouseWheelRotate(int count);
+
+  void MouseDoubleClick(MouseButton, int x, int y);
 
  private:
   UserInputController(const UserInputController&) = delete;

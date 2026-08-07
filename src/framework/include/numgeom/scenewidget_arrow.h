@@ -13,6 +13,7 @@ class SceneWidget_Arrow : public SceneWidget {
   SceneWidget_Arrow(Scene*);
   virtual ~SceneWidget_Arrow();
   void Drag(Drawable*, const glm::vec3&) override;
+  void DoubleClick(MouseButton, Drawable*) override;
 
  private:
   void Update();

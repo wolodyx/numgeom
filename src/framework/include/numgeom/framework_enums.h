@@ -8,6 +8,12 @@ enum class SelectionMode {
   DraggingOnly
 };
 
+enum class MouseButton {
+  Left,
+  Right,
+  Middle
+};
+
 enum class SampleCount {
   Bits_None = 0x00000000,
   Bits_1    = 0x00000001,

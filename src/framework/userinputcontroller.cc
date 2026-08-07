@@ -262,6 +262,15 @@ void UserInputController::MouseWheelRotate(int numDegrees) {
   renderer->Update(impl_->scene);
 }
 
+void UserInputController::MouseDoubleClick(MouseButton button, int x, int y) {
+  Drawable* item = impl_->app->Pick(impl_->scene, x, y);
+  if (item && IsInteractiveItem(item)) {
+    SceneWidget* widget = dynamic_cast<SceneWidget*>(item->GetParent());
+    assert(widget != nullptr);
+    widget->DoubleClick(button, item);
+  }
+}
+
 void UserInputController::KeyPressed(int key) {}
 
 void UserInputController::KeyReleased(int key) {}

@@ -1,7 +1,5 @@
 #include "scenewindow.h"
 
-#include <iostream>
-
 #include "qevent.h"
 #include "qvulkaninstance.h"
 
@@ -99,6 +97,25 @@ void SceneWindow::wheelEvent(QWheelEvent* event) {
   QPoint angleDelta = event->angleDelta();
   int numDegrees = angleDelta.y() / 8;
   user_input_controller_->MouseWheelRotate(numDegrees);
+  event->accept();
+}
+
+namespace {
+MouseButton ToMouseButton(Qt::MouseButton button) {
+  switch (button) {
+    case Qt::LeftButton:   return MouseButton::Left;
+    case Qt::RightButton:  return MouseButton::Right;
+    case Qt::MiddleButton: return MouseButton::Middle;
+    default: assert(false);
+  }
+  std::abort();
+}
+}
+
+void SceneWindow::mouseDoubleClickEvent(QMouseEvent* event) {
+  QPoint pt = event->pos();
+  user_input_controller_->MouseDoubleClick(ToMouseButton(event->button()),
+                                           pt.x(), pt.y());
   event->accept();
 }
 

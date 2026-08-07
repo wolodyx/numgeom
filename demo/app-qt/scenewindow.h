@@ -25,6 +25,7 @@ class SceneWindow : public QWindow {
   void mouseReleaseEvent(QMouseEvent*) override;
   void mouseMoveEvent(QMouseEvent*) override;
   void wheelEvent(QWheelEvent*) override;
+  void mouseDoubleClickEvent(QMouseEvent*) override;
 
   void resizeEvent(QResizeEvent*) override;
   void exposeEvent(QExposeEvent*) override;

@@ -1,5 +1,7 @@
 #include "numgeom/scenewidget_arrow.h"
 
+#include <cmath>
+
 #include "numgeom/drawable_cone.h"
 #include "numgeom/drawable_cylinder.h"
 #include "numgeom/drawable_sphere.h"
@@ -52,6 +54,34 @@ void SceneWidget_Arrow::Drag(Drawable* item, const glm::vec3& dragging_dir) {
     if (new_length > 1e-6f) {
       dir_ = new_dir / new_length;
     }
+  }
+  this->Update();
+}
+
+void SceneWidget_Arrow::DoubleClick(MouseButton button, Drawable* item) {
+  if (button != MouseButton::Left)
+    return;
+  if (item == base_) {
+    orig_ = glm::round(orig_);
+  } else if (item == shaft_) {
+    const float ax = std::fabs(dir_.x);
+    const float ay = std::fabs(dir_.y);
+    const float az = std::fabs(dir_.z);
+    glm::vec3 axis = glm::vec3(0.0f, 0.0f, 0.0f);
+    if (ax >= ay && ax >= az) {
+      axis = glm::vec3(glm::sign(dir_.x), 0.0f, 0.0f);
+    } else if (ay >= az) {
+      axis = glm::vec3(0.0f, glm::sign(dir_.y), 0.0f);
+    } else {
+      axis = glm::vec3(0.0f, 0.0f, glm::sign(dir_.z));
+    }
+    dir_ = axis;
+  } else if (item == head_) {
+    float snapped = std::round(length_);
+    if (snapped == 0.0f) {
+      snapped = (length_ < 0.0f) ? -1.0f : 1.0f;
+    }
+    length_ = snapped;
   }
   this->Update();
 }

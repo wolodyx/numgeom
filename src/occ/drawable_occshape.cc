@@ -171,8 +171,7 @@ class OccTriangleIterator : public IteratorImpl<glm::u32vec3> {
     auto ptr = dynamic_cast<const OccTriangleIterator*>(&other);
     if (!ptr) return false;
     return trng_it_ == ptr->trng_it_ &&
-           current_index_ == ptr->current_index_ &&
-           index_count_ == ptr->index_count_;
+           current_index_ == ptr->current_index_;
   }
 
  private:

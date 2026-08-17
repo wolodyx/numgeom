@@ -4,6 +4,7 @@
 #include "glm/glm.hpp"
 
 #include "numgeom/framework_enums.h"
+#include "numgeom/framework_export.h"
 
 class Application;
 class Scene;
@@ -15,7 +16,7 @@ class Scene;
 Контроллер преобразует ввод пользователя в перемещение камеры и подсветку
 объектов в сцене.
  */
-class UserInputController {
+class FRAMEWORK_EXPORT UserInputController {
  public:
   UserInputController(Application*, Scene*);
 

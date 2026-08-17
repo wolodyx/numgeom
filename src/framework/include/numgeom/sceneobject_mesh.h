@@ -4,7 +4,7 @@
 #include "numgeom/sceneobject.h"
 #include "numgeom/trimesh.h"
 
-class SceneObject_Mesh : public SceneObject {
+class FRAMEWORK_EXPORT SceneObject_Mesh : public SceneObject {
  public:
   SceneObject_Mesh(Scene*, CTriMesh::Ptr);
   virtual ~SceneObject_Mesh();

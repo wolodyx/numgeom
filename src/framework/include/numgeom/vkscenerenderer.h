@@ -9,6 +9,8 @@
 
 #include "glm/glm.hpp"
 
+#include "numgeom/framework_export.h"
+
 class Application;
 class Scene;
 
@@ -16,7 +18,7 @@ class Scene;
 Класс связывает состояние приложения (Application) с GPU и руководит
 отрисовкой данных в окне графического приложения.
 */
-class VkSceneRenderer {
+class FRAMEWORK_EXPORT VkSceneRenderer {
  public:
   struct Impl;
 

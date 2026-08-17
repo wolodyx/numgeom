@@ -3,10 +3,11 @@
 
 #include <cstdint>
 
+#include "numgeom/framework_export.h"
 #include "numgeom/pixelbuffer.h"
 #include "numgeom/trackedobject.h"
 
-class FgObject : public TrackedObject {
+class FRAMEWORK_EXPORT FgObject : public TrackedObject {
 public:
   virtual ~FgObject();
   virtual const PixelBuffer& GetPixelBuffer() const = 0;

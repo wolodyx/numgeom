@@ -1,25 +1,26 @@
 set(PUBLIC_HEADERS
-  include/numgeom/application.h
-  include/numgeom/debug_framework.h
-  include/numgeom/drawable.h
-  include/numgeom/drawable_cone.h
-  include/numgeom/drawable_cylinder.h
-  include/numgeom/drawable_sphere.h
-  include/numgeom/fgobject.h
-  include/numgeom/fgtext.h
-  include/numgeom/framework_enums.h
-  include/numgeom/lrupool.h
-  include/numgeom/pixelbuffer.h
-  include/numgeom/scene.h
-  include/numgeom/sceneobject.h
-  include/numgeom/sceneobject_mesh.h
-  include/numgeom/scenewidget.h
-  include/numgeom/scenewidget_arrow.h
-  include/numgeom/scenewidget_axisindicator.h
-  include/numgeom/trackedobject.h
-  include/numgeom/userinputcontroller.h
-  include/numgeom/vkscenerenderer.h
+  application.h
+  debug_framework.h
+  drawable.h
+  drawable_cone.h
+  drawable_cylinder.h
+  drawable_sphere.h
+  fgobject.h
+  fgtext.h
+  framework_enums.h
+  lrupool.h
+  pixelbuffer.h
+  scene.h
+  sceneobject.h
+  sceneobject_mesh.h
+  scenewidget.h
+  scenewidget_arrow.h
+  scenewidget_axisindicator.h
+  trackedobject.h
+  userinputcontroller.h
+  vkscenerenderer.h
 )
+list(TRANSFORM PUBLIC_HEADERS PREPEND "include/numgeom/")
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
@@ -71,7 +72,7 @@ set(FONT_FILES
   "UbuntuSans[wdth,wght].ttf"
 )
 
-add_library(framework ${SOURCE_FILES} ${SHADER_FILES})
+add_library(framework SHARED ${SOURCE_FILES} ${SHADER_FILES})
 add_library(numgeom::framework ALIAS framework)
 
 target_link_libraries(framework

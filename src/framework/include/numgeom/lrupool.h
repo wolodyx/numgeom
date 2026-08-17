@@ -4,6 +4,8 @@
 #include <memory>
 #include <vector>
 
+#include "numgeom/framework_export.h"
+
 /** \class LruPool
 \brief Пул счетных ресурсов с LRU-стратегией изъятия.
 
@@ -33,13 +35,13 @@
   +) `void Initialize(Resource*)`;
   +) `void Finalize(Resource*)`.
 */
-class LruPool {
+class FRAMEWORK_EXPORT LruPool {
  public:
   typedef std::shared_ptr<LruPool> PoolPtr;
 
   class Resource;
 
-  class Consumer {
+  class FRAMEWORK_EXPORT Consumer {
    friend class LruPool;
   public:
     Consumer(PoolPtr pool);
@@ -57,7 +59,7 @@ class LruPool {
     LruPool* lru_pool_;
   };
 
-  class Resource {
+  class FRAMEWORK_EXPORT Resource {
     friend class LruPool;
    public:
     Resource(LruPool*);

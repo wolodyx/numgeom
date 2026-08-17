@@ -1,18 +1,19 @@
 set(PUBLIC_HEADERS
-  include/numgeom/classificate.h
-  include/numgeom/drawable_occshape.h
-  include/numgeom/drawable_polytriangulation.h
-  include/numgeom/enums.h
-  include/numgeom/ijk.h
-  include/numgeom/loadusingocc.h
-  include/numgeom/octree.h
-  include/numgeom/quadtree.h
-  include/numgeom/removefaces.h
-  include/numgeom/sceneobject_polytriangulation.h
-  include/numgeom/sceneobject_tdocstd_document.h
-  include/numgeom/tesselate.h
-  include/numgeom/utilities.h
+  classificate.h
+  drawable_occshape.h
+  drawable_polytriangulation.h
+  enums.h
+  ijk.h
+  loadusingocc.h
+  octree.h
+  quadtree.h
+  removefaces.h
+  sceneobject_polytriangulation.h
+  sceneobject_tdocstd_document.h
+  tesselate.h
+  utilities.h
 )
+list(TRANSFORM PUBLIC_HEADERS PREPEND "include/numgeom/")
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
@@ -20,7 +21,7 @@ set(SOURCE_FILES
   curvemetriclength.cc      curvemetriclength.h
   drawable_occshape.cc
   drawable_polytriangulation.cc
-  ffextintersections.cc     ffextintersections.h
+ffextintersections.cc     ffextintersections.h
   intersections.cc          intersections.h
   iterator_ijk.cc           iterator_ijk.h
   loadusingocc.cc
@@ -34,7 +35,7 @@ set(SOURCE_FILES
   writevtk.cc               writevtk.h
 )
 
-add_library(occ ${SOURCE_FILES})
+add_library(occ SHARED ${SOURCE_FILES})
 add_library(numgeom::occ ALIAS occ)
 
 #set_target_properties(occ PROPERTIES PUBLIC_HEADER "${PUBLIC_HEADERS}")

@@ -3,7 +3,7 @@
 
 #include "numgeom/drawable.h"
 
-class Drawable2_Sphere : public Drawable2 {
+class FRAMEWORK_EXPORT Drawable2_Sphere : public Drawable2 {
  public:
   Drawable2_Sphere(SceneObject*);
   Drawable2_Sphere(SceneObject*, const glm::vec3& center, float radius,

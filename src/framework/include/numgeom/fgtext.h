@@ -17,7 +17,7 @@ class GlyphInfo;
 
 С экранным текстом связаны атрибуты: шрифт, размер, цвет, прозрачность.
 */
-class FgText : public FgObject {
+class FRAMEWORK_EXPORT FgText : public FgObject {
  public:
   static FgText* Make(const std::string& text,
                       const glm::vec3& color = glm::vec3(0.0f));

@@ -50,7 +50,7 @@ target_link_libraries(app-qt
     numgeom::framework
     numgeom::io
     $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
-    httplib
+    httplib::httplib
     ZLIB::ZLIB
 )
 

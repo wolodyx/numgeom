@@ -29,6 +29,7 @@
     "glm",
     "glfw3",
     "gtest",
+    "httplib",
     "nlohmann-json",
     "volk",
     "vulkan-memory-allocator",

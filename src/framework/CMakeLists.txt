@@ -83,7 +83,6 @@ target_link_libraries(framework
     GPUOpen::VulkanMemoryAllocator
     stb_image
     stb_truetype
-    gtmathematics
 )
 
 # Use VK_NO_PROTOTYPES to disable the use of prototypes in the Vulkan header.

@@ -29,6 +29,7 @@
     "glm",
     "glfw3",
     "gtest",
+    "stb",
     "httplib",
     "nlohmann-json",
     "volk",

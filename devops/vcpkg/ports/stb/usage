@@ -1,0 +1,12 @@
+stb provides CMake targets:
+
+    find_package(stb CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE stb)
+
+Individual convenience sub-targets are also available:
+
+    target_link_libraries(main PRIVATE stb_image)
+    target_link_libraries(main PRIVATE stb_image_write)
+    target_link_libraries(main PRIVATE stb_truetype)
+
+Headers are included as <stb_image.h>, <stb_image_write.h>, <stb_truetype.h>, etc.

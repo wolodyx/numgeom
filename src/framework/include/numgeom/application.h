@@ -42,12 +42,9 @@ class FRAMEWORK_EXPORT Application {
   //!@{
   //! Взаимодействие со сценами.
 
-  Scene* AddScene(const std::string&);
+  Scene* AddScene();
 
   bool RemoveScene(Scene*);
-
-  Scene* GetScene(const std::string&);
-  const Scene* GetScene(const std::string&) const;
   //!@}
 
   FgObject* AddFgImage(const std::string& image_filename);

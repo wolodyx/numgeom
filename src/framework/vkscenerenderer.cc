@@ -3627,7 +3627,7 @@ bool Synchronize(Application* app, VulkanObjects* vk_objects, Scene* scene) {
 
 bool VkSceneRenderer::Update(Scene* scene, bool force) {
   // Проверяем принадлежность сцены приложению.
-  if (!scene || scene != impl_->app->GetScene(scene->GetName()))
+  if (!scene /*|| scene != impl_->app->GetScene(scene->GetName())*/)
     return false;
 
   assert(!scene->IsDeleted());
@@ -3846,11 +3846,11 @@ VkSampleCountFlagBits VkSceneRenderer::GetSampleCount() const {
   return impl_->vk_objects.global_state.sample_count;
 }
 
-uint32_t VkSceneRenderer::GetObjectId(Scene* scene, int x, int y) const {
+uint32_t VkSceneRenderer::GetObjectId(const Scene* scene, int x, int y) const {
   if (!scene)
     return 0;
 
-  auto it = impl_->vk_objects.scene_res_array.find(scene);
+  auto it = impl_->vk_objects.scene_res_array.find(const_cast<Scene*>(scene));
   if (it == impl_->vk_objects.scene_res_array.end())
     return 0;
 

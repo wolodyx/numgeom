@@ -74,7 +74,7 @@ SceneMdiSubWindow* MainWindow::CreateMdiSubWindow(const QString& scene_name) {
   connect(sub, SIGNAL(destroyed(QObject*)), this, SLOT(updateWindowMenu()));
   updateWindowMenu();
   SceneWindow* scene_window = sub->GetSceneWindow();
-  scene_window->Initialize(&vulkan_instance_, scene_name);
+  scene_window->Initialize(&vulkan_instance_);
   mdi_area_->setActiveSubWindow(sub);
   return sub;
 }

@@ -10,7 +10,6 @@
 
 class SceneImpl {
  public:
-  std::string name_;
   std::map<FgObject*,glm::ivec2> fgobjects_positions;
   Camera camera_;
   TrackedObjectList objects_;
@@ -19,10 +18,8 @@ class SceneImpl {
   bool workplane_enabled_;
 };
 
-Scene::Scene(const std::string& name) {
-  impl_ = new SceneImpl {
-    .name_ = name
-  };
+Scene::Scene() {
+  impl_ = new SceneImpl{};
   this->AddSubObjects(&impl_->objects_);
   impl_->camera_.SetBoundBoxFunction(
     [this](){ return this->GetBoundBox(); });
@@ -30,10 +27,6 @@ Scene::Scene(const std::string& name) {
 
 Scene::~Scene() {
   delete impl_;
-}
-
-std::string Scene::GetName() const {
-  return impl_->name_;
 }
 
 AlignedBoundBox Scene::GetBoundBox() const {

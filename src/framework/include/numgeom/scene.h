@@ -25,10 +25,8 @@ class SceneObject;
 */
 class FRAMEWORK_EXPORT Scene : public TrackedObject {
  public:
-  Scene(const std::string& name);
+  Scene();
   ~Scene();
-
-  std::string GetName() const;
 
   AlignedBoundBox GetBoundBox() const;
 

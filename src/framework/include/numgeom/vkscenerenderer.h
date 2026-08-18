@@ -30,7 +30,7 @@ class FRAMEWORK_EXPORT VkSceneRenderer {
   //! Запрос на обновление связанного со сценой изображения.
   bool Update(Scene*, bool force = false);
 
-  uint32_t GetObjectId(Scene* scene, int x, int y) const;
+  uint32_t GetObjectId(const Scene* scene, int x, int y) const;
 
   //! Возвращает экземпляр vulkan:
   //! существующий или, если отсутствует, то вновь созданный.

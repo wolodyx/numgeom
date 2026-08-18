@@ -38,7 +38,7 @@ SceneWindow* SceneMdiSubWindow::GetSceneWindow() const {
 }
 
 Scene* SceneMdiSubWindow::GetScene() const {
-  return app_->GetScene(scene_name_.toStdString());
+  return scene_window_->GetScene();
 }
 
 QString SceneMdiSubWindow::GetSceneName() const {

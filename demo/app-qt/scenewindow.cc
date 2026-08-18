@@ -13,9 +13,8 @@ SceneWindow::SceneWindow(Application* app) {
   app_ = app;
 }
 
-bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance,
-                             const QString& scene_name) {
-  scene_ = app_->AddScene(scene_name.toStdString());
+bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance) {
+  scene_ = app_->AddScene();
   user_input_controller_ = new UserInputController(app_, scene_);
 
   // Устанавливаем функцию размера viewport'а (уже установлена в SceneMdiSubWindow,

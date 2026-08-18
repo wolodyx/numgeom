@@ -16,7 +16,8 @@ class SceneWindow : public QWindow {
  public:
   SceneWindow(Application*);
   ~SceneWindow();
-  bool Initialize(QVulkanInstance*, const QString& scene_name);
+  bool Initialize(QVulkanInstance*);
+  Scene* GetScene() { return scene_; }
 
  private:
   void keyPressEvent(QKeyEvent*) override;

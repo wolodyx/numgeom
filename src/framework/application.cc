@@ -29,7 +29,7 @@ class ApplicationImpl {
   }
 
  public:
-  TrackedObjectDict scenes_;
+  TrackedObjectList scenes_;
   TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
   SelectionMode selection_mode_ = SelectionMode::Disable;
@@ -79,14 +79,9 @@ bool Application::Update(Scene* scene, bool force) {
 
 VkSceneRenderer* Application::GetRenderer() { return impl_->renderer_; }
 
-Scene* Application::AddScene(const std::string& new_scene_name) {
-  // Check input arguments.
-  if (new_scene_name.empty())
-    return nullptr;
-  if (impl_->scenes_.Contains(new_scene_name))
-    return nullptr;
-  Scene* new_scene = new Scene(new_scene_name);
-  impl_->scenes_.Insert(new_scene_name, new_scene);
+Scene* Application::AddScene() {
+  Scene* new_scene = new Scene{};
+  impl_->scenes_.Insert(new_scene);
   new_scene->SetSelectionMode(impl_->selection_mode_);
   return new_scene;
 }
@@ -94,17 +89,7 @@ Scene* Application::AddScene(const std::string& new_scene_name) {
 bool Application::RemoveScene(Scene* scene) {
   if (!scene)
     return false;
-  if (impl_->scenes_.Get(scene->GetName()) != scene)
-    return false;
   return impl_->scenes_.Remove(scene);
-}
-
-Scene* Application::GetScene(const std::string& name) {
-  return dynamic_cast<Scene*>(impl_->scenes_.Get(name));
-}
-
-const Scene* Application::GetScene(const std::string& name) const {
-  return dynamic_cast<Scene*>(impl_->scenes_.Get(name));
 }
 
 FgObject* Application::AddFgImage(const std::string& image_filename) {

@@ -3559,9 +3559,6 @@ bool Synchronize(Application* app, VulkanObjects* vk_objects, Scene* scene) {
 
   std::list<Scene*> scenes_for_update;
   scenes_for_update.push_back(scene);
-  for (Scene* fg_scene : app->GetForegroundScenes(scene))
-    scenes_for_update.push_back(fg_scene);
-
   for (Scene* scene : scenes_for_update) {
     auto it = vk_objects->scene_res_array.find(scene);
     auto scene_res =

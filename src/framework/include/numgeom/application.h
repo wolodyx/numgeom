@@ -36,26 +36,18 @@ class FRAMEWORK_EXPORT Application {
 
   ~Application();
 
-  Scene* AddAxisIndicator();
-
   //! Обновление изображения на экране.
   bool Update(Scene*, bool force = false);
 
   //!@{
   //! Взаимодействие со сценами.
 
-  //! Добавляет новую сцену с именем. Если задан `background_scene`,
-  //! то создаваемая сцена будет выводиться на переднем плане.
-  Scene* AddScene(const std::string&, Scene* background_scene = nullptr);
+  Scene* AddScene(const std::string&);
 
   bool RemoveScene(Scene*);
 
   Scene* GetScene(const std::string&);
   const Scene* GetScene(const std::string&) const;
-
-  Iterator<Scene*> GetForegroundScenes(Scene*);
-
-  Scene* GetBackgroundScene(Scene*);
   //!@}
 
   FgObject* AddFgImage(const std::string& image_filename);

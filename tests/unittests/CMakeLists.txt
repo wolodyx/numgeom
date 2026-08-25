@@ -6,6 +6,7 @@ set(SOURCE_FILES
   testiterator.cc
   testlrupool.cc
   testscene.cc
+  testscratch.cc
   testtrimesh.cc
   utilities.cc              utilities.h
 )

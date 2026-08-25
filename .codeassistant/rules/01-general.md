@@ -19,3 +19,9 @@ NumGeom is a platform for the rapid development of 3D interactive applications u
 ## External libraries
 
 The small external libraries are located in the `/extern` directory: `glfw`, `glm`, `gtest`, `nlohmann_json`, `stb`, `volk`, `VulkanMemoryAllocator`.
+
+## Tests
+
+* The unit tests are located in the `/tests/unittests` directory.
+* Add temporary test for debugging to the `/tests/unittests/testscratch.cc` file into `TEST(Scratch, Test)`
+  and run this test using the `ctest --preset {preset-name} -R "Scratch.Test"` command.

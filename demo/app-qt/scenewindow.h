@@ -6,8 +6,8 @@
 #include "numgeom/trimesh.h"
 
 class Application;
-class Scene;
 class UserInputController;
+class Workbench;
 
 /** \class SceneWindow
 \brief Окно графического приложения, в котором отображается сцена.
@@ -17,7 +17,7 @@ class SceneWindow : public QWindow {
   SceneWindow(Application*);
   ~SceneWindow();
   bool Initialize(QVulkanInstance*);
-  Scene* GetScene() { return scene_; }
+  Workbench* GetWorkbench();
 
  private:
   void keyPressEvent(QKeyEvent*) override;
@@ -33,8 +33,6 @@ class SceneWindow : public QWindow {
   bool event(QEvent*) override;
 
  private:
-  Application* app_ = nullptr;
-  Scene* scene_ = nullptr;
-  UserInputController* user_input_controller_ = nullptr;
+  Workbench* workbench_ = nullptr;
 };
 #endif  // NUMGEOM_EXAMPLES_APPQT_SCENEWINDOW_H_

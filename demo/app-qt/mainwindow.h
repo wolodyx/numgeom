@@ -10,6 +10,7 @@ class Application;
 class Scene;
 class SceneWindow;
 class SceneMdiSubWindow;
+class Workbench;
 
 class MainWindow : public QMainWindow {
   Q_OBJECT
@@ -21,7 +22,7 @@ class MainWindow : public QMainWindow {
 
   // Возвращает активное MDI подокно (или nullptr, если нет окон)
   SceneMdiSubWindow* GetActiveMdiSubWindow() const;
-  Scene* GetActiveScene() const;
+  Workbench* GetActiveWorkbench() const;
 
  private:
   void addToRecentFiles(const QString& filepath);
@@ -37,6 +38,7 @@ class MainWindow : public QMainWindow {
   bool loadWelcomeModel(Scene*);
   void saveRecentFiles();
   void updateRecentFilesMenu();
+  bool executeCommand(const std::string&);
 
   // Создает новое MDI подокно с заданным именем сцены
   SceneMdiSubWindow* CreateMdiSubWindow(const QString& scene_name);

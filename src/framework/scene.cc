@@ -14,7 +14,6 @@ class SceneImpl {
   Camera camera_;
   TrackedObjectList objects_;
   uint64_t vulkan_surface_ = 0;
-  SelectionMode selection_mode_ = SelectionMode::Disable;
   bool workplane_enabled_;
 };
 
@@ -31,7 +30,7 @@ Scene::~Scene() {
 
 AlignedBoundBox Scene::GetBoundBox() const {
   AlignedBoundBox box;
-  for (SceneObject* o : GetObjects<SceneObject>(impl_->objects_)) {
+  for (SceneObject* o : this->VisibleObjects()) {
     box.Expand(o->GetBoundBox());
   }
   return box;
@@ -49,6 +48,13 @@ void Scene::Clear() {
 
 Iterator<SceneObject*> Scene::Objects() const {
   return GetObjects<SceneObject>(impl_->objects_);
+}
+
+Iterator<SceneObject*> Scene::VisibleObjects() const {
+  Iterator<SceneObject*> it = GetObjects<SceneObject>(impl_->objects_);
+  return Filter(it, [](SceneObject* o){
+                      return o->IsVisible();
+                    });
 }
 
 void Scene::EnableWorkplane(bool enable) {
@@ -117,10 +123,6 @@ void Scene::OrientCamera(const OrthoBasis<float>& ortho_basis) {
   this->FitScene();
 }
 
-void Scene::SetViewportSizeFunction(std::function<std::tuple<uint32_t,uint32_t>()> func) {
-  impl_->camera_.SetViewportSizeFunction(func);
-}
-
 bool Scene::HasFgObjects() const {
   return !impl_->fgobjects_positions.empty();
 }
@@ -144,18 +146,13 @@ void Scene::AddFgObject(FgObject* fg, const glm::ivec2& screen_position) {
   this->SetDirty();
 }
 
-void Scene::SetVulkanSurface(uint64_t surface) {
-  impl_->vulkan_surface_ = surface;
+void Scene::InitializeGraphics(
+    std::function<std::tuple<uint32_t, uint32_t>()> get_viewport_size,
+    uint64_t vulkan_surface) {
+  impl_->vulkan_surface_ = vulkan_surface;
+  impl_->camera_.SetViewportSizeFunction(get_viewport_size);
 }
 
 uint64_t Scene::GetVulkanSurface() const {
   return impl_->vulkan_surface_;
-}
-
-void Scene::SetSelectionMode(SelectionMode mode) {
-  impl_->selection_mode_ = mode;
-}
-
-SelectionMode Scene::GetSelectionMode() const {
-  return impl_->selection_mode_;
 }

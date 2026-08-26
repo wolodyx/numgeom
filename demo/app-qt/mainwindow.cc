@@ -17,18 +17,17 @@
 #include "qscreen.h"
 #include "qstandardpaths.h"
 
+#include "numgeom/appcontext.h"
 #include "numgeom/application.h"
+#include "numgeom/command.h"
 #include "numgeom/fgtext.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_arrow.h"
 #include "numgeom/scenewidget_axisindicator.h"
+#include "numgeom/userinputcontroller.h"
 #include "numgeom/vkscenerenderer.h"
-#ifdef USE_NUMGEOM_MODULE_OCC
-#  include "numgeom/loadusingocc.h"
-#  include "numgeom/sceneobject_polytriangulation.h"
-#  include "numgeom/sceneobject_tdocstd_document.h"
-#endif
+#include "numgeom/workbench.h"
 
 #include "dialogs/addforegroundimage.h"
 #include "dialogs/addforegroundtext.h"
@@ -39,7 +38,8 @@
 #include "scenemdisubwindow.h"
 #include "version.h"
 
-MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updating_window_menu_(false) {
+MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"),
+                                           updating_window_menu_(false) {
   app_ = app;
   loadRecentFiles();
   mdi_area_ = new QMdiArea(this);
@@ -47,6 +47,22 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"), updat
   this->createActions();
   QIcon window_icon(QString(":/resources/icons/app.ico"));
   this->setWindowIcon(window_icon);
+  app_->GetContext()->SetContextMenuFunction(
+      [this](Workbench* wb, int x, int y) {
+        QMenu menu(this);
+        auto uic = wb->GetUserInputController();
+        if (1) {
+          QAction* action = menu.addAction(tr("Visibility on/off"));
+          connect(action, &QAction::triggered, this,
+                  [this](){
+                    this->executeCommand("change-visibility");
+                  });
+        }
+        if (!menu.isEmpty()) {
+          QPoint pos = QWidget::mapToGlobal(QPoint{x,y});
+          menu.exec(pos);
+        }
+      });
 }
 
 MainWindow::~MainWindow() {}
@@ -56,14 +72,14 @@ SceneMdiSubWindow* MainWindow::GetActiveMdiSubWindow() const {
   return qobject_cast<SceneMdiSubWindow*>(sub);
 }
 
-Scene* MainWindow::GetActiveScene() const {
+Workbench* MainWindow::GetActiveWorkbench() const {
   auto sub_window = GetActiveMdiSubWindow();
   if (!sub_window)
     return nullptr;
   auto scene_sub_window = qobject_cast<SceneMdiSubWindow*>(sub_window);
   if (!scene_sub_window)
     return nullptr;
-  return scene_sub_window->GetScene();
+  return scene_sub_window->GetWorkbench();
 }
 
 SceneMdiSubWindow* MainWindow::CreateMdiSubWindow(const QString& scene_name) {
@@ -94,13 +110,15 @@ void MainWindow::initVulkan() {
   }
 
   // Сцена уже создана в конструкторе SceneMdiSubWindow
-  Scene* scene = active_sub->GetScene();
-  if (!scene) {
+  Workbench* wb = active_sub->GetWorkbench();
+  if (!wb) {
     qFatal("Failed to get scene from active subwindow");
     return;
   }
 
-  this->loadWelcomeModel(scene);
+  wb->LoadWelcomeModel();
+
+  Scene* scene = wb->GetScene();
 
   //auto fg_scene = app_->AddScene("axis-indicator", scene);
   //fg_scene->AddObject<SceneWidget_AxisIndicator>();
@@ -216,9 +234,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,1,0),
                   glm::vec3(0,0,1));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("1")));
     std_view->addAction(act);
@@ -230,9 +248,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,-1),
                   glm::vec3(0,1,0));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("2")));
     std_view->addAction(act);
@@ -244,9 +262,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(-1,0,0),
                   glm::vec3(0,0,1));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("3")));
     std_view->addAction(act);
@@ -258,9 +276,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,-1,0),
                   glm::vec3(0,0,1));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("4")));
     std_view->addAction(act);
@@ -272,9 +290,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(0,0,1),
                   glm::vec3(0,-1,0));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("5")));
     std_view->addAction(act);
@@ -286,9 +304,9 @@ void MainWindow::createViewMenu() {
               auto ortho_basis = OrthoBasis<float>::FromZY(
                   glm::vec3(1,0,0),
                   glm::vec3(0,0,1));
-              auto scene = this->GetActiveScene();
-              scene->OrientCamera(ortho_basis);
-              app_->Update(scene);
+              auto workbench = this->GetActiveWorkbench();
+              workbench->GetScene()->OrientCamera(ortho_basis);
+              workbench->UpdateScreen();
     });
     act->setShortcut(QKeySequence(tr("6")));
     std_view->addAction(act);
@@ -328,13 +346,13 @@ void MainWindow::createSceneMenu() {
             [=, this](bool checked){
               SceneMdiSubWindow* sub = GetActiveMdiSubWindow();
               if (!sub) return;
-              Scene* scene = sub->GetScene();
-              if (!scene) return;
+              Workbench* workbench = sub->GetWorkbench();
+              Scene* scene = workbench->GetScene();
               if (scene->IsWorkplaneEnabled())
                 scene->DisableWorkplane();
               else
                 scene->EnableWorkplane();
-              app_->Update(scene);
+              workbench->UpdateScreen();
     });
     menu->addAction(act);
   }
@@ -393,10 +411,11 @@ void MainWindow::createSceneMenu() {
       {"64 bit",  SampleCount::Bits_64},
     };
 
+    auto context = app_->GetContext();
     for (const auto& entry : entries) {
       QAction* act = new QAction(tr(entry.label), this);
       act->setCheckable(true);
-      act->setChecked(entry.sample_count == app_->GetSampleCount());
+      act->setChecked(entry.sample_count == context->GetSampleCount());
       act->setData(static_cast<int>(entry.sample_count));
       msaa_group->addAction(act);
       msaa_menu->addAction(act);
@@ -421,7 +440,8 @@ void MainWindow::createPickingMenu() {
     {"Multiple selection", SelectionMode::Multiple},
   };
 
-  SelectionMode current_selection_mode = app_->GetSelectionMode();
+  AppContext* app_context = app_->GetContext();
+  SelectionMode current_selection_mode = app_context->GetSelectionMode();
   for (const auto& entry : entries) {
     QAction* act = new QAction(tr(entry.label), this);
     act->setCheckable(true);
@@ -597,133 +617,13 @@ void MainWindow::onQuit() {
     this->close();
 }
 
-namespace {
-bool IsStepFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "step" || suffix == "stp";
-}
-
-bool IsStlFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "stl";
-}
-
-bool IsIgesFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "iges" || suffix == "igs";
-}
-
-bool IsObjFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "obj";
-}
-
-bool IsVrmlFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "wrl";
-}
-
-bool IsGltfFile(const QString& filename) {
-  QFileInfo fileInfo(filename);
-  QString suffix = fileInfo.suffix();
-  suffix = suffix.toLower();
-  return suffix == "glb";
-}
-}
-
 void MainWindow::openFile(const QString& filename) {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
-  if (!scene) return;
-
-  // Update window title with filename
-  QFileInfo fileInfo(filename);
-  active_sub->setWindowTitle(fileInfo.fileName());
-
-  scene->Clear();
-  app_->Update(scene);
-#ifdef USE_NUMGEOM_MODULE_OCC
-  if (IsStepFile(filename)) {
-    auto document = LoadStepDocument(filename.toStdWString());
-    if (!document) {
-      qDebug() << "Ошибка при загрузке файла '" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_TDocStd_Document>(document);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-  } else if (IsStlFile(filename)) {
-    auto triangulation = LoadStl(filename.toStdWString());
-    if (!triangulation) {
-      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-  } else if (IsIgesFile(filename)) {
-    auto document = LoadIges(filename.toStdWString());
-    if (!document) {
-      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_TDocStd_Document>(document);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-  } else if (IsObjFile(filename)) {
-    auto triangulation = LoadObj(filename.toStdWString());
-    if (!triangulation) {
-      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_PolyTriangulation>(triangulation);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-#ifdef NUMGEOM_OCC_LOAD_VRML
-  } else if (IsVrmlFile(filename)) {
-    auto document = LoadVrml(filename.toStdWString());
-    if (!document) {
-      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_TDocStd_Document>(document);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-#endif
-  } else if (IsGltfFile(filename)) {
-    auto document = LoadGltf(filename.toStdWString());
-    if (!document) {
-      qDebug() << "Ошибка при загрузке файла `" << filename << "'";
-      return;
-    }
-    scene->AddObject<SceneObject_TDocStd_Document>(document);
-    scene->FitScene();
-    app_->Update(scene);
-    return;
-  }
-#endif
-  auto mesh = LoadToTriMesh(filename.toStdWString());
-  if(mesh) {
-    scene->AddObject<SceneObject_Mesh>(mesh);
-    scene->FitScene();
-    app_->Update(scene);
-  }
+  Workbench* wb = active_sub->GetWorkbench();
+  wb->LoadFromFile(filename.toStdString());
+  wb->GetScene()->FitScene();
+  wb->UpdateScreen();
 }
 
 void MainWindow::onOpenFile() {
@@ -749,23 +649,25 @@ void MainWindow::onOpenFile() {
 void MainWindow::onFitScene() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
-  if (!scene) return;
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
   scene->FitScene();
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onMsaa(QAction* action) {
   if (!action) return;
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
   if (!scene) return;
   SampleCount count = static_cast<SampleCount>(action->data().toInt());
-  if (!app_->SetSampleCount(count)) {
+  AppContext* app_context = app_->GetContext();
+  if (!app_context->SetSampleCount(count)) {
     qWarning() << "Error of sample count setting";
     // Revert the action's checked state to the current sample count
-    SampleCount current = app_->GetSampleCount();
+    SampleCount current = app_context->GetSampleCount();
     for (QAction* act : action->actionGroup()->actions()) {
       if (static_cast<SampleCount>(act->data().toInt()) == current) {
         act->setChecked(true);
@@ -774,7 +676,7 @@ void MainWindow::onMsaa(QAction* action) {
     }
     return;
   }
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onPickingMode(QAction* action) {
@@ -782,35 +684,36 @@ void MainWindow::onPickingMode(QAction* action) {
   int mode = action->data().toInt(&ok);
   if (!ok) return;
   SelectionMode selection_mode = static_cast<SelectionMode>(mode);
-  app_->SetSelectionMode(selection_mode);
+  app_->GetContext()->SetSelectionMode(selection_mode);
 }
 
 void MainWindow::onAddAxisIndicator() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
   if (!scene) return;
   scene->AddObject<SceneWidget_AxisIndicator>();
   scene->FitScene();
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onAddArrow() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
-  if (!scene) return;
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
   scene->AddObject<SceneWidget_Arrow>();
   scene->FitScene();
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onAddFgImage() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub)
     return;
-  Scene* scene = active_sub->GetScene();
-  assert(scene != nullptr);
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
 
   Dialog_AddForegroundImage dialog(this, settings_);
   if (dialog.exec() != QDialog::Accepted)
@@ -822,15 +725,15 @@ void MainWindow::onAddFgImage() {
 
   FgObject* fg = app_->AddFgImage(file_path);
   scene->AddFgObject(fg, dialog.GetPosition());
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onAddFgText() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub)
     return;
-  Scene* scene = active_sub->GetScene();
-  assert(scene != nullptr);
+  Workbench* wb = active_sub->GetWorkbench();
+  Scene* scene = wb->GetScene();
 
   Dialog_AddForegroundText dialog(this);
   if (dialog.exec() != QDialog::Accepted)
@@ -839,7 +742,7 @@ void MainWindow::onAddFgText() {
   FgText* fg = app_->AddFgText(dialog.GetText());
   fg->SetColor(dialog.GetColor());
   scene->AddFgObject(fg, dialog.GetPosition());
-  app_->Update(scene);
+  wb->UpdateScreen();
 }
 
 void MainWindow::onNewWindow() {
@@ -999,16 +902,27 @@ void MainWindow::onOpenRecentFile() {
 void MainWindow::onRedrawScene() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
-  if (!scene) return;
-  app_->Update(scene, true);
+  Workbench* wb = active_sub->GetWorkbench();
+  wb->UpdateScreen(true);
 }
 
 void MainWindow::onClearScene() {
   SceneMdiSubWindow* active_sub = GetActiveMdiSubWindow();
   if (!active_sub) return;
-  Scene* scene = active_sub->GetScene();
-  if (!scene) return;
-  scene->Clear();
-  app_->Update(scene);
+  Workbench* wb = active_sub->GetWorkbench();
+  wb->Clear();
+  wb->UpdateScreen();
+}
+
+bool MainWindow::executeCommand(const std::string& cmd_id) {
+  Workbench* wb = this->GetActiveWorkbench();
+  if (!wb)
+    return false;
+  Command* cmd = wb->CreateCommand(cmd_id);
+  if (!cmd)
+    return false;
+  if (!cmd->Execute())
+    return false;
+  wb->UpdateScreen();
+  return true;
 }

@@ -229,6 +229,7 @@ class OccNormalIterator : public IteratorImpl<glm::vec3> {
   }
 
   glm::vec3 current() const override {
+    assert(trng_it_ != triangulations_.end());
     const Handle(Poly_Triangulation)& trng = std::get<0>(*trng_it_);
     gp_Dir normal;
     if (!trng->HasNormals())
@@ -256,8 +257,11 @@ class OccNormalIterator : public IteratorImpl<glm::vec3> {
   bool equals(const IteratorImpl<glm::vec3>& other) const override {
     auto ptr = dynamic_cast<const OccNormalIterator*>(&other);
     if (!ptr) return false;
-    return trng_it_ == ptr->trng_it_ &&
-           current_index_ == ptr->current_index_;
+    if (trng_it_ != ptr->trng_it_)
+      return false;
+    if (trng_it_ == triangulations_.end())
+      return true;
+    return current_index_ == ptr->current_index_;
   }
 
   private:

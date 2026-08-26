@@ -16,16 +16,13 @@ SceneMdiSubWindow::SceneMdiSubWindow(Application* app,
                                      const QString& scene_name,
                                      QVulkanInstance* vulkan_instance,
                                      QWidget* parent)
-    : QMdiSubWindow(parent),
-      app_(app),
-      scene_name_(scene_name) {
+    : QMdiSubWindow(parent), app_(app) {
   scene_window_ = new SceneWindow(app_);
 
   QWidget* container = QWidget::createWindowContainer(scene_window_, this);
   setWidget(container);
 
-  // Set window title
-  setWindowTitle(scene_name_);
+  setWindowTitle(scene_name);
 }
 
 SceneMdiSubWindow::~SceneMdiSubWindow() {
@@ -37,10 +34,6 @@ SceneWindow* SceneMdiSubWindow::GetSceneWindow() const {
   return scene_window_;
 }
 
-Scene* SceneMdiSubWindow::GetScene() const {
-  return scene_window_->GetScene();
-}
-
-QString SceneMdiSubWindow::GetSceneName() const {
-  return scene_name_;
+Workbench* SceneMdiSubWindow::GetWorkbench() const {
+  return scene_window_->GetWorkbench();
 }

@@ -7,61 +7,62 @@
 #include "numgeom/scene.h"
 #include "numgeom/userinputcontroller.h"
 #include "numgeom/vkscenerenderer.h"
+#include "numgeom/workbench.h"
 
 SceneWindow::SceneWindow(Application* app) {
   this->setSurfaceType(QSurface::VulkanSurface);
-  app_ = app;
+
+  workbench_ = Workbench::Create("OCC");
+  assert(workbench_ != nullptr);
+  app->Add(workbench_);
 }
 
 bool SceneWindow::Initialize(QVulkanInstance* vulkan_instance) {
-  scene_ = app_->AddScene();
-  user_input_controller_ = new UserInputController(app_, scene_);
-
-  // Устанавливаем функцию размера viewport'а (уже установлена в SceneMdiSubWindow,
-  // но можно обновить, если нужно)
-  scene_->SetViewportSizeFunction([this]() {
-    QSize sz = this->size();
-    qreal r = this->devicePixelRatio();
-    uint32_t width = static_cast<uint32_t>(sz.width() * r + 0.5);
-    uint32_t height = static_cast<uint32_t>(sz.height() * r + 0.5);
-    return std::make_tuple(width, height);
-  });
-
   if (!vulkan_instance->isValid())
     return false;
-
   this->setVulkanInstance(vulkan_instance);
   VkSurfaceKHR surface = QVulkanInstance::surfaceForWindow(this);
   assert(surface != VK_NULL_HANDLE);
-  scene_->SetVulkanSurface(reinterpret_cast<uint64_t>(surface));
-
+  Scene* scene = workbench_->GetScene();
+  scene->InitializeGraphics(
+    [this]() {
+      QSize sz = this->size();
+      qreal r = this->devicePixelRatio();
+      uint32_t width = static_cast<uint32_t>(sz.width() * r + 0.5);
+      uint32_t height = static_cast<uint32_t>(sz.height() * r + 0.5);
+      return std::make_tuple(width, height);
+    },
+    reinterpret_cast<uint64_t>(surface));
   return true;
 }
 
 SceneWindow::~SceneWindow() {
-  delete user_input_controller_;
+  delete workbench_;
 }
 
 void SceneWindow::keyPressEvent(QKeyEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   int key = event->key();
-  user_input_controller_->KeyPressed(key);
+  uic->KeyPressed(key);
   QWindow::keyPressEvent(event);
 }
 
 void SceneWindow::keyReleaseEvent(QKeyEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   int key = event->key();
-  user_input_controller_->KeyReleased(key);
+  uic->KeyReleased(key);
   QWindow::keyPressEvent(event);
 }
 
 void SceneWindow::mousePressEvent(QMouseEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   QPoint pt = event->pos();
   if (event->button() == Qt::LeftButton)
-    user_input_controller_->MouseLeftButtonDown(pt.x(), pt.y());
+    uic->MouseLeftButtonDown(pt.x(), pt.y());
   else if (event->button() == Qt::RightButton)
-    user_input_controller_->MouseRightButtonDown(pt.x(), pt.y());
+    uic->MouseRightButtonDown(pt.x(), pt.y());
   else if (event->button() == Qt::MiddleButton)
-    user_input_controller_->MouseMiddleButtonDown(pt.x(), pt.y());
+    uic->MouseMiddleButtonDown(pt.x(), pt.y());
   else {
     event->ignore();
     return;
@@ -71,13 +72,14 @@ void SceneWindow::mousePressEvent(QMouseEvent* event) {
 }
 
 void SceneWindow::mouseReleaseEvent(QMouseEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   QPoint pt = event->pos();
   if (event->button() == Qt::LeftButton)
-    user_input_controller_->MouseLeftButtonUp(pt.x(), pt.y());
+    uic->MouseLeftButtonUp(pt.x(), pt.y());
   else if (event->button() == Qt::RightButton)
-    user_input_controller_->MouseRightButtonUp(pt.x(), pt.y());
+    uic->MouseRightButtonUp(pt.x(), pt.y());
   else if (event->button() == Qt::MiddleButton)
-    user_input_controller_->MouseMiddleButtonUp(pt.x(), pt.y());
+    uic->MouseMiddleButtonUp(pt.x(), pt.y());
   else {
     event->ignore();
     return;
@@ -87,15 +89,17 @@ void SceneWindow::mouseReleaseEvent(QMouseEvent* event) {
 }
 
 void SceneWindow::mouseMoveEvent(QMouseEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   QPoint pt = event->pos();
-  user_input_controller_->MouseMove(pt.x(), pt.y());
+  uic->MouseMove(pt.x(), pt.y());
   event->accept();
 }
 
 void SceneWindow::wheelEvent(QWheelEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   QPoint angleDelta = event->angleDelta();
   int numDegrees = angleDelta.y() / 8;
-  user_input_controller_->MouseWheelRotate(numDegrees);
+  uic->MouseWheelRotate(numDegrees);
   event->accept();
 }
 
@@ -112,9 +116,9 @@ MouseButton ToMouseButton(Qt::MouseButton button) {
 }
 
 void SceneWindow::mouseDoubleClickEvent(QMouseEvent* event) {
+  auto uic = workbench_->GetUserInputController();
   QPoint pt = event->pos();
-  user_input_controller_->MouseDoubleClick(ToMouseButton(event->button()),
-                                           pt.x(), pt.y());
+  uic->MouseDoubleClick(ToMouseButton(event->button()), pt.x(), pt.y());
   event->accept();
 }
 
@@ -122,7 +126,7 @@ void SceneWindow::resizeEvent(QResizeEvent* event) {}
 
 void SceneWindow::exposeEvent(QExposeEvent* event) {
   if (this->isExposed()) {
-    app_->GetRenderer()->Update(scene_);
+    workbench_->UpdateScreen();
   } else {
     // renderer_->finalize();
   }
@@ -132,18 +136,23 @@ bool SceneWindow::event(QEvent* e) {
   switch (e->type()) {
     case QEvent::Paint:
     case QEvent::UpdateRequest:
-      app_->GetRenderer()->Update(scene_);
+      workbench_->UpdateScreen();
       break;
     case QEvent::PlatformSurface: {
       auto* pse = static_cast<QPlatformSurfaceEvent*>(e);
       if (pse->surfaceEventType() ==
           QPlatformSurfaceEvent::SurfaceAboutToBeDestroyed) {
-        app_->RemoveScene(scene_);
-        app_->GetRenderer()->Update(scene_);
-        scene_ = nullptr;
+        workbench_->Remove();
+        workbench_->UpdateScreen();
+        delete workbench_;
+        workbench_ = nullptr;
       }
       break;
     }
   }
   return QWindow::event(e);
+}
+
+Workbench* SceneWindow::GetWorkbench() {
+  return workbench_;
 }

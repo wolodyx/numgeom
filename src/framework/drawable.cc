@@ -86,7 +86,12 @@ const Drawable2* Drawable2::Cast(const Drawable* d) {
 
 bool Drawable::IsVisible() const { return is_visible_; }
 
-void Drawable::SetVisibility(bool visible) { is_visible_ = visible; }
+void Drawable::SetVisibility(bool visible) {
+  if (is_visible_ == visible)
+    return;
+  is_visible_ = visible;
+  this->SetDirty();
+}
 
 bool Drawable::IsPickable() const { return is_visible_ && is_pickable_; }
 

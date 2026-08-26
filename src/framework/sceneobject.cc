@@ -11,8 +11,8 @@ class SceneObjectImpl {
  public:
   Scene* scene;
   TrackedObjectList drawables;
-  bool is_visible_;
-  bool is_pickable_;
+  bool is_visible_ = true;
+  bool is_pickable_ = true;
 };
 
 SceneObject::SceneObject(Scene* scene) {
@@ -43,6 +43,13 @@ Iterator<Drawable*> SceneObject::Drawables() const {
   return GetObjects<Drawable>(impl_->drawables);
 }
 
+Iterator<Drawable*> SceneObject::VisibleDrawables() const {
+  auto it = GetObjects<Drawable>(impl_->drawables);
+  return Filter(it, [](Drawable* obj){
+                      return obj->IsVisible();
+                    });
+}
+
 void SceneObject::Insert(Drawable* drawable) {
   impl_->drawables.Insert(drawable);
 }
@@ -60,3 +67,11 @@ bool SceneObject::IsPickable() const { return impl_->is_pickable_; }
 void SceneObject::DisablePicking() { impl_->is_pickable_ = false; }
 
 void SceneObject::EnablePicking() { impl_->is_pickable_ = true; }
+
+Scene* SceneObject::GetScene() { return impl_->scene; }
+
+const Scene* SceneObject::GetScene() const { return impl_->scene;}
+
+void SceneObject::Clear() {
+  impl_->drawables.Clear();
+}

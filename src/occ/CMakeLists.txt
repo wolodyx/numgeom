@@ -8,7 +8,6 @@ set(PUBLIC_HEADERS
   octree.h
   quadtree.h
   removefaces.h
-  sceneobject_polytriangulation.h
   sceneobject_tdocstd_document.h
   tesselate.h
   utilities.h
@@ -18,21 +17,23 @@ list(TRANSFORM PUBLIC_HEADERS PREPEND "include/numgeom/")
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   classificate.cc
-  curvemetriclength.cc      curvemetriclength.h
+  command_changevisibility.cc   command_changevisibility.h
+  command_occ.cc                command_occ.h
+  curvemetriclength.cc          curvemetriclength.h
   drawable_occshape.cc
   drawable_polytriangulation.cc
-ffextintersections.cc     ffextintersections.h
-  intersections.cc          intersections.h
-  iterator_ijk.cc           iterator_ijk.h
+  ffextintersections.cc         ffextintersections.h
+  intersections.cc              intersections.h
+  iterator_ijk.cc               iterator_ijk.h
   loadusingocc.cc
   octree.cc
   quadtree.cc
   removefaces.cc
-  sceneobject_polytriangulation.cc
   sceneobject_tdocstd_document.cc
   tesselate.cc
   utilities.cc
-  writevtk.cc               writevtk.h
+  workbench_occ.cc              workbench_occ.h
+  writevtk.cc                   writevtk.h
 )
 
 add_library(occ SHARED ${SOURCE_FILES})

@@ -35,6 +35,7 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
   glm::uvec2 GetScreenSize() const;
 
   Iterator<SceneObject*> Objects() const;
+  Iterator<SceneObject*> VisibleObjects() const;
 
   void EnableWorkplane(bool enable = true);
   void DisableWorkplane();
@@ -70,18 +71,15 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
     return item;
   }
 
-  void SetViewportSizeFunction(std::function<std::tuple<uint32_t, uint32_t>()>);
-
   bool HasFgObjects() const;
   Iterator<FgObject*> GetFgObjects() const;
   glm::ivec2 GetScreenPosition(const FgObject*) const;
   void AddFgObject(FgObject*, const glm::ivec2&);
 
-  void SetVulkanSurface(uint64_t);
+  void InitializeGraphics(
+      std::function<std::tuple<uint32_t, uint32_t>()> get_viewport_size,
+      uint64_t vulkan_surface);
   uint64_t GetVulkanSurface() const;
-
-  void SetSelectionMode(SelectionMode);
-  SelectionMode GetSelectionMode() const;
 
  private:
   Scene(const Scene&) = delete;

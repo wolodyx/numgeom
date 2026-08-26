@@ -1,13 +1,15 @@
 #ifndef NUMGEOM_FRAMEWORK_TRACKEDOBJECT_H
 #define NUMGEOM_FRAMEWORK_TRACKEDOBJECT_H
 
+#include "numgeom/framework_export.h"
+
 class TrackedObjectList;
 
 /** \class TrackedObject
 \brief Класс объекта, для которого необходимо отслеживать состояние для
   последующей синхронизации со связанным объектом.
 */
-class TrackedObject {
+class FRAMEWORK_EXPORT TrackedObject {
  public:
   enum class State {
     New,     //< Только что добавлен.
@@ -33,6 +35,7 @@ class TrackedObject {
  private:
   friend class TrackedObjectDict;
   friend class TrackedObjectList;
+  friend class Workbench;
   void MarkForDeletion();
 
  private:

@@ -4,20 +4,19 @@
 #include <functional>
 #include <string>
 
-#include "numgeom/framework_enums.h"
+#include "glm/glm.hpp"
+
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
-#include "numgeom/trimesh.h"
 
-class QWindow;
-
+class AppContext;
 class ApplicationImpl;
+class Command;
 class Drawable;
 class FgObject;
 class FgText;
-class Scene;
-class SceneObject;
 class VkSceneRenderer;
+class Workbench;
 class WorkplaneAttributes;
 
 /** \class Application
@@ -32,37 +31,35 @@ class WorkplaneAttributes;
 */
 class FRAMEWORK_EXPORT Application {
  public:
+  static Application* Get();
+
+ public:
   Application(int argc, char* argv[]);
 
   ~Application();
 
-  //! Обновление изображения на экране.
-  bool Update(Scene*, bool force = false);
-
-  //!@{
-  //! Взаимодействие со сценами.
-
-  Scene* AddScene();
-
-  bool RemoveScene(Scene*);
-  //!@}
-
   FgObject* AddFgImage(const std::string& image_filename);
   FgObject* AddFgImage(const unsigned char* image_data, size_t image_data_size);
   FgText* AddFgText(const std::string& text);
-  bool Remove(Scene*, const FgObject*);
 
   VkSceneRenderer* GetRenderer();
-
-  SampleCount GetSampleCount() const;
-  bool SetSampleCount(SampleCount);
-
-  SelectionMode GetSelectionMode() const;
-  void SetSelectionMode(SelectionMode);
+  AppContext* GetContext();
 
   void Sync();
 
-  Drawable* Pick(Scene*, int x, int y, glm::vec3* picked_point = nullptr) const;
+  //! \{
+  bool Add(Workbench*);
+  bool Remove(Workbench*);
+  Workbench* GetWorkbench(const std::string&) const;
+  Iterator<Workbench*> GetWorkbenches() const;
+  //! \}
+
+  //! \{
+  bool SetupCommand(const std::string&);
+  bool ExecuteCommand();
+  void StopCommand();
+  Command* GetCommand() const;
+  //! \}
 
   const WorkplaneAttributes* GetWorkplaneAttributes() const;
 

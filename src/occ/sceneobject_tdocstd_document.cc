@@ -1,12 +1,15 @@
 #include "numgeom/sceneobject_tdocstd_document.h"
 
 #include "Quantity_Color.hxx"
+#include "TDataXtd_Triangulation.hxx"
+#include "TDF_ChildIterator.hxx"
 #include "TDocStd_Document.hxx"
 #include "XCAFDoc_DocumentTool.hxx"
 #include "XCAFDoc_ColorTool.hxx"
 #include "XCAFDoc_ShapeTool.hxx"
 
 #include "numgeom/drawable_occshape.h"
+#include "numgeom/drawable_polytriangulation.h"
 
 namespace {
 struct TerminalShape {
@@ -97,16 +100,27 @@ bool AnalyzeLabelRecursively(
 SceneObject_TDocStd_Document::SceneObject_TDocStd_Document(
     Scene* scene,
     const Handle(TDocStd_Document)& doc) : SceneObject(scene), document_(doc) {
+  this->Synchronize();
+}
+
+SceneObject_TDocStd_Document::~SceneObject_TDocStd_Document() {
+}
+
+void SceneObject_TDocStd_Document::Synchronize() {
+  this->Clear();
+  if (!document_ || document_.IsNull())
+    return;
+  SetDirty();
   std::list<TerminalShape> triangulableShapes;
   TDF_LabelSequence free_shape_labels;
-  auto shape_tool = XCAFDoc_DocumentTool::ShapeTool(doc->Main());
+  auto shape_tool = XCAFDoc_DocumentTool::ShapeTool(document_->Main());
   shape_tool->GetFreeShapes(free_shape_labels);
   for (const TDF_Label& lbl : free_shape_labels) {
     assert(shape_tool->IsTopLevel(lbl) && shape_tool->IsShape(lbl));
     AnalyzeLabelRecursively(shape_tool, lbl, gp_Trsf(), triangulableShapes);
   }
 
-  auto color_tool = XCAFDoc_DocumentTool::ColorTool(doc->Main());
+  auto color_tool = XCAFDoc_DocumentTool::ColorTool(document_->Main());
   for (const auto& tShape : triangulableShapes) {
     auto d = this->AddDrawable<Drawable2_OccShape>(tShape.shape, tShape.trsf);
     Quantity_Color clr;
@@ -116,7 +130,27 @@ SceneObject_TDocStd_Document::SceneObject_TDocStd_Document(
                 static_cast<float>(clr.Green()),
                 static_cast<float>(clr.Blue()));
   }
-}
 
-SceneObject_TDocStd_Document::~SceneObject_TDocStd_Document() {
+  // Collect Poly_Triangulation stored in the document as
+  // TDataXtd_Triangulation attributes (they are not XCAF free shapes).
+  for (TDF_ChildIterator child_it(document_->Main(), Standard_True);
+       child_it.More(); child_it.Next()) {
+    const TDF_Label& label = child_it.Value();
+    Handle(TDF_Attribute) attr;
+    if (!label.FindAttribute(TDataXtd_Triangulation::GetID(), attr))
+      continue;
+    auto trng_attr = Handle(TDataXtd_Triangulation)::DownCast(attr);
+    if (trng_attr.IsNull())
+      continue;
+    Handle(Poly_Triangulation) trng = trng_attr->Get();
+    if (trng.IsNull())
+      continue;
+    auto d = this->AddDrawable<Drawable2_PolyTriangulation>(trng);
+    Quantity_Color clr;
+    if (!color_tool->GetColor(label, XCAFDoc_ColorSurf, clr))
+      clr = Quantity_Color(0.647,0.647,0.647,Quantity_TOC_RGB);
+    d->SetColor(static_cast<float>(clr.Red()),
+                static_cast<float>(clr.Green()),
+                static_cast<float>(clr.Blue()));
+  }
 }

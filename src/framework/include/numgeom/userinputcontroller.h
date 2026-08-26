@@ -5,9 +5,10 @@
 
 #include "numgeom/framework_enums.h"
 #include "numgeom/framework_export.h"
+#include "numgeom/iterator.h"
 
-class Application;
-class Scene;
+class Drawable;
+class Workbench;
 
 /**
 \class UserInputController
@@ -18,7 +19,7 @@ class Scene;
  */
 class FRAMEWORK_EXPORT UserInputController {
  public:
-  UserInputController(Application*, Scene*);
+  UserInputController(Workbench*);
 
   ~UserInputController();
 
@@ -44,6 +45,10 @@ class FRAMEWORK_EXPORT UserInputController {
 
   void MouseDoubleClick(MouseButton, int x, int y);
 
+  Iterator<Drawable*> SelectedObjects();
+
+  void ClearSelections();
+
  private:
   UserInputController(const UserInputController&) = delete;
   UserInputController& operator=(const UserInputController&) = delete;
@@ -52,5 +57,4 @@ class FRAMEWORK_EXPORT UserInputController {
   struct Impl;
   Impl* impl_;
 };
-
 #endif  // !numgeom_framework_userinputcontroller_h

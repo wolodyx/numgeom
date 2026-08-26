@@ -6,7 +6,7 @@
 class Application;
 class QVulkanInstance;
 class SceneWindow;
-class Scene;
+class Workbench;
 
 /** \class SceneMdiSubWindow
 \brief MDI подокно, содержащее SceneWindow и управляющее своей сценой.
@@ -24,11 +24,7 @@ class SceneMdiSubWindow : public QMdiSubWindow {
   // Возвращает указатель на вложенное SceneWindow.
   SceneWindow* GetSceneWindow() const;
 
-  // Возвращает указатель на сцену, связанную с этим окном.
-  Scene* GetScene() const;
-
-  // Возвращает имя сцены.
-  QString GetSceneName() const;
+  Workbench* GetWorkbench() const;
 
  private:
   Application* app_;

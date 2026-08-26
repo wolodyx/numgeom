@@ -5,18 +5,19 @@
 #include <map>
 
 #include "numgeom/alignedboundbox.h"
+#include "numgeom/appcontext.h"
+#include "numgeom/command.h"
 #include "numgeom/drawable.h"
 #include "numgeom/fgtext.h"
 #include "numgeom/iteratorimpl.hpp"
-#include "numgeom/ray.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/trimesh.h"
 #include "numgeom/vkscenerenderer.h"
+#include "numgeom/workbench.h"
 
 #include "fgimage.h"
-#include "intersection.h"
 #include "trackedobjectlist.h"
 #include "trackedobjectdict.h"
 #include "vkutilities.h"
@@ -29,11 +30,13 @@ class ApplicationImpl {
   }
 
  public:
+  AppContext context;
   TrackedObjectList scenes_;
   TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
-  SelectionMode selection_mode_ = SelectionMode::Disable;
   WorkplaneAttributes workplane_attributes_;
+  Command* command_ = nullptr;
+  std::map<std::string, Workbench*> workbenches_;
 };
 
 namespace {
@@ -63,34 +66,23 @@ AlignedBoundBox ComputeBoundBox(CTriMesh::Ptr scene) {
 }
 }  // namespace
 
+static Application* s_instance = nullptr;
+
 Application::Application(int argc, char* argv[]) {
   impl_ = new ApplicationImpl();
   impl_->renderer_ = new VkSceneRenderer(this);
+  if (s_instance)
+    std::abort();
+  s_instance = this;
+}
+
+Application* Application::Get() {
+  return s_instance;
 }
 
 Application::~Application() { delete impl_; }
 
-bool Application::Update(Scene* scene, bool force) {
-  if (!scene)
-    return false;
-  impl_->renderer_->Update(scene, force);
-  return true;
-}
-
 VkSceneRenderer* Application::GetRenderer() { return impl_->renderer_; }
-
-Scene* Application::AddScene() {
-  Scene* new_scene = new Scene{};
-  impl_->scenes_.Insert(new_scene);
-  new_scene->SetSelectionMode(impl_->selection_mode_);
-  return new_scene;
-}
-
-bool Application::RemoveScene(Scene* scene) {
-  if (!scene)
-    return false;
-  return impl_->scenes_.Remove(scene);
-}
 
 FgObject* Application::AddFgImage(const std::string& image_filename) {
   auto fg_image = FgImage::Make(image_filename);
@@ -117,100 +109,102 @@ FgText* Application::AddFgText(const std::string& text) {
   return fg_text;
 }
 
-bool Application::Remove(Scene*, const FgObject*) {
-  return false;
-}
-
 void Application::Sync() {
   impl_->scenes_.Synch();
   impl_->fg_objects_.Synch();
 }
 
-bool Application::SetSampleCount(SampleCount count) {
-  if (count == SampleCount::Bits_None)
-    return false;
-  VkSampleCountFlagBits max_count = impl_->renderer_->GetMaxUsableSampleCount();
-  VkSampleCountFlagBits desired_count = ToVkSampleCountFlagBits(count);
-  bool in_the_range = static_cast<int>(desired_count) <= static_cast<int>(max_count);
-  if (!in_the_range)
-    return false;
-  VkSampleCountFlagBits next_count = (in_the_range ? desired_count : max_count);
-  return impl_->renderer_->SetSampleCount(next_count);
+const WorkplaneAttributes* Application::GetWorkplaneAttributes() const {
+  return &impl_->workplane_attributes_;
 }
 
-SampleCount Application::GetSampleCount() const {
-  return ToSampleCount(impl_->renderer_->GetSampleCount());
+bool Application::Add(Workbench* workbench) {
+  if (!workbench)
+    return false;
+  std::string name = workbench->GetName();
+  if (name.empty())
+    return false;
+  if (impl_->workbenches_.find(name) != impl_->workbenches_.end())
+    return false;
+  impl_->workbenches_.insert(std::make_pair(workbench->GetName(),workbench));
+  return true;
+}
+
+bool Application::Remove(Workbench* workbench) {
+  auto it = impl_->workbenches_.find(workbench->GetName());
+  if (it == impl_->workbenches_.end())
+    return false;
+  impl_->workbenches_.erase(it);
+  delete workbench;
+  return true;
+}
+
+Workbench* Application::GetWorkbench(const std::string& name) const {
+  auto it = impl_->workbenches_.find(name);
+  if (it == impl_->workbenches_.end())
+    return nullptr;
+  return it->second;
+}
+
+Iterator<Workbench*> Application::GetWorkbenches() const {
+  auto it_impl = new IteratorImpl_StdMapValue<std::string, Workbench*>(
+      impl_->workbenches_.begin(), impl_->workbenches_.end());
+  return Iterator<Workbench*>(it_impl);
 }
 
 namespace {
-Ray ScreenPosToRay(const Scene* scene, const glm::ivec2& screen_pos) {
-  const glm::mat4 view = scene->GetViewMatrix();
-  const glm::mat4 proj = scene->GetProjectionMatrix();
-  const glm::uvec2 screen_size = scene->GetScreenSize();
-
-  if (screen_size.x <= 0 || screen_size.y <= 0)
-    return Ray(scene->CameraPosition(), glm::vec3(0.0f, 0.0f, 1.0f));
-
-  const float fx = static_cast<float>(screen_pos.x);
-  const float fy = static_cast<float>(screen_pos.y);
-  const float width = static_cast<float>(screen_size.x);
-  const float height = static_cast<float>(screen_size.y);
-  // Mind: Vulkan clip space Y points down (top-left origin), so window fy=0
-  // (top) maps to NDC y = +1. This must match GetWorldPointOnViewParallelPlane
-  // in userinputcontroller.cc so a picked/clicked point lands on the same
-  // view-parallel plane used while dragging.
-  const glm::vec4 ndc_near{
-      (2.0f * fx) / width - 1.0f,
-      (2.0f * fy) / height - 1.0f,
-      0.0f,
-      1.0f};
-  const glm::vec4 ndc_far{
-      (2.0f * fx) / width - 1.0f,
-      (2.0f * fy) / height - 1.0f,
-      1.0f,
-      1.0f};
-  const glm::mat4 inv_view_proj = glm::inverse(proj * view);
-  const glm::vec4 world_near4 = inv_view_proj * ndc_near;
-  const glm::vec4 world_far4 = inv_view_proj * ndc_far;
-  const glm::vec3 world_near = glm::vec3(world_near4) / world_near4.w;
-  const glm::vec3 world_far = glm::vec3(world_far4) / world_far4.w;
-  const glm::vec3 direction = glm::normalize(world_far - world_near);
-  return Ray(world_near, direction);
+std::pair<std::string,std::string> SplitByFirstDot(const std::string& str) {
+  auto pos = str.find('.');
+  if (pos == std::string::npos)
+    return std::make_pair(str, "");
+  return std::make_pair(str.substr(0, pos), str.substr(pos + 1));
 }
 }
 
-Drawable* Application::Pick(Scene* scene, int x, int y,
-                            glm::vec3* picked_point) const {
-  auto id = impl_->renderer_->GetObjectId(scene, x, y);
-  if (id == 0) return nullptr;
-  Drawable* picked_item = nullptr;
-  for (auto o : scene->Objects()) {
-    for (auto d : o->Drawables()) {
-      if (d->GetId() == id) {
-        picked_item = d;
-        break;
-      }
-    }
-    if (picked_item) break;
+bool Application::SetupCommand(const std::string& command_name) {
+  // Уничтожаем предыдущую команду.
+  if (impl_->command_) {
+    impl_->command_->Cleanup();
+    delete impl_->command_;
+    impl_->command_ = nullptr;
   }
-  if (picked_item && picked_point) {
-    Ray ray = ScreenPosToRay(scene, glm::ivec2(x, y));
-    *picked_point = IntersectRayWithDrawable(ray, dynamic_cast<Drawable2*>(picked_item));
+
+  // Создаем новую команду через модуль.
+  std::string workbench_name, command_name_without_workbench;
+  std::tie(workbench_name, command_name_without_workbench) =
+      SplitByFirstDot(command_name);
+  Workbench* wb = this->GetWorkbench(workbench_name);
+  if (!wb) {
+    std::cerr << std::format("Failed to find workbench {}", workbench_name)
+              << std::endl;
+    return false;
   }
-  return picked_item;
-}
-
-SelectionMode Application::GetSelectionMode() const {
-  return impl_->selection_mode_;
-}
-
-void Application::SetSelectionMode(SelectionMode selection_mode) {
-  impl_->selection_mode_ = selection_mode;
-  for (Scene* s : GetObjects<Scene>(impl_->scenes_)) {
-    s->SetSelectionMode(selection_mode);
+  impl_->command_ = wb->CreateCommand(command_name_without_workbench);
+  if (!impl_->command_) {
+    std::cerr << std::format("Failed to create command {} from module {}.",
+                             command_name_without_workbench,
+                             workbench_name)
+              << std::endl;
+    return false;
   }
+
+  impl_->command_->Setup();
+  impl_->command_->Recover();
+
+  return true;
 }
 
-const WorkplaneAttributes* Application::GetWorkplaneAttributes() const {
-  return &impl_->workplane_attributes_;
+bool Application::ExecuteCommand() {
+  return true;
+}
+
+void Application::StopCommand() {
+}
+
+Command* Application::GetCommand() const {
+  return nullptr;
+}
+
+AppContext* Application::GetContext() {
+  return &impl_->context;
 }

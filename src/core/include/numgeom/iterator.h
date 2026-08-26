@@ -135,4 +135,79 @@ class Iterator {
  private:
   IteratorImpl<T>* impl_;
 };
+
+/** \class IteratorImpl_FilterPredicate
+\brief Реализация фильтрующего итератора, хранящая предикат (лямбда-функцию).
+
+Оборачивает базовую реализацию `IteratorImpl<T>` и при переходе к следующему
+элементу пропускает все значения, не удовлетворяющие предикату `pred`.
+В отличие от `IteratorImpl_Filter` (в `numgeom/iteratorimpl.h`), предикат
+хранится в экземпляре, а не создаётся заново, поэтому поддерживаются
+лямбда-функции с захватом контекста.
+
+\tparam T Тип значений базового итератора.
+\tparam Pred Тип предиката (обычно лямбда-функция) с действующим методом
+        `bool operator()(const T&) const`, возвращающим `true` для значений,
+        которые нужно оставить.
+*/
+template <typename T, typename Pred>
+class IteratorImpl_FilterPredicate : public IteratorImpl<T> {
+ public:
+  typedef T value_type;
+
+ public:
+  IteratorImpl_FilterPredicate(IteratorImpl<T>* baseIt, Pred pred)
+      : base_it_(baseIt), pred_(std::move(pred)) {
+    SkipNonMatching();
+  }
+
+  virtual ~IteratorImpl_FilterPredicate() { delete base_it_; }
+
+  void advance() override {
+    assert(!this->end());
+    base_it_->advance();
+    SkipNonMatching();
+  }
+
+  value_type current() const override {
+    assert(!this->end());
+    return base_it_->current();
+  }
+
+  IteratorImpl<T>* clone() const override {
+    return new IteratorImpl_FilterPredicate<T, Pred>(base_it_->clone(), pred_);
+  }
+
+  IteratorImpl<T>* last() const override {
+    return new IteratorImpl_FilterPredicate<T, Pred>(base_it_->last(), pred_);
+  }
+
+  bool end() const override { return base_it_->end(); }
+
+  bool equals(const IteratorImpl<T>& other) const override {
+    auto ptr =
+        dynamic_cast<const IteratorImpl_FilterPredicate<T, Pred>*>(&other);
+    if (!ptr) return false;
+    return base_it_->equals(*ptr->base_it_);
+  }
+
+ private:
+  void SkipNonMatching() {
+    while (!base_it_->end() && !pred_(base_it_->current()))
+      base_it_->advance();
+  }
+
+  IteratorImpl<T>* base_it_;
+  Pred pred_;
+};
+
+//! Возвращает фильтрующий итератор на основе заданного и фильтра - лямбда-функции.
+template <typename T, typename Pred>
+Iterator<T> Filter(const Iterator<T>& it, Pred pred) {
+  Iterator<T> copy = it;
+  IteratorImpl<T>* impl = copy.Reset();
+  if (!impl) return Iterator<T>();
+  return Iterator<T>(
+      new IteratorImpl_FilterPredicate<T, Pred>(impl, std::move(pred)));
+}
 #endif // !NUMGEOM_CORE_ITERATOR_H

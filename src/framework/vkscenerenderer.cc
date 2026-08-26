@@ -35,7 +35,6 @@
 
 #include "fgimage.h"
 #include "lrudescriptorsetpool.h"
-#include "sceneiterators.h"
 #include "vkutilities.h"
 #include "workplaneattributes.h"
 
@@ -3225,6 +3224,81 @@ void SceneRes::InvalidateSwapchain() {
   }
 }
 
+std::pair<size_t,size_t> GetElementsCount(const Scene* scene) {
+  size_t n_verts = 0, n_cells = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      n_verts += d->GetVertsCount();
+      n_cells += d->GetCellsCount();
+    }
+  }
+  return std::make_pair(n_verts, n_cells);
+}
+
+void CopyVerts(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      for (glm::vec3 v : d->GetVertices()) {
+        *data++ = v.x;
+        *data++ = v.y;
+        *data++ = v.z;
+      }
+    }
+  }
+}
+
+void CopyNormals(const Scene* scene, float* data) {
+  int x = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      Drawable2* d2 = Drawable2::Cast(d);
+      for (glm::vec3 v : d2->GetNormals()) {
+        *data++ = v.x;
+        *data++ = v.y;
+        *data++ = v.z;
+        ++x;
+      }
+    }
+  }
+}
+
+void CopyColors(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      auto color = d->GetColor();
+      for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+        *data++ = color.x;
+        *data++ = color.y;
+        *data++ = color.z;
+      }
+    }
+  }
+}
+
+void CopyTrias(const Scene* scene, uint32_t* data) {
+  size_t v_offset = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Triangles)
+        continue;
+      Drawable2* d2 = Drawable2::Cast(d);
+      for (glm::u32vec3 v : d2->GetTriangles()) {
+        *data++ = (v.x + v_offset);
+        *data++ = (v.y + v_offset);
+        *data++ = (v.z + v_offset);
+      }
+      v_offset += d->GetVertsCount();
+    }
+  }
+}
 } // namespace
 
 VkInstance VkSceneRenderer::GetInstance() const {
@@ -3250,7 +3324,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
   }
 
   size_t n_verts = 0, n_cells = 0;
-  GetElementsCount(scene, n_verts, n_cells);
+  std::tie(n_verts, n_cells) = GetElementsCount(scene);
 
   VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
   VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
@@ -3279,11 +3353,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
     void* mapped_data = nullptr;
     vmaMapMemory(allocator, scene_res->alloc_vertex, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 pt : GetVertexIterator(scene)) {
-      *data++ = pt.x;
-      *data++ = pt.y;
-      *data++ = pt.z;
-    }
+    CopyVerts(scene, data);
     vmaUnmapMemory(allocator, scene_res->alloc_vertex);
   }
 
@@ -3304,11 +3374,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
     void* mapped_data = nullptr;
     vmaMapMemory(allocator, scene_res->alloc_normal, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 n : GetNormalIterator(scene)) {
-      *data++ = n.x;
-      *data++ = n.y;
-      *data++ = n.z;
-    }
+    CopyNormals(scene, data);
     vmaUnmapMemory(allocator, scene_res->alloc_normal);
   }
 
@@ -3329,11 +3395,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
     void* mapped_data = nullptr;
     vmaMapMemory(allocator, scene_res->alloc_color, &mapped_data);
     float* data = reinterpret_cast<float*>(mapped_data);
-    for (glm::vec3 c : GetColorIterator(scene)) {
-      *data++ = c.x;
-      *data++ = c.y;
-      *data++ = c.z;
-    }
+    CopyColors(scene, data);
     vmaUnmapMemory(allocator, scene_res->alloc_color);
   }
 
@@ -3383,11 +3445,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
     void* mapped_data = nullptr;
     vmaMapMemory(allocator, scene_res->alloc_index, &mapped_data);
     uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
-    for (glm::u32vec3 tr : GetTriaIterator(scene)) {
-      *data++ = tr.x;
-      *data++ = tr.y;
-      *data++ = tr.z;
-    }
+    CopyTrias(scene, data);
     vmaUnmapMemory(allocator, scene_res->alloc_index);
   }
 
@@ -3571,7 +3629,7 @@ bool Synchronize(Application* app, VulkanObjects* vk_objects, Scene* scene) {
       assert(scene_res == nullptr);
       scene_res = new SceneRes(vk_global_state, surface, scene);
       vk_objects->scene_res_array.insert(std::make_pair(scene,scene_res));
-      // Проваливаемся в следующую ветку `case` осознанно!
+      [[fallthrough]];
     case TrackedObject::State::Dirty:
       assert(scene_res != nullptr);
       scene_res->RestoreInvalidated();

@@ -1,5 +1,7 @@
 set(PUBLIC_HEADERS
+  appcontext.h
   application.h
+  command.h
   debug_framework.h
   drawable.h
   drawable_cone.h
@@ -19,13 +21,16 @@ set(PUBLIC_HEADERS
   trackedobject.h
   userinputcontroller.h
   vkscenerenderer.h
+  workbench.h
 )
 list(TRANSFORM PUBLIC_HEADERS PREPEND "include/numgeom/")
 
 set(SOURCE_FILES
   ${PUBLIC_HEADERS}
+  appcontext.cc
   application.cc
   camera.cc                 camera.h
+  command.cc
   debug_framework.cc
   drawable.cc
   drawable_cone.cc
@@ -39,7 +44,6 @@ set(SOURCE_FILES
   lrupool.cc
   pixelbuffer.cc
   scene.cc
-  sceneiterators.cc         sceneiterators.h
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc
@@ -52,6 +56,7 @@ set(SOURCE_FILES
   vkscenerenderer.cc
   vkutilities.cc            vkutilities.h
   volk_impl.cc
+  workbench.cc
   workplaneattributes.cc    workplaneattributes.h
 )
 

@@ -13,6 +13,8 @@ class OCC_EXPORT SceneObject_TDocStd_Document : public SceneObject {
   SceneObject_TDocStd_Document(Scene*, const Handle(TDocStd_Document)&);
   virtual ~SceneObject_TDocStd_Document();
 
+  void Synchronize() override;
+
  private:
   const Handle(TDocStd_Document) document_;
 };

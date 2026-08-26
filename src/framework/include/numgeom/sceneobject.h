@@ -30,9 +30,15 @@ class FRAMEWORK_EXPORT SceneObject : public TrackedObject {
 
   AlignedBoundBox GetBoundBox() const;
 
+  Scene* GetScene();
+  const Scene* GetScene() const;
+
   size_t DrawablesCount() const;
 
   Iterator<Drawable*> Drawables() const;
+  Iterator<Drawable*> VisibleDrawables() const;
+
+  virtual void Synchronize() {}
 
  protected:
   template<typename DrawableType, class... _Types>
@@ -44,6 +50,8 @@ class FRAMEWORK_EXPORT SceneObject : public TrackedObject {
 
   void Insert(Drawable*);
   bool Remove(Drawable*);
+
+  void Clear();
 
  private:
   SceneObject(const SceneObject&) = delete;

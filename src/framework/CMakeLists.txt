@@ -7,16 +7,24 @@ set(PUBLIC_HEADERS
   drawable_cone.h
   drawable_cylinder.h
   drawable_sphere.h
+  drawable_torus.h
+  drawableimplementations.h
   fgobject.h
   fgtext.h
   framework_enums.h
+  gizmo.h
+  gizmo_arrow.h
+  gizmo_filepath.h
+  gizmo_placein3d.h
+  gizmo_realnumber.h
+  guimediator.h
   lrupool.h
+  phantom.h
   pixelbuffer.h
   scene.h
   sceneobject.h
   sceneobject_mesh.h
   scenewidget.h
-  scenewidget_arrow.h
   scenewidget_axisindicator.h
   trackedobject.h
   userinputcontroller.h
@@ -35,19 +43,29 @@ set(SOURCE_FILES
   drawable.cc
   drawable_cone.cc
   drawable_cylinder.cc
+  drawable_primitives.cc    drawable_primitives.h
   drawable_sphere.cc
+  drawable_torus.cc
+  drawableimplementations.cc
   fgimage.cc                fgimage.h
   fgobject.cc
   fgtext.cc
+  gizmo.cc
+  gizmo_arrow.cc
+  gizmo_filepath.cc
+  gizmo_placein3d.cc
+  gizmo_realnumber.cc
+  gizmoobserver.cc          gizmoobserver.h
+  guimediator.cc
   intersection.cc           intersection.h
   lrudescriptorsetpool.cc   lrudescriptorsetpool.h
   lrupool.cc
+  phantom.cc
   pixelbuffer.cc
   scene.cc
   sceneobject.cc
   sceneobject_mesh.cc
   scenewidget.cc
-  scenewidget_arrow.cc
   scenewidget_axisindicator.cc
   trackedobject.cc
   trackedobjectdict.cc      trackedobjectdict.h
@@ -71,6 +89,10 @@ set(SHADER_FILES
   text.frag
   workplane.vert
   workplane.frag
+  line.vert
+  line.frag
+  point.vert
+  point.frag
 )
 
 set(FONT_FILES

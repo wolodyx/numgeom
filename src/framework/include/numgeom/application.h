@@ -8,6 +8,7 @@
 
 #include "numgeom/framework_export.h"
 #include "numgeom/iterator.h"
+#include "numgeom/outcome.h"
 
 class AppContext;
 class ApplicationImpl;
@@ -15,6 +16,7 @@ class Command;
 class Drawable;
 class FgObject;
 class FgText;
+class GuiMediator;
 class VkSceneRenderer;
 class Workbench;
 class WorkplaneAttributes;
@@ -56,11 +58,12 @@ class FRAMEWORK_EXPORT Application {
 
   //! \{
   bool SetupCommand(const std::string&);
-  bool ExecuteCommand();
-  void StopCommand();
+  Outcome ExecuteCommand();
+  void CancelCommand();
   Command* GetCommand() const;
   //! \}
 
+  void SetGuiMediator(GuiMediator*);
   const WorkplaneAttributes* GetWorkplaneAttributes() const;
 
  private:

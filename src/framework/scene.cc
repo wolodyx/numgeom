@@ -71,10 +71,6 @@ bool Scene::IsWorkplaneEnabled() const {
   return impl_->workplane_enabled_;
 }
 
-void Scene::AddObject(SceneObject* object) {
-  impl_->objects_.Insert(object);
-}
-
 glm::mat4 Scene::GetViewMatrix() const {
   return impl_->camera_.GetViewMatrix();
 }
@@ -155,4 +151,12 @@ void Scene::InitializeGraphics(
 
 uint64_t Scene::GetVulkanSurface() const {
   return impl_->vulkan_surface_;
+}
+
+void Scene::Register(SceneObject* object) {
+  impl_->objects_.Insert(object);
+}
+
+void Scene::Unregister(SceneObject* object) {
+  impl_->objects_.Remove(object);
 }

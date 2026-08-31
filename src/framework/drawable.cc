@@ -32,9 +32,9 @@ void Drawable::SetColor(float r, float g, float b) {
 }
 
 void Drawable::SetColor(int r,int g,int b) {
-  assert(r > 0 && r < 256);
-  assert(g > 0 && g < 256);
-  assert(b > 0 && b < 256);
+  assert(r >= 0 && r < 256);
+  assert(g >= 0 && g < 256);
+  assert(b >= 0 && b < 256);
   color_ = glm::vec3(r/255.0,g/255.0,b/255.0);
 }
 

@@ -3,9 +3,9 @@
 
 #include "glm/glm.hpp"
 
-class Drawable2;
+class Drawable;
 class Ray;
 
-glm::vec3 IntersectRayWithDrawable(const Ray& ray, const Drawable2* drawable);
+glm::vec3 IntersectRayWithDrawable(const Ray& ray, const Drawable* drawable);
 
 #endif // !NUMGEOM_FRAMEWORK_INTERSECTION_H

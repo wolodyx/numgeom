@@ -70,7 +70,7 @@ class FRAMEWORK_EXPORT Drawable : public TrackedObject {
   bool is_highlighted_;
 };
 
-class FRAMEWORK_EXPORT Drawable0 : public Drawable {
+class FRAMEWORK_EXPORT Drawable0 : public virtual Drawable {
  public:
   static Drawable0* Cast(Drawable*);
   static const Drawable0* Cast(const Drawable*);
@@ -83,7 +83,7 @@ class FRAMEWORK_EXPORT Drawable0 : public Drawable {
   }
 };
 
-class FRAMEWORK_EXPORT Drawable1 : public Drawable {
+class FRAMEWORK_EXPORT Drawable1 : public virtual Drawable {
  public:
   static Drawable1* Cast(Drawable*);
   static const Drawable1* Cast(const Drawable*);
@@ -94,9 +94,13 @@ class FRAMEWORK_EXPORT Drawable1 : public Drawable {
   PrimitiveType Type() const override {
     return PrimitiveType::Edges;
   }
+
+  //! Возвращает отрезки как пары индексов в собственный список вершин
+  //! (см. GetVertices()). Количество отрезков равно GetCellsCount().
+  virtual Iterator<glm::u32vec2> GetEdges() const = 0;
 };
 
-class FRAMEWORK_EXPORT Drawable2 : public Drawable {
+class FRAMEWORK_EXPORT Drawable2 : public virtual Drawable {
  public:
   static Drawable2* Cast(Drawable*);
   static const Drawable2* Cast(const Drawable*);

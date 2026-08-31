@@ -5,8 +5,8 @@
 #include "numgeom/iteratorimpl.hpp"
 
 Drawable2_PolyTriangulation::Drawable2_PolyTriangulation(
-    SceneObject* scene_object,
-    Handle(Poly_Triangulation) triangulation) : Drawable2(scene_object) {
+    SceneObject* o,
+    Handle(Poly_Triangulation) triangulation) : Drawable(o), Drawable2(o) {
   triangulation_ = triangulation;
   if (!triangulation_->HasNormals()) {
     triangulation_->ComputeNormals();

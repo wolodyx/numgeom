@@ -1,16 +1,16 @@
-#ifndef NUMGEOM_FRAMEWORK_SCENEWIDGET_ARROW_H
-#define NUMGEOM_FRAMEWORK_SCENEWIDGET_ARROW_H
+#ifndef NUMGEOM_FRAMEWORK_GIZMO_ARROW_H
+#define NUMGEOM_FRAMEWORK_GIZMO_ARROW_H
 
-#include "numgeom/scenewidget.h"
+#include "numgeom/gizmo.h"
 
 class Drawable2_Cone;
 class Drawable2_Cylinder;
 class Drawable2_Sphere;
 
-class FRAMEWORK_EXPORT SceneWidget_Arrow : public SceneWidget {
+class FRAMEWORK_EXPORT Gizmo_Arrow : public Gizmo {
  public:
-  SceneWidget_Arrow(Scene*);
-  virtual ~SceneWidget_Arrow();
+  Gizmo_Arrow(Command*);
+  virtual ~Gizmo_Arrow();
   void Drag(Drawable*, const glm::vec3&) override;
   void DoubleClick(MouseButton, Drawable*) override;
 
@@ -25,4 +25,4 @@ class FRAMEWORK_EXPORT SceneWidget_Arrow : public SceneWidget {
   Drawable2_Cylinder* shaft_;
   Drawable2_Sphere* base_;
 };
-#endif // !NUMGEOM_FRAMEWORK_SCENEWIDGET_ARROW_H
+#endif // !NUMGEOM_FRAMEWORK_GIZMO_ARROW_H

@@ -17,7 +17,8 @@ class Workbench_OCC : public Workbench {
   std::string GetName() const override;
   void Setup() override;
   void Cleanup() override;
-  bool LoadFromFile(const std::filesystem::path&) override;
+  Outcome LoadFromFile(const std::filesystem::path&,
+                       const glm::mat4x4& transform_matrix) override;
 
   void Clear() override;
   bool Move(Drawable* drawable, const glm::vec3& dir);

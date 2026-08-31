@@ -1,5 +1,14 @@
 #include "numgeom/workbench.h"
 
+#include <filesystem>
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
 #include "numgeom/application.h"
 #include "numgeom/drawable.h"
 #include "numgeom/iteratorimpl.hpp"
@@ -43,7 +52,19 @@ Workbench* Workbench::Create(const std::string& type_name) {
   return (it->second)();
 }
 
-static std::unordered_map<
+bool Workbench::LoadModule(const std::filesystem::path& library_path) {
+  if (library_path.empty())
+    return false;
+#if defined(_WIN32)
+  HMODULE module = ::LoadLibraryW(library_path.c_str());
+  return module != nullptr;
+#else
+  void* handle = ::dlopen(library_path.c_str(), RTLD_NOW | RTLD_GLOBAL);
+  return handle != nullptr;
+#endif
+}
+
+static std::map<
     std::string,
     std::function<Command*(Workbench*)>> g_command_registry;
 
@@ -54,6 +75,23 @@ bool Workbench::RegisterCommand(
   auto key = type_id + '.' + cmd_id;
   auto ib = g_command_registry.insert(std::make_pair(key,create_function));
   return ib.second;
+}
+
+Iterator<std::string> Workbench::GetCommandIds(const std::string& workbench_type_id) {
+  IteratorImpl<std::string>* it_impl_extract_key =
+      new IteratorImpl_StdMapKey<
+          std::string,
+          std::function<Command*(Workbench*)>>(g_command_registry);
+  //IteratorImpl<std::string>* it_impl_transform_key =
+  //    new IteratorImpl_Transform<std::string,std::string>(
+  //        it_impl_extract_key,
+  //        [](const std::string& v){
+  //          auto pos = v.find('.');
+  //          if (pos == std::string::npos)
+  //            return v;
+  //          return v.substr(pos + 1);
+  //        });
+  return Iterator<std::string>(it_impl_extract_key);
 }
 
 class WorkbenchImpl {
@@ -138,9 +176,11 @@ Drawable* Workbench::Pick(int x, int y, glm::vec3* picked_point) const {
     }
     if (picked_item) break;
   }
-  if (picked_item && picked_point) {
+  if (!picked_item || !picked_item->IsPickable())
+    return nullptr;
+  if (picked_point) {
     Ray ray = ScreenPosToRay(scene, glm::ivec2(x, y));
-    *picked_point = IntersectRayWithDrawable(ray, dynamic_cast<Drawable2*>(picked_item));
+    *picked_point = IntersectRayWithDrawable(ray, picked_item);
   }
   return picked_item;
 }
@@ -169,8 +209,9 @@ UserInputController* Workbench::GetUserInputController() {
   return impl_->uic;
 }
 
-bool Workbench::LoadFromFile(const std::filesystem::path& filepath) {
-  return false;
+Outcome Workbench::LoadFromFile(const std::filesystem::path& filepath,
+                                const glm::mat4x4& transform) {
+  return Outcome::Error("Not implemented");
 }
 
 void Workbench::Clear() {}

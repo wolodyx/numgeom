@@ -1,4 +1,4 @@
-#include "numgeom/scenewidget_arrow.h"
+#include "numgeom/gizmo_arrow.h"
 
 #include <cmath>
 
@@ -6,8 +6,8 @@
 #include "numgeom/drawable_cylinder.h"
 #include "numgeom/drawable_sphere.h"
 
-SceneWidget_Arrow::SceneWidget_Arrow(Scene* scene)
-    : SceneWidget(scene) {
+Gizmo_Arrow::Gizmo_Arrow(Command* command)
+    : Gizmo(command, "Arrow") {
 
   orig_ = glm::vec3(0.0f, 0.0f, 0.0f);
   dir_ = glm::vec3(1.0f, 0.0f, 0.0f);
@@ -27,10 +27,10 @@ SceneWidget_Arrow::SceneWidget_Arrow(Scene* scene)
   this->Update();
 }
 
-SceneWidget_Arrow::~SceneWidget_Arrow() {
+Gizmo_Arrow::~Gizmo_Arrow() {
 }
 
-void SceneWidget_Arrow::Update() {
+void Gizmo_Arrow::Update() {
   const float sphere_radius = 0.2f;
   const float axis_thickness = 0.05f;
   const float cone_radius = 0.15f;
@@ -42,7 +42,7 @@ void SceneWidget_Arrow::Update() {
   head_->UpdateParams(shaft_end, shaft_end + cone_height * dir_, cone_radius);
 }
 
-void SceneWidget_Arrow::Drag(Drawable* item, const glm::vec3& dragging_dir) {
+void Gizmo_Arrow::Drag(Drawable* item, const glm::vec3& dragging_dir) {
   if (item == base_) {
     orig_ += dragging_dir;
   } else if (item == shaft_) {
@@ -58,7 +58,7 @@ void SceneWidget_Arrow::Drag(Drawable* item, const glm::vec3& dragging_dir) {
   this->Update();
 }
 
-void SceneWidget_Arrow::DoubleClick(MouseButton button, Drawable* item) {
+void Gizmo_Arrow::DoubleClick(MouseButton button, Drawable* item) {
   if (button != MouseButton::Left)
     return;
   if (item == base_) {

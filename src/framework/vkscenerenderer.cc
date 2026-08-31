@@ -149,6 +149,11 @@ struct VulkanGlobalState {
   VkPipelineLayout workplane_pipeline_layout = VK_NULL_HANDLE;
   VkPipeline workplane_pipeline = VK_NULL_HANDLE;
 
+  // Конвейеры для отрезков (LINE_LIST) и вершин (POINT_LIST).
+  // Переиспользуют graphics_pipeline_layout и graphics_desc_layout.
+  VkPipeline edges_pipeline = VK_NULL_HANDLE;
+  VkPipeline vertices_pipeline = VK_NULL_HANDLE;
+
   VkDescriptorSetLayout selection_desc_layout = VK_NULL_HANDLE;
   VkPipelineLayout selection_pipeline_layout = VK_NULL_HANDLE;
   VkPipeline selection_pipeline = VK_NULL_HANDLE;
@@ -236,13 +241,35 @@ class SceneRes {
   VmaAllocation alloc_color = VK_NULL_HANDLE;
   VkBuffer buffer_object_id = VK_NULL_HANDLE;
   VmaAllocation alloc_object_id = VK_NULL_HANDLE;
+
+  //! Буферы и память для отрезков (LINE_LIST).
+  VkBuffer buffer_edge_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_edge_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_edge_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_edge_color = VK_NULL_HANDLE;
+  VkBuffer buffer_edge_object_id = VK_NULL_HANDLE;
+  VmaAllocation alloc_edge_object_id = VK_NULL_HANDLE;
+  VkBuffer buffer_edge_index = VK_NULL_HANDLE;
+  VmaAllocation alloc_edge_index = VK_NULL_HANDLE;
+
+  //! Буферы и память для вершин (POINT_LIST).
+  VkBuffer buffer_point_vertex = VK_NULL_HANDLE;
+  VmaAllocation alloc_point_vertex = VK_NULL_HANDLE;
+  VkBuffer buffer_point_color = VK_NULL_HANDLE;
+  VmaAllocation alloc_point_color = VK_NULL_HANDLE;
+  VkBuffer buffer_point_object_id = VK_NULL_HANDLE;
+  VmaAllocation alloc_point_object_id = VK_NULL_HANDLE;
+
   VkBuffer buffer_frame = VK_NULL_HANDLE;
   VmaAllocation alloc_frame = VK_NULL_HANDLE;
   VkBuffer buffer_selection = VK_NULL_HANDLE;
   VmaAllocation alloc_selection = VK_NULL_HANDLE;
   //! \}
 
-  uint32_t index_count = 0; //!< Количество примитивов для отрисовки.
+  uint32_t index_count = 0;         //!< Количество треугольных примитивов.
+  uint32_t edge_vertex_count = 0;   //!< Количество вершин отрезков.
+  uint32_t edge_index_count = 0;    //!< Количество индексов отрезков (2 на отрезок).
+  uint32_t point_vertex_count = 0;  //!< Количество вершин для POINT_LIST.
 };
 
 struct VulkanObjects {
@@ -295,6 +322,14 @@ void Finalize(VulkanGlobalState* state) {
   if (state->workplane_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state->device, state->workplane_pipeline, nullptr);
     state->workplane_pipeline = VK_NULL_HANDLE;
+  }
+  if (state->edges_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->edges_pipeline, nullptr);
+    state->edges_pipeline = VK_NULL_HANDLE;
+  }
+  if (state->vertices_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state->device, state->vertices_pipeline, nullptr);
+    state->vertices_pipeline = VK_NULL_HANDLE;
   }
   if (state->selection_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state->device, state->selection_pipeline, nullptr);
@@ -1472,6 +1507,303 @@ bool CreateWorkplanePipeline(VulkanGlobalState* state) {
   return true;
 }
 
+//! Создаёт конвейеры для отрезков (LINE_LIST) и вершин (POINT_LIST).
+//! Оба переиспользуют графический макет набора дескрипторов и дескрипторные
+//! наборы основного графического конвейера (те же uniform-буферы VBO/FBO), но
+//! не используют нормали -- вершины приходят из трёх буферов:
+//! позиция (binding 0), цвет (binding 1), object id (binding 2).
+//! Рисуются в подпроходе 0 того же graphics_renderpass, записывая и цветовой
+//! аттачмент, и аттачмент object id (для выделения).
+bool CreateLinePointPipelines(VulkanGlobalState* state) {
+  VkResult r;
+
+  if (state->edges_pipeline && state->vertices_pipeline)
+    return true;
+
+  // Вершинный ввод общий для обоих конвейеров.
+  std::vector<VkVertexInputBindingDescription> vertex_binding_descs = {
+      VkVertexInputBindingDescription{
+          .binding = 0,
+          .stride = 3 * sizeof(float),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+      VkVertexInputBindingDescription{
+          .binding = 1,
+          .stride = 3 * sizeof(float),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+      VkVertexInputBindingDescription{
+          .binding = 2,
+          .stride = sizeof(uint32_t),
+          .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
+      },
+  };
+  std::vector<VkVertexInputAttributeDescription> vertex_attr_descs = {
+      VkVertexInputAttributeDescription{
+          .location = 0,
+          .binding = 0,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = 0,
+      },
+      VkVertexInputAttributeDescription{
+          .location = 1,
+          .binding = 1,
+          .format = VK_FORMAT_R32G32B32_SFLOAT,
+          .offset = 0,
+      },
+      VkVertexInputAttributeDescription{
+          .location = 2,
+          .binding = 2,
+          .format = VK_FORMAT_R32_UINT,
+          .offset = 0,
+      },
+  };
+  VkPipelineVertexInputStateCreateInfo ci_vertex_input_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
+      .vertexBindingDescriptionCount =
+          static_cast<uint32_t>(vertex_binding_descs.size()),
+      .pVertexBindingDescriptions = vertex_binding_descs.data(),
+      .vertexAttributeDescriptionCount =
+          static_cast<uint32_t>(vertex_attr_descs.size()),
+      .pVertexAttributeDescriptions = vertex_attr_descs.data(),
+  };
+
+  VkPipelineViewportStateCreateInfo ci_viewport_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
+      .viewportCount = 1,
+      .scissorCount = 1,
+  };
+
+  VkPipelineRasterizationStateCreateInfo ci_rasterization_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
+      .rasterizerDiscardEnable = false,
+      .polygonMode = VK_POLYGON_MODE_FILL,
+      .cullMode = VK_CULL_MODE_NONE,
+      .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+      .lineWidth = 1.0f,
+  };
+
+  VkPipelineMultisampleStateCreateInfo ci_multisample_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+      .rasterizationSamples = state->sample_count,
+  };
+
+  VkPipelineDepthStencilStateCreateInfo ci_depth_stencil_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO,
+      .depthTestEnable = VK_TRUE,
+      .depthWriteEnable = VK_TRUE,
+      .depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL,
+  };
+
+  // Подпроход 0 имеет два цветовых аттачмента: scene_color и object_id
+  // (VK_FORMAT_R32_UINT). R32_UINT не поддерживает blending, поэтому
+  // выключим смешивание явно для обоих аттачментов.
+  std::array<VkPipelineColorBlendAttachmentState, 2> attachment_states = {{
+      {
+          .blendEnable = VK_FALSE,
+          .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                            VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+      },
+      {
+          .blendEnable = VK_FALSE,
+          .colorWriteMask = VK_COLOR_COMPONENT_A_BIT | VK_COLOR_COMPONENT_R_BIT |
+                            VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT,
+      },
+  }};
+  VkPipelineColorBlendStateCreateInfo ci_color_blend_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
+      .logicOpEnable = VK_FALSE,
+      .attachmentCount = static_cast<uint32_t>(attachment_states.size()),
+      .pAttachments = attachment_states.data(),
+  };
+
+  VkDynamicState dynamic_states[] = {VK_DYNAMIC_STATE_VIEWPORT,
+                                     VK_DYNAMIC_STATE_SCISSOR};
+  VkPipelineDynamicStateCreateInfo ci_pipeline_dynamic_state{
+      .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
+      .dynamicStateCount = 2,
+      .pDynamicStates = dynamic_states,
+  };
+
+  // --- Конвейер отрезков (LINE_LIST) ---
+  if (!state->edges_pipeline) {
+    static uint32_t vs_spirv_source[] = {
+#include "line.vert.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_vs_module{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(vs_spirv_source),
+        .pCode = (uint32_t*)vs_spirv_source,
+    };
+    VkShaderModule vs_module = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Line vertex shader creation error ({}).", VkResultToString(r));
+      return false;
+    }
+
+    static uint32_t fs_spirv_source[] = {
+#include "line.frag.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_fs_module{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(fs_spirv_source),
+        .pCode = (uint32_t*)fs_spirv_source,
+    };
+    VkShaderModule fs_module = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Line fragment shader creation error ({}).", VkResultToString(r));
+      vkDestroyShaderModule(state->device, vs_module, nullptr);
+      return false;
+    }
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vs_module,
+            .pName = "main",
+        },
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fs_module,
+            .pName = "main",
+        },
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_LINE_LIST,
+        .primitiveRestartEnable = false,
+    };
+
+    VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(ci_stages.size()),
+        .pStages = ci_stages.data(),
+        .pVertexInputState = &ci_vertex_input_state,
+        .pInputAssemblyState = &ci_input_assembly_state,
+        .pViewportState = &ci_viewport_state,
+        .pRasterizationState = &ci_rasterization_state,
+        .pMultisampleState = &ci_multisample_state,
+        .pDepthStencilState = &ci_depth_stencil_state,
+        .pColorBlendState = &ci_color_blend_state,
+        .pDynamicState = &ci_pipeline_dynamic_state,
+        .layout = state->graphics_pipeline_layout,
+        .renderPass = state->graphics_renderpass,
+        .subpass = 0,
+    }};
+    VkPipeline pipelines[] = {VK_NULL_HANDLE};
+    r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1,
+                                  ci_pipelines, nullptr, pipelines);
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Edges graphics pipeline creation error ({}).", VkResultToString(r));
+      return false;
+    }
+    state->edges_pipeline = pipelines[0];
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Edges graphics pipeline {} is created.",
+        static_cast<void*>(state->edges_pipeline));
+  }
+
+  // --- Конвейер вершин (POINT_LIST) ---
+  if (!state->vertices_pipeline) {
+    static uint32_t vs_spirv_source[] = {
+#include "point.vert.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_vs_module{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(vs_spirv_source),
+        .pCode = (uint32_t*)vs_spirv_source,
+    };
+    VkShaderModule vs_module = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_vs_module, nullptr, &vs_module);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Point vertex shader creation error ({}).", VkResultToString(r));
+      return false;
+    }
+
+    static uint32_t fs_spirv_source[] = {
+#include "point.frag.spv.h"
+    };
+    VkShaderModuleCreateInfo ci_fs_module{
+        .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
+        .codeSize = sizeof(fs_spirv_source),
+        .pCode = (uint32_t*)fs_spirv_source,
+    };
+    VkShaderModule fs_module = VK_NULL_HANDLE;
+    r = vkCreateShaderModule(state->device, &ci_fs_module, nullptr, &fs_module);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Point fragment shader creation error ({}).", VkResultToString(r));
+      vkDestroyShaderModule(state->device, vs_module, nullptr);
+      return false;
+    }
+
+    std::array<VkPipelineShaderStageCreateInfo, 2> ci_stages = {
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_VERTEX_BIT,
+            .module = vs_module,
+            .pName = "main",
+        },
+        VkPipelineShaderStageCreateInfo{
+            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
+            .module = fs_module,
+            .pName = "main",
+        },
+    };
+
+    VkPipelineInputAssemblyStateCreateInfo ci_input_assembly_state{
+        .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
+        .topology = VK_PRIMITIVE_TOPOLOGY_POINT_LIST,
+        .primitiveRestartEnable = false,
+    };
+
+    VkGraphicsPipelineCreateInfo ci_pipelines[] = {{
+        .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
+        .stageCount = static_cast<uint32_t>(ci_stages.size()),
+        .pStages = ci_stages.data(),
+        .pVertexInputState = &ci_vertex_input_state,
+        .pInputAssemblyState = &ci_input_assembly_state,
+        .pViewportState = &ci_viewport_state,
+        .pRasterizationState = &ci_rasterization_state,
+        .pMultisampleState = &ci_multisample_state,
+        .pDepthStencilState = &ci_depth_stencil_state,
+        .pColorBlendState = &ci_color_blend_state,
+        .pDynamicState = &ci_pipeline_dynamic_state,
+        .layout = state->graphics_pipeline_layout,
+        .renderPass = state->graphics_renderpass,
+        .subpass = 0,
+    }};
+    VkPipeline pipelines[] = {VK_NULL_HANDLE};
+    r = vkCreateGraphicsPipelines(state->device, VK_NULL_HANDLE, 1,
+                                  ci_pipelines, nullptr, pipelines);
+    vkDestroyShaderModule(state->device, vs_module, nullptr);
+    vkDestroyShaderModule(state->device, fs_module, nullptr);
+    if (r != VK_SUCCESS) {
+      BOOST_LOG_TRIVIAL(trace) << std::format(
+          "Vertices graphics pipeline creation error ({}).", VkResultToString(r));
+      return false;
+    }
+    state->vertices_pipeline = pipelines[0];
+    BOOST_LOG_TRIVIAL(trace) << std::format(
+        "Vertices graphics pipeline {} is created.",
+        static_cast<void*>(state->vertices_pipeline));
+  }
+
+  return true;
+}
+
 bool SceneRes::InitFrames() {
   VkResult r;
 
@@ -2113,6 +2445,59 @@ void Render(Application* app, Scene* scene, SceneRes* scene_res,
     vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
 
     vkCmdDrawIndexed(frame.cmd_buf, scene_res->index_count, 1, 0, 0, 0);
+  }
+
+  // Отрисовка отрезков (LINE_LIST).
+  if (scene_res->buffer_edge_index) {
+    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->edges_pipeline);
+
+    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            state->graphics_pipeline_layout, 0, 1,
+                            &frame.graphics_desc_set, 0, nullptr);
+
+    // Bind vertex buffers: позиция (binding 0), цвет (binding 1), object id
+    // (binding 2).
+    std::vector<VkBuffer> edge_buffers = {
+        scene_res->buffer_edge_vertex,
+        scene_res->buffer_edge_color,
+        scene_res->buffer_edge_object_id,
+    };
+    VkDeviceSize edge_offsets[] = {0, 0, 0};
+    vkCmdBindVertexBuffers(frame.cmd_buf, 0, edge_buffers.size(),
+                           edge_buffers.data(), edge_offsets);
+
+    vkCmdBindIndexBuffer(frame.cmd_buf, scene_res->buffer_edge_index, 0,
+                         VK_INDEX_TYPE_UINT32);
+
+    vkCmdSetViewport(frame.cmd_buf, 0, 1, &viewport);
+    vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
+
+    vkCmdDrawIndexed(frame.cmd_buf, scene_res->edge_index_count, 1, 0, 0, 0);
+  }
+
+  // Отрисовка вершин (POINT_LIST).
+  if (scene_res->buffer_point_vertex) {
+    vkCmdBindPipeline(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                      state->vertices_pipeline);
+
+    vkCmdBindDescriptorSets(frame.cmd_buf, VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            state->graphics_pipeline_layout, 0, 1,
+                            &frame.graphics_desc_set, 0, nullptr);
+
+    std::vector<VkBuffer> point_buffers = {
+        scene_res->buffer_point_vertex,
+        scene_res->buffer_point_color,
+        scene_res->buffer_point_object_id,
+    };
+    VkDeviceSize point_offsets[] = {0, 0, 0};
+    vkCmdBindVertexBuffers(frame.cmd_buf, 0, point_buffers.size(),
+                           point_buffers.data(), point_offsets);
+
+    vkCmdSetViewport(frame.cmd_buf, 0, 1, &viewport);
+    vkCmdSetScissor(frame.cmd_buf, 0, 1, &scissor);
+
+    vkCmdDraw(frame.cmd_buf, scene_res->point_vertex_count, 1, 0, 0);
   }
 
   vkCmdNextSubpass(frame.cmd_buf, VK_SUBPASS_CONTENTS_INLINE);
@@ -3005,6 +3390,7 @@ bool VulkanObjects::RestoreInvalidated(VkSurfaceKHR surface) {
   if (!CreateGraphicsRenderPass(&global_state)) return false;
   if (!CreateGraphicsPipeline(&global_state)) return false;
   if (!CreateWorkplanePipeline(&global_state)) return false;
+  if (!CreateLinePointPipelines(&global_state)) return false;
   if (!CreateSelectionPipeline(&global_state)) return false;
   if (!CreateCompositeRenderPass(&global_state)) return false;
   if (!CreateCompositePipeline(&global_state)) return false;
@@ -3299,6 +3685,131 @@ void CopyTrias(const Scene* scene, uint32_t* data) {
     }
   }
 }
+
+//! Количество вершин и отрезков для примитивов типа Edges.
+std::pair<size_t,size_t> GetEdgeElementsCount(const Scene* scene) {
+  size_t n_verts = 0, n_segs = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Edges)
+        continue;
+      n_verts += d->GetVertsCount();
+      n_segs += d->GetCellsCount();
+    }
+  }
+  return std::make_pair(n_verts, n_segs);
+}
+
+//! Количество вершин для примитивов типа Vertices.
+size_t GetPointVerticesCount(const Scene* scene) {
+  size_t n_verts = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Vertices)
+        continue;
+      n_verts += d->GetVertsCount();
+    }
+  }
+  return n_verts;
+}
+
+void CopyEdgeVerts(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Edges)
+        continue;
+      for (glm::vec3 v : d->GetVertices()) {
+        *data++ = v.x;
+        *data++ = v.y;
+        *data++ = v.z;
+      }
+    }
+  }
+}
+
+void CopyEdgeColors(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Edges)
+        continue;
+      auto color = d->GetColor();
+      for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+        *data++ = color.x;
+        *data++ = color.y;
+        *data++ = color.z;
+      }
+    }
+  }
+}
+
+void CopyEdgeObjectIds(const Scene* scene, uint32_t* data) {
+  for (const SceneObject* o : scene->Objects()) {
+    for (Drawable* d : o->Drawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Edges)
+        continue;
+      for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+        *data++ = d->GetId();
+      }
+    }
+  }
+}
+
+void CopyEdges(const Scene* scene, uint32_t* data) {
+  size_t v_offset = 0;
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Edges)
+        continue;
+      Drawable1* d1 = Drawable1::Cast(d);
+      for (glm::u32vec2 e : d1->GetEdges()) {
+        *data++ = (e.x + v_offset);
+        *data++ = (e.y + v_offset);
+      }
+      v_offset += d->GetVertsCount();
+    }
+  }
+}
+
+void CopyPointVerts(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Vertices)
+        continue;
+      for (glm::vec3 v : d->GetVertices()) {
+        *data++ = v.x;
+        *data++ = v.y;
+        *data++ = v.z;
+      }
+    }
+  }
+}
+
+void CopyPointColors(const Scene* scene, float* data) {
+  for (SceneObject* so : scene->VisibleObjects()) {
+    for (Drawable* d : so->VisibleDrawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Vertices)
+        continue;
+      auto color = d->GetColor();
+      for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+        *data++ = color.x;
+        *data++ = color.y;
+        *data++ = color.z;
+      }
+    }
+  }
+}
+
+void CopyPointObjectIds(const Scene* scene, uint32_t* data) {
+  for (const SceneObject* o : scene->Objects()) {
+    for (Drawable* d : o->Drawables()) {
+      if (d->Type() != Drawable::PrimitiveType::Vertices)
+        continue;
+      for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+        *data++ = d->GetId();
+      }
+    }
+  }
+}
 } // namespace
 
 VkInstance VkSceneRenderer::GetInstance() const {
@@ -3310,6 +3821,7 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
   VulkanGlobalState* vk_global_state = scene_res->vk_state;
   auto allocator = vk_global_state->allocator;
 
+  // Уничтожаем предыдущие буферы треугольников.
   if (scene_res->buffer_vertex != VK_NULL_HANDLE) {
     vmaDestroyBuffer(allocator,scene_res->buffer_vertex,scene_res->alloc_vertex);
     vmaDestroyBuffer(allocator,scene_res->buffer_normal,scene_res->alloc_normal);
@@ -3322,134 +3834,314 @@ void UpdateScene(const Scene* scene, SceneRes* scene_res) {
     scene_res->buffer_object_id = VK_NULL_HANDLE;
     scene_res->buffer_index = VK_NULL_HANDLE;
   }
+  // Уничтожаем предыдущие буферы отрезков.
+  if (scene_res->buffer_edge_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator, scene_res->buffer_edge_vertex,
+                     scene_res->alloc_edge_vertex);
+    vmaDestroyBuffer(allocator, scene_res->buffer_edge_color,
+                     scene_res->alloc_edge_color);
+    vmaDestroyBuffer(allocator, scene_res->buffer_edge_object_id,
+                     scene_res->alloc_edge_object_id);
+    vmaDestroyBuffer(allocator, scene_res->buffer_edge_index,
+                     scene_res->alloc_edge_index);
+    scene_res->buffer_edge_vertex = VK_NULL_HANDLE;
+    scene_res->buffer_edge_color = VK_NULL_HANDLE;
+    scene_res->buffer_edge_object_id = VK_NULL_HANDLE;
+    scene_res->buffer_edge_index = VK_NULL_HANDLE;
+  }
+  // Уничтожаем предыдущие буферы вершин.
+  if (scene_res->buffer_point_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(allocator, scene_res->buffer_point_vertex,
+                     scene_res->alloc_point_vertex);
+    vmaDestroyBuffer(allocator, scene_res->buffer_point_color,
+                     scene_res->alloc_point_color);
+    vmaDestroyBuffer(allocator, scene_res->buffer_point_object_id,
+                     scene_res->alloc_point_object_id);
+    scene_res->buffer_point_vertex = VK_NULL_HANDLE;
+    scene_res->buffer_point_color = VK_NULL_HANDLE;
+    scene_res->buffer_point_object_id = VK_NULL_HANDLE;
+  }
 
+  // --- Буферы треугольников ---
   size_t n_verts = 0, n_cells = 0;
   std::tie(n_verts, n_cells) = GetElementsCount(scene);
+  scene_res->index_count = 0;
+  if (n_verts > 0) {
+    VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
+    VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
+    VkDeviceSize color_buffer_size = Aligned(3 * n_verts * sizeof(float), 256);
+    VkDeviceSize object_id_buffer_size =
+        Aligned(n_verts * sizeof(uint32_t), 256);
+    VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
 
-  VkDeviceSize vertex_buffer_size = Aligned(6 * n_verts * sizeof(float), 256);
-  VkDeviceSize normal_buffer_size = Aligned(3 * n_cells * sizeof(float), 256);
-  VkDeviceSize color_buffer_size = Aligned(3 * n_verts * sizeof(float), 256);
-  VkDeviceSize object_id_buffer_size = Aligned(3 * n_verts * sizeof(uint32_t), 256);
-  VkDeviceSize index_buffer_size = Aligned(3 * n_cells * sizeof(uint32_t), 256);
+    {
+      // Выделяем память под буфер вершин.
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = vertex_buffer_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      VkResult r = vmaCreateBuffer(allocator,
+                                   &ci_buffer, &ci_allocation,
+                                   &scene_res->buffer_vertex,
+                                   &scene_res->alloc_vertex, nullptr);
+      // Копируем вершины.
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_vertex, &mapped_data);
+      float* data = reinterpret_cast<float*>(mapped_data);
+      CopyVerts(scene, data);
+      vmaUnmapMemory(allocator, scene_res->alloc_vertex);
+    }
 
-  if (vertex_buffer_size == 0)
-    return;
+    {
+      // Выделяем память под буфер с нормалями.
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = normal_buffer_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator,
+                      &ci_buffer, &ci_allocation, &scene_res->buffer_normal,
+                      &scene_res->alloc_normal, nullptr);
+      // Копируем нормали.
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_normal, &mapped_data);
+      float* data = reinterpret_cast<float*>(mapped_data);
+      CopyNormals(scene, data);
+      vmaUnmapMemory(allocator, scene_res->alloc_normal);
+    }
 
-  {
-    // Выделяем память под буфер вершин.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = vertex_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    VkResult r = vmaCreateBuffer(allocator,
-                                 &ci_buffer, &ci_allocation,
-                                 &scene_res->buffer_vertex,
-                                 &scene_res->alloc_vertex, nullptr);
-    // Копируем вершины.
-    void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_res->alloc_vertex, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    CopyVerts(scene, data);
-    vmaUnmapMemory(allocator, scene_res->alloc_vertex);
-  }
+    {
+      // Выделяем память под буфер с цветами.
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = color_buffer_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator,
+                      &ci_buffer, &ci_allocation, &scene_res->buffer_color,
+                      &scene_res->alloc_color, nullptr);
+      // Копируем цвета.
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_color, &mapped_data);
+      float* data = reinterpret_cast<float*>(mapped_data);
+      CopyColors(scene, data);
+      vmaUnmapMemory(allocator, scene_res->alloc_color);
+    }
 
-  {
-    // Выделяем память под буфер с нормалями.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = normal_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(allocator,
-                    &ci_buffer, &ci_allocation, &scene_res->buffer_normal,
-                    &scene_res->alloc_normal, nullptr);
-    // Копируем нормали.
-    void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_res->alloc_normal, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    CopyNormals(scene, data);
-    vmaUnmapMemory(allocator, scene_res->alloc_normal);
-  }
-
-  {
-    // Выделяем память под буфер с цветами.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = color_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(allocator,
-                    &ci_buffer, &ci_allocation, &scene_res->buffer_color,
-                    &scene_res->alloc_color, nullptr);
-    // Копируем цвета.
-    void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_res->alloc_color, &mapped_data);
-    float* data = reinterpret_cast<float*>(mapped_data);
-    CopyColors(scene, data);
-    vmaUnmapMemory(allocator, scene_res->alloc_color);
-  }
-
-  {
-    // Выделяем память под буфер object id.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = object_id_buffer_size,
-        .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(allocator,
-                    &ci_buffer, &ci_allocation, &scene_res->buffer_object_id,
-                    &scene_res->alloc_object_id, nullptr);
-    // Копируем идентификаторы объектов.
-    void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_res->alloc_object_id, &mapped_data);
-    uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
-    for (const SceneObject* o : scene->Objects()) {
-      for (Drawable* d : o->Drawables()) {
-        if (d->Type() != Drawable::PrimitiveType::Triangles) continue;
-        for (size_t i = 0; i < d->GetVertsCount(); ++i) {
-          *data++ = d->GetId();
+    {
+      // Выделяем память под буфер object id.
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = object_id_buffer_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator,
+                      &ci_buffer, &ci_allocation, &scene_res->buffer_object_id,
+                      &scene_res->alloc_object_id, nullptr);
+      // Копируем идентификаторы объектов.
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_object_id, &mapped_data);
+      uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
+      for (const SceneObject* o : scene->Objects()) {
+        for (Drawable* d : o->Drawables()) {
+          if (d->Type() != Drawable::PrimitiveType::Triangles) continue;
+          for (size_t i = 0; i < d->GetVertsCount(); ++i) {
+            *data++ = d->GetId();
+          }
         }
       }
+      vmaUnmapMemory(allocator, scene_res->alloc_object_id);
     }
-    vmaUnmapMemory(allocator, scene_res->alloc_object_id);
+
+    {
+      // Выделяем память под индексный буфер.
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = index_buffer_size,
+          .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_index,
+                      &scene_res->alloc_index, nullptr);
+
+      // Копируем индексный буфер.
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_index, &mapped_data);
+      uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
+      CopyTrias(scene, data);
+      vmaUnmapMemory(allocator, scene_res->alloc_index);
+    }
+
+    scene_res->index_count = 3 * n_cells;
   }
 
-  {
-    // Выделяем память под индексный буфер.
-    VkBufferCreateInfo ci_buffer {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = index_buffer_size,
-        .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
-    };
-    VmaAllocationCreateInfo ci_allocation {
-        .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
-    };
-    vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
-                    &scene_res->buffer_index,
-                    &scene_res->alloc_index, nullptr);
+  // --- Буферы отрезков (LINE_LIST) ---
+  size_t e_verts = 0, e_segs = 0;
+  std::tie(e_verts, e_segs) = GetEdgeElementsCount(scene);
+  scene_res->edge_vertex_count = 0;
+  scene_res->edge_index_count = 0;
+  if (e_verts > 0 && e_segs > 0) {
+    VkDeviceSize edge_vertex_size = Aligned(3 * e_verts * sizeof(float), 256);
+    VkDeviceSize edge_color_size = Aligned(3 * e_verts * sizeof(float), 256);
+    VkDeviceSize edge_object_id_size = Aligned(e_verts * sizeof(uint32_t), 256);
+    VkDeviceSize edge_index_size = Aligned(2 * e_segs * sizeof(uint32_t), 256);
 
-    // Копируем индексный буфер.
-    void* mapped_data = nullptr;
-    vmaMapMemory(allocator, scene_res->alloc_index, &mapped_data);
-    uint32_t* data = reinterpret_cast<uint32_t*>(mapped_data);
-    CopyTrias(scene, data);
-    vmaUnmapMemory(allocator, scene_res->alloc_index);
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = edge_vertex_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_edge_vertex,
+                      &scene_res->alloc_edge_vertex, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_edge_vertex, &mapped_data);
+      CopyEdgeVerts(scene, reinterpret_cast<float*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_edge_vertex);
+    }
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = edge_color_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_edge_color,
+                      &scene_res->alloc_edge_color, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_edge_color, &mapped_data);
+      CopyEdgeColors(scene, reinterpret_cast<float*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_edge_color);
+    }
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = edge_object_id_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_edge_object_id,
+                      &scene_res->alloc_edge_object_id, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_edge_object_id, &mapped_data);
+      CopyEdgeObjectIds(scene, reinterpret_cast<uint32_t*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_edge_object_id);
+    }
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = edge_index_size,
+          .usage = VK_BUFFER_USAGE_INDEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_edge_index,
+                      &scene_res->alloc_edge_index, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_edge_index, &mapped_data);
+      CopyEdges(scene, reinterpret_cast<uint32_t*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_edge_index);
+    }
+
+    scene_res->edge_vertex_count = static_cast<uint32_t>(e_verts);
+    scene_res->edge_index_count = static_cast<uint32_t>(2 * e_segs);
   }
 
-  scene_res->index_count = 3 * n_cells;
+  // --- Буферы вершин (POINT_LIST) ---
+  size_t p_verts = GetPointVerticesCount(scene);
+  scene_res->point_vertex_count = 0;
+  if (p_verts > 0) {
+    VkDeviceSize point_vertex_size = Aligned(3 * p_verts * sizeof(float), 256);
+    VkDeviceSize point_color_size = Aligned(3 * p_verts * sizeof(float), 256);
+    VkDeviceSize point_object_id_size = Aligned(p_verts * sizeof(uint32_t), 256);
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = point_vertex_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_point_vertex,
+                      &scene_res->alloc_point_vertex, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_point_vertex, &mapped_data);
+      CopyPointVerts(scene, reinterpret_cast<float*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_point_vertex);
+    }
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = point_color_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_point_color,
+                      &scene_res->alloc_point_color, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_point_color, &mapped_data);
+      CopyPointColors(scene, reinterpret_cast<float*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_point_color);
+    }
+
+    {
+      VkBufferCreateInfo ci_buffer {
+          .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+          .size = point_object_id_size,
+          .usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT
+      };
+      VmaAllocationCreateInfo ci_allocation {
+          .usage = VMA_MEMORY_USAGE_CPU_TO_GPU
+      };
+      vmaCreateBuffer(allocator, &ci_buffer, &ci_allocation,
+                      &scene_res->buffer_point_object_id,
+                      &scene_res->alloc_point_object_id, nullptr);
+      void* mapped_data = nullptr;
+      vmaMapMemory(allocator, scene_res->alloc_point_object_id, &mapped_data);
+      CopyPointObjectIds(scene, reinterpret_cast<uint32_t*>(mapped_data));
+      vmaUnmapMemory(allocator, scene_res->alloc_point_object_id);
+    }
+
+    scene_res->point_vertex_count = static_cast<uint32_t>(p_verts);
+  }
 }
 
 void UpdateDescriptorSets(
@@ -3845,6 +4537,41 @@ void SceneRes::Release() {
     vmaDestroyBuffer(vk_state->allocator, buffer_index, alloc_index);
     buffer_index = VK_NULL_HANDLE;
   }
+  if (buffer_edge_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_edge_vertex,
+                     alloc_edge_vertex);
+    buffer_edge_vertex = VK_NULL_HANDLE;
+  }
+  if (buffer_edge_color != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_edge_color,
+                     alloc_edge_color);
+    buffer_edge_color = VK_NULL_HANDLE;
+  }
+  if (buffer_edge_object_id != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_edge_object_id,
+                     alloc_edge_object_id);
+    buffer_edge_object_id = VK_NULL_HANDLE;
+  }
+  if (buffer_edge_index != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_edge_index,
+                     alloc_edge_index);
+    buffer_edge_index = VK_NULL_HANDLE;
+  }
+  if (buffer_point_vertex != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_point_vertex,
+                     alloc_point_vertex);
+    buffer_point_vertex = VK_NULL_HANDLE;
+  }
+  if (buffer_point_color != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_point_color,
+                     alloc_point_color);
+    buffer_point_color = VK_NULL_HANDLE;
+  }
+  if (buffer_point_object_id != VK_NULL_HANDLE) {
+    vmaDestroyBuffer(vk_state->allocator, buffer_point_object_id,
+                     alloc_point_object_id);
+    buffer_point_object_id = VK_NULL_HANDLE;
+  }
   if (buffer_frame != VK_NULL_HANDLE) {
     vmaDestroyBuffer(vk_state->allocator, buffer_frame, alloc_frame);
     buffer_frame = VK_NULL_HANDLE;
@@ -3884,6 +4611,14 @@ bool VkSceneRenderer::SetSampleCount(VkSampleCountFlagBits sample_count) {
   if (state.workplane_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state.device, state.workplane_pipeline, nullptr);
     state.workplane_pipeline = VK_NULL_HANDLE;
+  }
+  if (state.edges_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state.device, state.edges_pipeline, nullptr);
+    state.edges_pipeline = VK_NULL_HANDLE;
+  }
+  if (state.vertices_pipeline != VK_NULL_HANDLE) {
+    vkDestroyPipeline(state.device, state.vertices_pipeline, nullptr);
+    state.vertices_pipeline = VK_NULL_HANDLE;
   }
   if (state.selection_pipeline != VK_NULL_HANDLE) {
     vkDestroyPipeline(state.device, state.selection_pipeline, nullptr);

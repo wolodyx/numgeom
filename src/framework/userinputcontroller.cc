@@ -6,9 +6,9 @@
 #include "numgeom/appcontext.h"
 #include "numgeom/application.h"
 #include "numgeom/drawable.h"
+#include "numgeom/gizmo.h"
 #include "numgeom/iteratorimpl.hpp"
 #include "numgeom/scene.h"
-#include "numgeom/scenewidget.h"
 #include "numgeom/vkscenerenderer.h"
 #include "numgeom/workbench.h"
 
@@ -29,11 +29,12 @@ struct UserInputController::Impl {
     [](const Drawable*) { return false; };
 
   Workbench* workbench;
-  MouseButtonState mouseLeftButtonState;
-  MouseButtonState mouseMiddleButtonState;
-  MouseButtonState mouseRightButtonState;
+  MouseButtonState mouse_left_button_state;
+  MouseButtonState mouse_middle_button_state;
+  MouseButtonState mouse_right_button_state;
   std::vector<Drawable*> selected_items;
   std::function<bool(const Drawable*)> filter = EmptyFilter;
+  Drawable* entered_item = nullptr;
 };
 
 UserInputController::UserInputController(Workbench* wb) {
@@ -45,44 +46,44 @@ UserInputController::UserInputController(Workbench* wb) {
 UserInputController::~UserInputController() {}
 
 void UserInputController::MouseLeftButtonDown(int x, int y) {
-  impl_->mouseLeftButtonState.down = true;
-  impl_->mouseLeftButtonState.xDown = x;
-  impl_->mouseLeftButtonState.yDown = y;
-  impl_->mouseLeftButtonState.xPrev = x;
-  impl_->mouseLeftButtonState.yPrev = y;
+  impl_->mouse_left_button_state.down = true;
+  impl_->mouse_left_button_state.xDown = x;
+  impl_->mouse_left_button_state.yDown = y;
+  impl_->mouse_left_button_state.xPrev = x;
+  impl_->mouse_left_button_state.yPrev = y;
   glm::vec3 picked_point;
   Drawable* item = impl_->workbench->Pick(x, y, &picked_point);
-  impl_->mouseLeftButtonState.selected_item = item;
+  impl_->mouse_left_button_state.selected_item = item;
   if (item) {
-    impl_->mouseLeftButtonState.clicked_point = picked_point;
-    impl_->mouseLeftButtonState.next_dragged_point = picked_point;
-    impl_->mouseLeftButtonState.prev_dragged_point = picked_point;
+    impl_->mouse_left_button_state.clicked_point = picked_point;
+    impl_->mouse_left_button_state.next_dragged_point = picked_point;
+    impl_->mouse_left_button_state.prev_dragged_point = picked_point;
   }
 }
 
 void UserInputController::MouseMiddleButtonDown(int x, int y) {
-  impl_->mouseMiddleButtonState.down = true;
-  impl_->mouseMiddleButtonState.xDown = x;
-  impl_->mouseMiddleButtonState.yDown = y;
-  impl_->mouseMiddleButtonState.xPrev = x;
-  impl_->mouseMiddleButtonState.yPrev = y;
+  impl_->mouse_middle_button_state.down = true;
+  impl_->mouse_middle_button_state.xDown = x;
+  impl_->mouse_middle_button_state.yDown = y;
+  impl_->mouse_middle_button_state.xPrev = x;
+  impl_->mouse_middle_button_state.yPrev = y;
 }
 
 void UserInputController::MouseRightButtonDown(int x, int y) {
-  impl_->mouseRightButtonState.down = true;
-  impl_->mouseRightButtonState.xDown = x;
-  impl_->mouseRightButtonState.yDown = y;
-  impl_->mouseRightButtonState.xPrev = x;
-  impl_->mouseRightButtonState.yPrev = y;
+  impl_->mouse_right_button_state.down = true;
+  impl_->mouse_right_button_state.xDown = x;
+  impl_->mouse_right_button_state.yDown = y;
+  impl_->mouse_right_button_state.xPrev = x;
+  impl_->mouse_right_button_state.yPrev = y;
 }
 
 void UserInputController::MouseLeftButtonUp(int x, int y) {
-  if (!impl_->mouseLeftButtonState.down) return;
+  if (!impl_->mouse_left_button_state.down) return;
 
-  impl_->mouseLeftButtonState.down = false;
+  impl_->mouse_left_button_state.down = false;
 
-  bool be_clicked = impl_->mouseLeftButtonState.xDown == x &&
-                   impl_->mouseLeftButtonState.yDown == y;
+  bool be_clicked = impl_->mouse_left_button_state.xDown == x &&
+                   impl_->mouse_left_button_state.yDown == y;
 
   if (!be_clicked) return;
 
@@ -90,7 +91,7 @@ void UserInputController::MouseLeftButtonUp(int x, int y) {
 
   Scene* scene = impl_->workbench->GetScene();
 
-  Drawable* selected_item = impl_->mouseLeftButtonState.selected_item;
+  Drawable* selected_item = impl_->mouse_left_button_state.selected_item;
   auto app = Application::Get();
   SelectionMode selection_mode = app->GetContext()->GetSelectionMode();
   std::vector<Drawable*> selected_objs, deselected_objs;
@@ -138,21 +139,21 @@ void UserInputController::MouseLeftButtonUp(int x, int y) {
 }
 
 void UserInputController::MouseMiddleButtonUp(int x, int y) {
-  if (!impl_->mouseMiddleButtonState.down) return;
+  if (!impl_->mouse_middle_button_state.down) return;
 
-  impl_->mouseMiddleButtonState.down = false;
+  impl_->mouse_middle_button_state.down = false;
 
-  bool beClicked = impl_->mouseMiddleButtonState.xDown == x &&
-                   impl_->mouseMiddleButtonState.yDown == y;
+  bool beClicked = impl_->mouse_middle_button_state.xDown == x &&
+                   impl_->mouse_middle_button_state.yDown == y;
 }
 
 void UserInputController::MouseRightButtonUp(int x, int y) {
-  if (!impl_->mouseRightButtonState.down) return;
+  if (!impl_->mouse_right_button_state.down) return;
 
-  impl_->mouseRightButtonState.down = false;
+  impl_->mouse_right_button_state.down = false;
 
-  bool beClicked = impl_->mouseRightButtonState.xDown == x &&
-                   impl_->mouseRightButtonState.yDown == y;
+  bool beClicked = impl_->mouse_right_button_state.xDown == x &&
+                   impl_->mouse_right_button_state.yDown == y;
 
   if (beClicked) {
     Application* app = Application::Get();
@@ -165,7 +166,7 @@ void UserInputController::MouseRightButtonUp(int x, int y) {
 namespace {
 bool IsInteractiveItem(const Drawable* item) {
   if (!item) return false;
-  auto w = dynamic_cast<const SceneWidget*>(item->GetParent());
+  auto w = dynamic_cast<const Gizmo*>(item->GetParent());
   if (!w) return false;
   return item->IsPickable();
 }
@@ -227,11 +228,11 @@ void UserInputController::MouseMove(int x, int y) {
   Scene* scene = impl_->workbench->GetScene();
   bool is_scene_dirty = false;
   glm::ivec2 screen_pos{x, y};
-  if (impl_->mouseLeftButtonState.down) {
-    MouseButtonState& mbs = impl_->mouseLeftButtonState;
+  if (impl_->mouse_left_button_state.down) {
+    MouseButtonState& mbs = impl_->mouse_left_button_state;
     if (IsInteractiveItem(mbs.selected_item)) {
       auto* selected_item = mbs.selected_item;
-      auto* widget = dynamic_cast<SceneWidget*>(selected_item->GetParent());
+      auto* widget = dynamic_cast<Gizmo*>(selected_item->GetParent());
       mbs.prev_dragged_point = mbs.next_dragged_point;
       mbs.next_dragged_point = GetWorldPointOnViewParallelPlane(scene, mbs.prev_dragged_point, screen_pos);
       auto dragging_dir = mbs.next_dragged_point - mbs.prev_dragged_point;
@@ -244,21 +245,44 @@ void UserInputController::MouseMove(int x, int y) {
     is_scene_dirty = true;
     mbs.xPrev = x;
     mbs.yPrev = y;
-  } else if (impl_->mouseMiddleButtonState.down) {
-    const int dx = x - impl_->mouseMiddleButtonState.xPrev;
-    const int dy = y - impl_->mouseMiddleButtonState.yPrev;
+  } else if (impl_->mouse_middle_button_state.down) {
+    const int dx = x - impl_->mouse_middle_button_state.xPrev;
+    const int dy = y - impl_->mouse_middle_button_state.yPrev;
     // ...
-    impl_->mouseMiddleButtonState.xPrev = x;
-    impl_->mouseMiddleButtonState.yPrev = y;
-  } else if (impl_->mouseRightButtonState.down) {
-    const int dx = x - impl_->mouseRightButtonState.xPrev;
-    const int dy = y - impl_->mouseRightButtonState.yPrev;
+    impl_->mouse_middle_button_state.xPrev = x;
+    impl_->mouse_middle_button_state.yPrev = y;
+  } else if (impl_->mouse_right_button_state.down) {
+    const int dx = x - impl_->mouse_right_button_state.xPrev;
+    const int dy = y - impl_->mouse_right_button_state.yPrev;
 
     scene->RotateCamera(x, y, dx, dy);
     is_scene_dirty = true;
 
-    impl_->mouseRightButtonState.xPrev = x;
-    impl_->mouseRightButtonState.yPrev = y;
+    impl_->mouse_right_button_state.xPrev = x;
+    impl_->mouse_right_button_state.yPrev = y;
+  } else {
+    // Перемещение мыши без нажатия на клавиши. Генерируем события Enter и Exit.
+    Drawable* item = impl_->workbench->Pick(x, y);
+    if (item) {
+      if (item->GetParent()->IsVisible() && item->IsVisible() && IsInteractiveItem(item)) {
+        auto item_parent = dynamic_cast<SceneWidget*>(item->GetParent());
+        if (!impl_->entered_item) {
+          impl_->entered_item = item;
+          item_parent->Enter(item);
+        } else {
+          if (impl_->entered_item != item) {
+            dynamic_cast<SceneWidget*>(impl_->entered_item->GetParent())->Exit(impl_->entered_item);
+            impl_->entered_item = item;
+            item_parent->Enter(item);
+          }
+        }
+      }
+    } else {
+      if (impl_->entered_item) {
+        dynamic_cast<SceneWidget*>(impl_->entered_item->GetParent())->Exit(impl_->entered_item);
+        impl_->entered_item = nullptr;
+      }
+    }
   }
 
   if (is_scene_dirty) {
@@ -275,7 +299,7 @@ void UserInputController::MouseWheelRotate(int numDegrees) {
 void UserInputController::MouseDoubleClick(MouseButton button, int x, int y) {
   Drawable* item = impl_->workbench->Pick(x, y);
   if (item && IsInteractiveItem(item)) {
-    SceneWidget* widget = dynamic_cast<SceneWidget*>(item->GetParent());
+    auto widget = dynamic_cast<Gizmo*>(item->GetParent());
     assert(widget != nullptr);
     widget->DoubleClick(button, item);
   }

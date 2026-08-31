@@ -5,12 +5,6 @@
 #include "numgeom/trimeshconnectivity.h"
 
 namespace {
-struct DVec3ToVec3 {
-  glm::vec3 operator()(const glm::dvec3& v) const {
-    return glm::vec3(v.x, v.y, v.z);
-  }
-};
-
 glm::vec3 computeTriangleNormal(const glm::vec3& a, const glm::vec3& b,
                                 const glm::vec3& c) {
   glm::vec3 ab = b - a;
@@ -80,16 +74,11 @@ class IteratorImpl_DrawableNormals : public IteratorImpl<glm::vec3> {
   size_t vertex_index_;
 };
 
-struct TriCellToU32Vec3 {
-  glm::u32vec3 operator()(const TriMesh::Cell& cell) const {
-    return glm::u32vec3(cell.na, cell.nb, cell.nc);
-  }
-};
-
 class Drawable2_TriMesh : public Drawable2 {
  public:
 
-  Drawable2_TriMesh(SceneObject* o, CTriMesh::Ptr mesh) : Drawable2(o) {
+  Drawable2_TriMesh(SceneObject* o, CTriMesh::Ptr mesh)
+      : Drawable(o), Drawable2(o) {
     mesh_ = mesh;
   }
 
@@ -113,7 +102,8 @@ class Drawable2_TriMesh : public Drawable2 {
                                          glm::dvec3,
                                          &CTriMesh::NbNodes,
                                          &CTriMesh::GetNode>(mesh_.get());
-    auto impl2 = new IteratorImpl_Transform<glm::dvec3, glm::vec3, DVec3ToVec3>(impl);
+    auto impl2 = new IteratorImpl_Transform<glm::dvec3, glm::vec3>(
+        impl, [](const glm::dvec3& v) { return glm::vec3(v.x, v.y, v.z); });
     return Iterator<glm::vec3>(impl2);
   }
 
@@ -122,7 +112,10 @@ class Drawable2_TriMesh : public Drawable2 {
                                          CTriMesh::Cell,
                                          &CTriMesh::NbCells,
                                          &CTriMesh::GetCell>(mesh_.get());
-    auto impl2 = new IteratorImpl_Transform<CTriMesh::Cell, glm::u32vec3, TriCellToU32Vec3>(impl);
+    auto impl2 = new IteratorImpl_Transform<CTriMesh::Cell, glm::u32vec3>(
+        impl, [](const CTriMesh::Cell& cell) {
+          return glm::u32vec3(cell.na, cell.nb, cell.nc);
+        });
     return Iterator<glm::u32vec3>(impl2);
   }
 

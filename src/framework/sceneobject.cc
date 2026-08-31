@@ -4,6 +4,7 @@
 
 #include "numgeom/drawable.h"
 #include "numgeom/iteratorimpl.hpp"
+#include "numgeom/scene.h"
 
 #include "trackedobjectlist.h"
 
@@ -21,9 +22,11 @@ SceneObject::SceneObject(Scene* scene) {
     .scene = scene
   };
   this->AddSubObjects(&impl_->drawables);
+  scene->Register(this);
 }
 
 SceneObject::~SceneObject() {
+  impl_->scene->Unregister(this);
   delete impl_;
 }
 

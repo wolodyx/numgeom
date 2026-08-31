@@ -1,6 +1,7 @@
 #include "gtest/gtest.h"
 
 #include "numgeom/drawable_sphere.h"
+#include "numgeom/drawable_torus.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject.h"
 
@@ -47,6 +48,52 @@ TEST(Drawable, DrawableSphereGetNormals) {
     glm::vec3 pt = (*it_vertex++);
     glm::vec3 n2 = glm::normalize(pt - center);
     ASSERT_TRUE(glm::length(n - n2) < 1.0e-6);
+  }
+}
+
+TEST(Drawable, DrawableTorusGetVertices) {
+  Scene scene;
+  const glm::vec3 center(0.0, 0.0, 0.0);
+  const glm::vec3 normal(0.0, 1.0, 0.0);
+  Drawable* d = AddDrawable<Drawable2_Torus>(scene, center, normal, 2.0f, 0.5f,
+                                              8, 6);
+  EXPECT_EQ(d->GetVertsCount(), 48);
+  EXPECT_EQ(d->GetCellsCount(), 96);
+  AlignedBoundBox boxCalculatedFromVerts;
+  for (auto pt : d->GetVertices())
+    boxCalculatedFromVerts.Expand(pt);
+  EXPECT_TRUE(boxCalculatedFromVerts.IsEqual(d->GetBoundBox(), 1.0e-4));
+}
+
+TEST(Drawable, DrawableTorusGetNormals) {
+  Scene scene;
+  const glm::vec3 center(0.0, 0.0, 0.0);
+  const glm::vec3 normal(0.0, 1.0, 0.0);
+  Drawable* d = AddDrawable<Drawable2_Torus>(scene, center, normal, 2.0f, 0.5f,
+                                              8, 6);
+  auto d2 = Drawable2::Cast(d);
+  auto it_normal = d2->GetNormals();
+  auto it_vertex = d2->GetVertices();
+  for (auto n : it_normal) {
+    // Нормаль тора единичной длины.
+    ASSERT_TRUE(glm::length(n) > 1.0e-6);
+  }
+  (void)it_vertex;
+}
+
+TEST(Drawable, DrawableTorusGetTriangles) {
+  Scene scene;
+  const glm::vec3 center(0.0, 0.0, 0.0);
+  const glm::vec3 normal(0.0, 1.0, 0.0);
+  Drawable* d = AddDrawable<Drawable2_Torus>(scene, center, normal, 2.0f, 0.5f,
+                                              8, 6);
+  Drawable2* d2 = Drawable2::Cast(d);
+  size_t verts = d2->GetVertsCount();
+  for (auto tr : d2->GetTriangles()) {
+    ASSERT_TRUE(tr.x != tr.y && tr.x != tr.z && tr.y != tr.z);
+    ASSERT_LT(tr.x, verts);
+    ASSERT_LT(tr.y, verts);
+    ASSERT_LT(tr.z, verts);
   }
 }
 

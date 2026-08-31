@@ -247,19 +247,19 @@ class CylinderNormalIterator : public IteratorImpl<glm::vec3> {
 
 } // namespace
 
-Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* object)
-    : Drawable2(object) {
+Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* o)
+    : Drawable(o), Drawable2(o) {
   bottom_center_ = glm::vec3(0.0f, 0.0f, 0.0f);
   top_center_ = glm::vec3(0.0f, 0.0f, 0.0f);
   radius_ = 0.0f;
   segments_ = 0;
 }
 
-Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* object,
+Drawable2_Cylinder::Drawable2_Cylinder(SceneObject* o,
                                        const glm::vec3& bottom_center,
                                        const glm::vec3& top_center,
                                        float radius, int segments)
-    : Drawable2(object) {
+    : Drawable(o), Drawable2(o) {
   bottom_center_ = bottom_center;
   top_center_ = top_center;
   radius_ = radius;

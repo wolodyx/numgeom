@@ -9,10 +9,10 @@
 #include "numgeom/command.h"
 #include "numgeom/drawable.h"
 #include "numgeom/fgtext.h"
+#include "numgeom/guimediator.h"
 #include "numgeom/iteratorimpl.hpp"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
-#include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/trimesh.h"
 #include "numgeom/vkscenerenderer.h"
 #include "numgeom/workbench.h"
@@ -31,6 +31,7 @@ class ApplicationImpl {
 
  public:
   AppContext context;
+  GuiMediator* gui_mediator = nullptr;
   TrackedObjectList scenes_;
   TrackedObjectList fg_objects_;
   VkSceneRenderer* renderer_ = nullptr;
@@ -161,50 +162,69 @@ std::pair<std::string,std::string> SplitByFirstDot(const std::string& str) {
 }
 }
 
-bool Application::SetupCommand(const std::string& command_name) {
+bool Application::SetupCommand(const std::string& command_id) {
   // Уничтожаем предыдущую команду.
   if (impl_->command_) {
+    if (impl_->gui_mediator)
+      impl_->gui_mediator->DisableCommandMode();
     impl_->command_->Cleanup();
     delete impl_->command_;
     impl_->command_ = nullptr;
   }
 
   // Создаем новую команду через модуль.
-  std::string workbench_name, command_name_without_workbench;
-  std::tie(workbench_name, command_name_without_workbench) =
-      SplitByFirstDot(command_name);
-  Workbench* wb = this->GetWorkbench(workbench_name);
+  std::string workbench_type_id, command_name;
+  std::tie(workbench_type_id, command_name) = SplitByFirstDot(command_id);
+  Workbench* wb = this->GetWorkbench(workbench_type_id);
   if (!wb) {
-    std::cerr << std::format("Failed to find workbench {}", workbench_name)
+    std::cerr << std::format("Failed to find workbench {}", workbench_type_id)
               << std::endl;
     return false;
   }
-  impl_->command_ = wb->CreateCommand(command_name_without_workbench);
+  impl_->command_ = wb->CreateCommand(command_name);
   if (!impl_->command_) {
     std::cerr << std::format("Failed to create command {} from module {}.",
-                             command_name_without_workbench,
-                             workbench_name)
+                             command_name, workbench_type_id)
               << std::endl;
     return false;
   }
 
   impl_->command_->Setup();
   impl_->command_->Recover();
-
+  if (impl_->gui_mediator)
+    impl_->gui_mediator->EnableCommandMode();
   return true;
 }
 
-bool Application::ExecuteCommand() {
-  return true;
+Outcome Application::ExecuteCommand() {
+  if (!impl_->command_)
+    return Outcome::Error("No command to execute");
+  auto outcome = impl_->command_->Execute();
+  if (impl_->gui_mediator)
+    impl_->gui_mediator->ShowMessage(outcome);
+  impl_->command_->Recover();
+  impl_->command_->GetWorkbench()->UpdateScreen();
+  return outcome;
 }
 
-void Application::StopCommand() {
+void Application::CancelCommand() {
+  if (!impl_->command_)
+    return;
+  impl_->command_->Cleanup();
+  delete impl_->command_;
+  impl_->command_ = nullptr;
+  if (impl_->gui_mediator)
+    impl_->gui_mediator->DisableCommandMode();
 }
 
 Command* Application::GetCommand() const {
-  return nullptr;
+  return impl_->command_;
 }
 
 AppContext* Application::GetContext() {
   return &impl_->context;
+}
+
+void Application::SetGuiMediator(GuiMediator* gui_mediator) {
+  impl_->gui_mediator = gui_mediator;
 }

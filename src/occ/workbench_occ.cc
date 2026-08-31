@@ -2,8 +2,12 @@
 
 #include <format>
 
+#include "BRepBuilderAPI_Transform.hxx"
 #include "Poly_Triangle.hxx"
 #include "TDataXtd_Triangulation.hxx"
+#include "gp_GTrsf.hxx"
+#include "gp_Pnt.hxx"
+#include "gp_XYZ.hxx"
 #include "TDF_ChildIterator.hxx"
 #include "TDocStd_Document.hxx"
 #include "XCAFApp_Application.hxx"
@@ -11,9 +15,10 @@
 #include "XCAFDoc_ShapeTool.hxx"
 
 #include "numgeom/drawable_occshape.h"
-#include "numgeom/loadusingocc.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_tdocstd_document.h"
+
+#include "loadusingocc.h"
 
 REGISTER_WORKBENCH("OCC", Workbench_OCC);
 
@@ -28,43 +33,6 @@ void Workbench_OCC::Setup() {}
 void Workbench_OCC::Cleanup() {}
 
 namespace {
-std::string GetExtension(const std::filesystem::path& filename) {
-  std::string ext = filename.extension().string();
-  std::transform(ext.begin(), ext.end(), ext.begin(),
-                 [](unsigned char c) { return std::tolower(c); });
-  return ext;
-}
-
-bool IsStepFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".step" || ext == ".stp";
-}
-
-bool IsStlFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".stl";
-}
-
-bool IsIgesFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".iges" || ext == ".igs";
-}
-
-bool IsObjFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".obj";
-}
-
-bool IsVrmlFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".wrl";
-}
-
-bool IsGltfFile(const std::filesystem::path& filename) {
-  auto ext = GetExtension(filename);
-  return ext == ".glb";
-}
-
 void Append(Handle(TDocStd_Document)& main_doc,
             const Handle(TDocStd_Document)& add_doc) {
   if (main_doc.IsNull()) {
@@ -106,50 +74,100 @@ void Append(Handle(TDocStd_Document)& main_doc,
   TDF_Label label = main_doc->Main().NewChild();
   TDataXtd_Triangulation::Set(label, add_trng);
 }
+
+// Converts a column-major GLM 4x4 matrix (numgeom uses the OpenGL convention)
+// into an OpenCascade general transformation.
+gp_Trsf GlmToGTrsf(const glm::mat4x4& m) {
+  gp_Trsf gtrsf;
+  // glm::mat4x4 is indexed as [column][row].
+  //for (int col = 0; col < 3; ++col) {
+  //  for (int row = 0; row < 3; ++row) {
+  //    gtrsf.SetValue(row + 1, col + 1, transform_matrix[col][row]);
+  //  }
+  //}
+  //gtrsf.SetTranslationPart(gp_XYZ(transform_matrix[3][0],
+  //                                transform_matrix[3][1],
+  //                                transform_matrix[3][2]));
+  gtrsf.SetValues(m[0][0], m[1][0], m[2][0], m[3][0],
+                  m[0][1], m[1][1], m[2][1], m[3][1],
+                  m[0][2], m[1][2], m[2][2], m[3][2]
+                  /*m[0][3], m[1][3], m[2][3], m[3][3]*/);
+  return gtrsf;
 }
 
-bool Workbench_OCC::LoadFromFile(const std::filesystem::path& file_path) {
+void Transform(Handle(TDocStd_Document)& document,
+                const glm::mat4x4& transform_matrix) {
+  if (document.IsNull())
+    return;
+
+  gp_Trsf gtrsf = GlmToGTrsf(transform_matrix);
+  auto shape_tool = XCAFDoc_DocumentTool::ShapeTool(document->Main());
+
+  TDF_LabelSequence free_shapes;
+  shape_tool->GetFreeShapes(free_shapes);
+  for (const TDF_Label& label : free_shapes) {
+    TopoDS_Shape shape;
+    if (!shape_tool->GetShape(label, shape))
+      continue;
+
+    BRepBuilderAPI_Transform gtransform(shape, gtrsf);
+    if (!gtransform.IsDone())
+      continue;
+
+    shape_tool->SetShape(label, gtransform.Shape());
+  }
+}
+
+gp_Pnt TransformPoint(const gp_Pnt& point, const glm::mat4x4& m) {
+  const double x = point.X();
+  const double y = point.Y();
+  const double z = point.Z();
+  return gp_Pnt(m[0][0] * x + m[0][1] * y + m[0][2] * z + m[0][3],
+                m[1][0] * x + m[1][1] * y + m[1][2] * z + m[1][3],
+                m[2][0] * x + m[2][1] * y + m[2][2] * z + m[2][3]);
+}
+
+void Transform(Handle(Poly_Triangulation)& trng,
+                const glm::mat4x4& m) {
+  if (trng.IsNull())
+    return;
+
+  const Standard_Integer nb_nodes = trng->NbNodes();
+  for (Standard_Integer i = 1; i <= nb_nodes; ++i) {
+    gp_Pnt orig = trng->Node(i);
+    gp_Pnt next = TransformPoint(orig, m);
+    trng->SetNode(i, TransformPoint(trng->Node(i), m));
+  }
+}
+}
+
+Outcome Workbench_OCC::LoadFromFile(const std::filesystem::path& filepath,
+                                    const glm::mat4x4& transform_matrix) {
   Scene* scene = this->GetScene();
 
-  Handle(Standard_Transient) loaded_object;
-  if (IsStepFile(file_path)) {
-    loaded_object = LoadStepDocument(file_path);
-  } else if (IsStlFile(file_path)) {
-    loaded_object = LoadStl(file_path);
-  } else if (IsIgesFile(file_path)) {
-    loaded_object = LoadIges(file_path);
-  } else if (IsObjFile(file_path)) {
-    loaded_object = LoadObj(file_path);
-#ifdef NUMGEOM_OCC_LOAD_VRML
-  } else if (IsVrmlFile(file_path)) {
-    loaded_object = LoadVrml(file_path);
-#endif
-  } else if (IsGltfFile(file_path)) {
-    loaded_object = LoadGltf(file_path);
-  } else {
-    std::cerr << std::format("Не поддерживается загрузка файла '{}'",
-                             file_path.string());
-    return false;
-  }
-  if (!loaded_object) {
-    std::cerr << std::format("Ошибка при загрузке файла '{}'",
-                             file_path.string());
-    return false;
+  Outcome outcome;
+  Handle(Standard_Transient) loaded_object = ::LoadFromFile(filepath, &outcome);
+  if (!outcome) {
+    return Outcome::Error(
+        std::format("Ошибка при загрузке файла '{}'",
+                    filepath.string()));
   }
 
   if (loaded_object->IsKind(STANDARD_TYPE(TDocStd_Document))) {
     auto next_doc = Handle(TDocStd_Document)::DownCast(loaded_object);
+    Transform(next_doc, transform_matrix);
     Append(document_, next_doc);
   } else if (loaded_object->IsKind(STANDARD_TYPE(Poly_Triangulation))) {
     auto trng = Handle(Poly_Triangulation)::DownCast(loaded_object);
+    Transform(trng, transform_matrix);
     Append(document_, trng);
   } else {
-    std::cerr << std::format("Неизвестный тип объекта.");
+    return Outcome::Error(std::format("Неизвестный тип объекта."));
   }
 
   this->Update();
   scene->FitScene();
-  return true;
+  return Outcome::Success();
 }
 
 bool Workbench_OCC::Move(Drawable* drawable, const glm::vec3& dir) {
@@ -208,18 +226,8 @@ void Workbench_OCC::Clear() {
   this->Update();
 }
 
-#define REGISTER_COMMAND(WorkbenchType, Cmd, CmdId) \
-namespace { \
-  class Register_##WorkbenchType_Cmd { \
-   public: \
-    Register_##WorkbenchType_Cmd() { \
-      auto create_function = [](Workbench* wb) { return new Cmd(wb); }; \
-      bool ret = Workbench::RegisterCommand(#WorkbenchType, CmdId, create_function); \
-      if (!ret) std::abort(); \
-    } \
-  }; \
-  Register_##WorkbenchType_Cmd register_##WorkbenchType_cmd; \
-}
-
 #include "command_changevisibility.h"
 REGISTER_COMMAND(OCC, Command_ChangeVisibility, "change-visibility");
+
+#include "command_loadfromfile.h"
+REGISTER_COMMAND(OCC, Command_LoadFromFile, "load-from-file");

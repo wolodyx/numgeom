@@ -103,6 +103,11 @@ bool IteratorImpl_StdMapValue<KeyType,ValueType>::equals(
 
 template<typename KeyType, typename ValueType>
 IteratorImpl_StdMapKey<KeyType,ValueType>::IteratorImpl_StdMapKey(
+    const map_type& c) : m_it(c.begin()), m_itEnd(c.end()) {
+}
+
+template<typename KeyType, typename ValueType>
+IteratorImpl_StdMapKey<KeyType,ValueType>::IteratorImpl_StdMapKey(
     const IteratorImpl_StdMapKey<KeyType,ValueType>::map_const_iterator& itBeg,
     const IteratorImpl_StdMapKey<KeyType,ValueType>::map_const_iterator& itEnd)
     : m_it(itBeg), m_itEnd(itEnd) {
@@ -202,49 +207,49 @@ bool IteratorImpl_Filter<BaseItValueType,Filter,Transform>::equals(
   return m_baseIt->equals(*pOther->m_baseIt);
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::IteratorImpl_Transform(
+template<typename InputValueType, typename OutputValueType>
+IteratorImpl_Transform<InputValueType,OutputValueType>::IteratorImpl_Transform(
     IteratorImpl<InputValueType>* it,
     const Transformer& tr) : tr_(tr), it_(it) {
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::~IteratorImpl_Transform() {
+template<typename InputValueType, typename OutputValueType>
+IteratorImpl_Transform<InputValueType,OutputValueType>::~IteratorImpl_Transform() {
   delete it_;
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-void IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::advance() {
+template<typename InputValueType, typename OutputValueType>
+void IteratorImpl_Transform<InputValueType,OutputValueType>::advance() {
   it_->advance();
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-typename IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::value_type
-IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::current() const {
+template<typename InputValueType, typename OutputValueType>
+typename IteratorImpl_Transform<InputValueType,OutputValueType>::value_type
+IteratorImpl_Transform<InputValueType,OutputValueType>::current() const {
   return tr_(it_->current());
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-IteratorImpl<typename IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::value_type>*
-IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::clone() const {
-  return new IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>(it_->clone());
+template<typename InputValueType, typename OutputValueType>
+IteratorImpl<typename IteratorImpl_Transform<InputValueType,OutputValueType>::value_type>*
+IteratorImpl_Transform<InputValueType,OutputValueType>::clone() const {
+  return new IteratorImpl_Transform<InputValueType,OutputValueType>(it_->clone(), tr_);
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-IteratorImpl<typename IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::value_type>*
-IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::last() const {
-  return new IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>(it_->last());
+template<typename InputValueType, typename OutputValueType>
+IteratorImpl<typename IteratorImpl_Transform<InputValueType,OutputValueType>::value_type>*
+IteratorImpl_Transform<InputValueType,OutputValueType>::last() const {
+  return new IteratorImpl_Transform<InputValueType,OutputValueType>(it_->last(), tr_);
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-bool IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::end() const {
+template<typename InputValueType, typename OutputValueType>
+bool IteratorImpl_Transform<InputValueType,OutputValueType>::end() const {
   return it_->end();
 }
 
-template<typename InputValueType, typename OutputValueType, typename Transformer>
-bool IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>::equals(
+template<typename InputValueType, typename OutputValueType>
+bool IteratorImpl_Transform<InputValueType,OutputValueType>::equals(
     const IteratorImpl<value_type>& other) const {
-  auto ptr = dynamic_cast<const IteratorImpl_Transform<InputValueType,OutputValueType,Transformer>*>(&other);
+  auto ptr = dynamic_cast<const IteratorImpl_Transform<InputValueType,OutputValueType>*>(&other);
   if (!ptr)
     return false;
   return ptr->it_->equals(*it_);

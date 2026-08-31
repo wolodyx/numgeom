@@ -4,7 +4,6 @@ set(PUBLIC_HEADERS
   drawable_polytriangulation.h
   enums.h
   ijk.h
-  loadusingocc.h
   octree.h
   quadtree.h
   removefaces.h
@@ -18,6 +17,7 @@ set(SOURCE_FILES
   ${PUBLIC_HEADERS}
   classificate.cc
   command_changevisibility.cc   command_changevisibility.h
+  command_loadfromfile.cc       command_loadfromfile.h
   command_occ.cc                command_occ.h
   curvemetriclength.cc          curvemetriclength.h
   drawable_occshape.cc
@@ -25,7 +25,7 @@ set(SOURCE_FILES
   ffextintersections.cc         ffextintersections.h
   intersections.cc              intersections.h
   iterator_ijk.cc               iterator_ijk.h
-  loadusingocc.cc
+  loadusingocc.cc               loadusingocc.h
   octree.cc
   quadtree.cc
   removefaces.cc

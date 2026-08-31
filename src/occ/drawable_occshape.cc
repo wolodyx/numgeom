@@ -274,10 +274,10 @@ class OccNormalIterator : public IteratorImpl<glm::vec3> {
 
 } // namespace
 
-Drawable2_OccShape::Drawable2_OccShape(SceneObject* parent,
+Drawable2_OccShape::Drawable2_OccShape(SceneObject* o,
                                        const TopoDS_Shape& shape,
                                        const gp_Trsf& trsf)
-    : Drawable2(parent), shape_(shape), trsf_(trsf) {
+    : Drawable(o), Drawable2(o), shape_(shape), trsf_(trsf) {
   verts_num_ = 0;
   cells_num_ = 0;
   for (TopExp_Explorer it(shape,TopAbs_FACE); it.More(); it.Next()) {

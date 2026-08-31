@@ -1,4 +1,4 @@
-#include "numgeom/loadusingocc.h"
+#include "loadusingocc.h"
 
 #include <algorithm>
 
@@ -15,6 +15,7 @@
 #  include "DEVRML_Provider.hxx"
 #endif
 
+#include "numgeom/outcome.h"
 #include "numgeom/utilities.h"
 
 TriMesh::Ptr LoadUsingOCC(const std::filesystem::path& filename) {
@@ -133,4 +134,92 @@ Handle(TDocStd_Document) LoadGltf(const std::filesystem::path& filename) {
     return Handle(TDocStd_Document)();
   }
   return document;
+}
+
+namespace {
+std::string GetExtension(const std::filesystem::path& filename) {
+  std::string ext = filename.extension().string();
+  std::transform(ext.begin(), ext.end(), ext.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return ext;
+}
+
+bool IsStepFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".step" || ext == ".stp";
+}
+
+bool IsStlFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".stl";
+}
+
+bool IsIgesFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".iges" || ext == ".igs";
+}
+
+bool IsObjFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".obj";
+}
+
+bool IsVrmlFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".wrl";
+}
+
+bool IsGltfFile(const std::filesystem::path& filename) {
+  auto ext = GetExtension(filename);
+  return ext == ".glb";
+}
+}
+
+Handle(Standard_Transient) LoadFromFile(const std::filesystem::path& filepath,
+                                        Outcome* outcome) {
+  if (outcome)
+    *outcome = Outcome::Success();
+  Handle(Standard_Transient) loaded_object;
+  if (IsStepFile(filepath)) {
+    auto document = LoadStepDocument(filepath);
+    if (document.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return document;
+  }
+  if (IsStlFile(filepath)) {
+    auto triangulation = LoadStl(filepath);
+    if (triangulation.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return triangulation;
+  }
+  if (IsIgesFile(filepath)) {
+    auto document = LoadIges(filepath);
+    if (document.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return document;
+  }
+  if (IsObjFile(filepath)) {
+    auto triangulation = LoadObj(filepath);
+    if (triangulation.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return triangulation;
+  }
+#ifdef NUMGEOM_OCC_LOAD_VRML
+  if (IsVrmlFile(filepath)) {
+    auto document = LoadVrml(filepath);
+    if (document.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return document;
+  }
+#endif
+  if (IsGltfFile(filepath)) {
+    auto document = LoadGltf(filepath);
+    if (document.IsNull() && outcome)
+      *outcome = Outcome::Error("Не удалось загрузить файл.");
+    return document;
+  }
+
+  if (outcome)
+    *outcome = Outcome::Error("Не поддерживается загрузка файла из указанного формата.");
+  return Handle(Standard_Transient)();
 }

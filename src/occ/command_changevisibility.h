@@ -7,6 +7,7 @@ class Command_ChangeVisibility : public Command_OCC {
  public:
   Command_ChangeVisibility(Workbench*);
   ~Command_ChangeVisibility();
-  bool Execute() override;
+  std::string GetDisplayName() const override { return "Change visibility"; }
+  Outcome Execute() override;
 };
 #endif // !NUMGEOM_OCC_COMMAND_CHANGEVISIBILITY_H

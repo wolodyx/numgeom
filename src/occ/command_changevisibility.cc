@@ -14,7 +14,7 @@ Command_ChangeVisibility::Command_ChangeVisibility(Workbench* workbench)
 Command_ChangeVisibility::~Command_ChangeVisibility() {
 }
 
-bool Command_ChangeVisibility::Execute() {
+Outcome Command_ChangeVisibility::Execute() {
   auto workbench = this->GetWorkbench();
   auto uic = workbench->GetUserInputController();
   bool has_selected = false;
@@ -33,5 +33,5 @@ bool Command_ChangeVisibility::Execute() {
     }
   }
   uic->ClearSelections();
-  return true;
+  return Outcome::Success();
 }

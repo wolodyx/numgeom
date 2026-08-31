@@ -66,9 +66,7 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
   //! Добавление в сцену объекта по заданному типу и аргументам конструирования.
   template<typename ObjectType, class... _Types>
   SceneObject* AddObject(_Types&&... _Args) {
-    auto item = new ObjectType(this, _Args...);
-    this->AddObject(item);
-    return item;
+    return new ObjectType(this, _Args...);
   }
 
   bool HasFgObjects() const;
@@ -82,9 +80,13 @@ class FRAMEWORK_EXPORT Scene : public TrackedObject {
   uint64_t GetVulkanSurface() const;
 
  private:
+  friend SceneObject;
+  void Register(SceneObject*);
+  void Unregister(SceneObject*);
+
+ private:
   Scene(const Scene&) = delete;
   Scene& operator=(const Scene&) = delete;
-  void AddObject(SceneObject* _Object);
 
  private:
   SceneImpl* impl_;

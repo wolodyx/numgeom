@@ -281,16 +281,16 @@ class SphereNormalIterator : public IteratorImpl<glm::vec3> {
 
 } // namespace
 
-Drawable2_Sphere::Drawable2_Sphere(SceneObject* object)
-    : Drawable2(object) {
+Drawable2_Sphere::Drawable2_Sphere(SceneObject* o)
+    : Drawable(o), Drawable2(o) {
   center_ = glm::vec3(0.0f, 0.0f, 0.0f);
   radius_ = 0.0f;
   slices_num_ = stacks_num_ = 0;
 }
 
-Drawable2_Sphere::Drawable2_Sphere(SceneObject* object, const glm::vec3& center,
+Drawable2_Sphere::Drawable2_Sphere(SceneObject* o, const glm::vec3& center,
                                   float radius, int slices_num, int stacks_num)
-    : Drawable2(object) {
+    : Drawable(o), Drawable2(o) {
   center_ = center;
   radius_ = radius;
   slices_num_ = slices_num;

@@ -7,6 +7,7 @@
 #include "qvulkaninstance.h"
 
 class Application;
+class GuiMediator;
 class Scene;
 class SceneWindow;
 class SceneMdiSubWindow;
@@ -24,6 +25,9 @@ class MainWindow : public QMainWindow {
   SceneMdiSubWindow* GetActiveMdiSubWindow() const;
   Workbench* GetActiveWorkbench() const;
 
+  void onCommandMode();
+  void offCommandMode();
+
  private:
   void addToRecentFiles(const QString& filepath);
   void createActions();
@@ -33,14 +37,13 @@ class MainWindow : public QMainWindow {
   void createSceneMenu();
   void createViewMenu();
   void createWindowMenu();
+  void createWorkbenchMenus();
+  void executeCommand(const std::string&);
   void loadRecentFiles();
+  void loadWelcomeModel(Scene*);
   void openFile(const QString&);
-  bool loadWelcomeModel(Scene*);
   void saveRecentFiles();
   void updateRecentFilesMenu();
-  bool executeCommand(const std::string&);
-
-  // Создает новое MDI подокно с заданным именем сцены
   SceneMdiSubWindow* CreateMdiSubWindow(const QString& scene_name);
 
  private slots:
@@ -60,9 +63,10 @@ class MainWindow : public QMainWindow {
   void onQuit();
   void onRedrawScene();
   void onScreenshot();
-  void updateWindowMenu(); //!< Обновляет список окон в меню Window.
+  void updateWindowMenu();
 
-  // Window menu slots
+  //! \brief Window menu slots
+  //! \{
   void onNewWindow();
   void onCloseWindow();
   void onCloseAllWindows();
@@ -71,6 +75,7 @@ class MainWindow : public QMainWindow {
   void onNextWindow();
   void onPreviousWindow();
   void onWindowActivated();
+  //! \}
 
  private:
   Application* app_;
@@ -82,5 +87,7 @@ class MainWindow : public QMainWindow {
   QMenu* recent_files_menu_;
   QMenu* window_list_menu_;
   bool updating_window_menu_;
+  QDockWidget* command_args_widget_;
+  GuiMediator* gui_mediator_;
 };
 #endif  // NUMGEOM_EXAMPLE_APPQT_MAINWINDOW_H_

@@ -6,6 +6,7 @@
 #include "qapplication.h"
 #include "qdesktopservices.h"
 #include "qdir.h"
+#include "qdockwidget.h"
 #include "qevent.h"
 #include "qfile.h"
 #include "qfiledialog.h"
@@ -16,14 +17,17 @@
 #include "qresource.h"
 #include "qscreen.h"
 #include "qstandardpaths.h"
+#include "qstatusbar.h"
 
 #include "numgeom/appcontext.h"
 #include "numgeom/application.h"
 #include "numgeom/command.h"
 #include "numgeom/fgtext.h"
+#include "numgeom/gizmo_arrow.h"
+#include "numgeom/guimediator.h"
+#include "numgeom/outcome.h"
 #include "numgeom/scene.h"
 #include "numgeom/sceneobject_mesh.h"
-#include "numgeom/scenewidget_arrow.h"
 #include "numgeom/scenewidget_axisindicator.h"
 #include "numgeom/userinputcontroller.h"
 #include "numgeom/vkscenerenderer.h"
@@ -32,11 +36,39 @@
 #include "dialogs/addforegroundimage.h"
 #include "dialogs/addforegroundtext.h"
 
+#include "commandwidget.h"
 #include "downloaddata.h"
 #include "loadtotrimesh.h"
 #include "scenewindow.h"
 #include "scenemdisubwindow.h"
 #include "version.h"
+
+class DemoGuiMediator : public GuiMediator {
+ public:
+  DemoGuiMediator(MainWindow* main_window) {
+    main_window_ = main_window;
+  }
+
+  virtual ~DemoGuiMediator() {}
+
+  void EnableCommandMode() override {
+    main_window_->onCommandMode();
+  }
+
+  void DisableCommandMode() override {
+    main_window_->offCommandMode();
+  }
+
+  void ShowMessage(const Outcome& outcome) override {
+    QString msg("Success!");
+    if (outcome != Outcome::Success())
+      msg = QString::fromStdString(outcome.message());
+    main_window_->statusBar()->showMessage(msg);
+  }
+
+ private:
+  MainWindow* main_window_;
+};
 
 MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"),
                                            updating_window_menu_(false) {
@@ -63,9 +95,21 @@ MainWindow::MainWindow(Application* app) : settings_("NumGeom", "QtDemo"),
           menu.exec(pos);
         }
       });
+
+  command_args_widget_ = new QDockWidget(tr("Command Args"), this);
+  command_args_widget_->setAllowedAreas(Qt::RightDockWidgetArea);
+  this->addDockWidget(Qt::LeftDockWidgetArea, command_args_widget_);
+  command_args_widget_->setVisible(false);
+
+  this->statusBar()->showMessage(tr("Ready"));
+
+  gui_mediator_ = new DemoGuiMediator(this);
+  app->SetGuiMediator(gui_mediator_);
 }
 
-MainWindow::~MainWindow() {}
+MainWindow::~MainWindow() {
+  delete gui_mediator_;
+}
 
 SceneMdiSubWindow* MainWindow::GetActiveMdiSubWindow() const {
   QMdiSubWindow* sub = mdi_area_->activeSubWindow();
@@ -146,33 +190,31 @@ void MainWindow::initVulkan() {
   scene->FitScene();
 }
 
-bool MainWindow::loadWelcomeModel(Scene* scene) {
+void MainWindow::loadWelcomeModel(Scene* scene) {
   QString data_path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
   if (data_path.isEmpty())
-    return false;
+    return;
 
   QFile resource_file(":/resources/welcome-model.vtk");
   if (!resource_file.open(QIODevice::ReadOnly))
-    return false;
+    return;
   QByteArray resource_data = resource_file.readAll();
   resource_file.close();
 
   QDir dir;
   if (!dir.mkpath(data_path))
-    return false;
+    return;
 
   QString model_filename = data_path + "/welcome-model.vtk";
   QFile model_file(model_filename);
   if (!model_file.open(QIODevice::WriteOnly))
-    return false;
+    return;
   model_file.write(resource_data);
   model_file.close();
 
   auto trimesh = LoadToTriMesh(model_filename.toStdString());
   scene->AddObject<SceneObject_Mesh>(trimesh);
   scene->EnableWorkplane();
-
-  return true;
 }
 
 void MainWindow::createActions() {
@@ -181,6 +223,7 @@ void MainWindow::createActions() {
   this->createSceneMenu();
   this->createPickingMenu();
   this->createWindowMenu();
+  this->createWorkbenchMenus();
   this->createHelpMenu();
 }
 
@@ -510,12 +553,34 @@ void MainWindow::createWindowMenu() {
 
   menu->addSeparator();
 
-  // Dynamic window list submenu
   window_list_menu_ = menu->addMenu(tr("Windows"));
   updateWindowMenu();
 
   connect(mdi_area_, SIGNAL(subWindowActivated(QMdiSubWindow*)),
           this, SLOT(updateWindowMenu()));
+}
+
+namespace {
+std::string RemovePrefixUntilDot(const std::string& v) {
+  auto pos = v.find('.');
+  if (pos == std::string::npos)
+    return v;
+  return v.substr(pos + 1);
+}
+}
+
+void MainWindow::createWorkbenchMenus() {
+  for (std::string wb_type_id : Workbench::GetWorkbenchTypes()) {
+    QMenu* menu = menuBar()->addMenu(QString::fromStdString(wb_type_id));
+    for (std::string cmd_id : Workbench::GetCommandIds(wb_type_id)) {
+      auto cmd_name = RemovePrefixUntilDot(cmd_id);
+      auto act = menu->addAction(QString::fromStdString(cmd_name));
+      connect(act, &QAction::triggered, this,
+              [this, cmd_id](){
+                app_->SetupCommand(cmd_id);
+              });
+    }
+  }
 }
 
 void MainWindow::createHelpMenu() {
@@ -703,7 +768,7 @@ void MainWindow::onAddArrow() {
   if (!active_sub) return;
   Workbench* wb = active_sub->GetWorkbench();
   Scene* scene = wb->GetScene();
-  scene->AddObject<SceneWidget_Arrow>();
+  //scene->AddObject<Gizmo_Arrow>();
   scene->FitScene();
   wb->UpdateScreen();
 }
@@ -914,15 +979,27 @@ void MainWindow::onClearScene() {
   wb->UpdateScreen();
 }
 
-bool MainWindow::executeCommand(const std::string& cmd_id) {
+void MainWindow::executeCommand(const std::string& cmd_id) {
   Workbench* wb = this->GetActiveWorkbench();
   if (!wb)
-    return false;
+    return;
   Command* cmd = wb->CreateCommand(cmd_id);
   if (!cmd)
-    return false;
+    return;
   if (!cmd->Execute())
-    return false;
+    return;
   wb->UpdateScreen();
-  return true;
+}
+
+void MainWindow::onCommandMode() {
+  auto command = app_->GetCommand();
+  auto w = new CommandWidget(command);
+  command_args_widget_->setWidget(w);
+  auto title = QString::fromStdString(command->GetDisplayName());
+  command_args_widget_->setWindowTitle(title);
+  command_args_widget_->setVisible(true);
+}
+
+void MainWindow::offCommandMode() {
+  command_args_widget_->setVisible(false);
 }

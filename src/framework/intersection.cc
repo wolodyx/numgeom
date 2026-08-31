@@ -194,32 +194,58 @@ float Intersect(const Ray& ray, glm::vec3* pts, float* t) {
 }
 }
 
-glm::vec3 IntersectRayWithDrawable(const Ray& ray, const Drawable2* drawable) {
+glm::vec3 IntersectRayWithDrawable(const Ray& ray, const Drawable* drawable) {
   // Подготавливаем массивы вершин и треугольников.
   std::vector<glm::vec3> verts(drawable->GetVertsCount());
   auto it_v = verts.begin();
   for (glm::vec3 v : drawable->GetVertices())
     (*it_v++) = v;
-  std::vector<glm::u32vec3> cells(drawable->GetCellsCount());
-  auto it_t = cells.begin();
-  for (glm::u32vec3 t : drawable->GetTriangles())
-    (*it_t++) = t;
 
-  // Вычисляем пересечение луча с объектом.
   RayProximity result;
-  glm::vec3 tr[3];
-  for (glm::u32vec3 t : cells) {
-    tr[0] = verts[t.x];
-    tr[1] = verts[t.y];
-    tr[2] = verts[t.z];
-    float parameter;
-    float sqrDistance = Intersect(ray, tr, &parameter);
-    if (parameter <= 0.0)
-      continue;
-    if (sqrDistance < result.dist2
-        || sqrDistance == result.dist2 && parameter < result.tRay) {
-      result.dist2 = sqrDistance;
-      result.tRay = parameter;
+  if (auto drawable2 = Drawable2::Cast(drawable)) {
+    std::vector<glm::u32vec3> cells(drawable->GetCellsCount());
+    auto it_t = cells.begin();
+    for (glm::u32vec3 t : drawable2->GetTriangles())
+      (*it_t++) = t;
+
+    // Вычисляем пересечение луча с объектом.
+    glm::vec3 tr[3];
+    for (glm::u32vec3 t : cells) {
+      tr[0] = verts[t.x];
+      tr[1] = verts[t.y];
+      tr[2] = verts[t.z];
+      float parameter;
+      float sqrDistance = Intersect(ray, tr, &parameter);
+      if (parameter <= 0.0)
+        continue;
+      if (sqrDistance < result.dist2
+          || sqrDistance == result.dist2 && parameter < result.tRay) {
+        result.dist2 = sqrDistance;
+        result.tRay = parameter;
+      }
+    }
+  } else if (auto drawable1 = Drawable1::Cast(drawable)) {
+    // Подготавливаем массив отрезков как пары индексов в список вершин.
+    std::vector<glm::u32vec2> edges(drawable->GetCellsCount());
+    auto it_e = edges.begin();
+    for (glm::u32vec2 e : drawable1->GetEdges())
+      (*it_e++) = e;
+
+    const float kEpsilon = 1e-12f;
+    for (glm::u32vec2 e : edges) {
+      const glm::vec3& a = verts[e.x];
+      const glm::vec3& b = verts[e.y];
+      float parameter;
+      float sqrDistance = SqDistRaySegment(ray, a, b, &parameter);
+      if (parameter <= 0.0f)
+        continue;
+      // Отрезок считается пересечённым, если луч проходит через него.
+      if (sqrDistance > kEpsilon)
+        continue;
+      if (parameter < result.tRay) {
+        result.dist2 = sqrDistance;
+        result.tRay = parameter;
+      }
     }
   }
   return ray.origin + ray.direction * result.tRay;

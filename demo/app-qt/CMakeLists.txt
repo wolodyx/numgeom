@@ -16,7 +16,12 @@ set(CMAKE_AUTOUIC ON)
 
 set(SOURCE_FILES
   main.cc
+  commandwidget.cc          commandwidget.h
   downloaddata.cc           downloaddata.h
+  gizmowidget.cc            gizmowidget.h
+  gizmowidget_filepath.cc   gizmowidget_filepath.h
+  gizmowidget_placein3d.cc  gizmowidget_placein3d.h
+  gizmowidget_realnumber.cc gizmowidget_realnumber.h
   loadtotrimesh.cc          loadtotrimesh.h
   mainwindow.cc             mainwindow.h
   scenewindow.cc            scenewindow.h
@@ -49,10 +54,17 @@ target_link_libraries(app-qt
     Qt::Gui
     numgeom::framework
     numgeom::io
-    $<$<TARGET_EXISTS:numgeom::occ>:numgeom::occ>
     httplib::httplib
     ZLIB::ZLIB
 )
+
+if(TARGET numgeom::occ)
+  target_link_libraries(app-qt PRIVATE numgeom::occ)
+  target_compile_definitions(app-qt PRIVATE
+    NUMGEOM_HAS_OCC=1
+    NUMGEOM_OCC_MODULE="$<TARGET_FILE_NAME:occ>"
+  )
+endif()
 
 include(DeployApp)
 create_qt_conf()

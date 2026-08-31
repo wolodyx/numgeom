@@ -2,6 +2,7 @@
 #define NUMGEOM_CORE_ITERATORIMPL_H
 
 #include <cassert>
+#include <functional>
 #include <map>
 #include <memory>
 #include <vector>
@@ -56,10 +57,12 @@ template<typename KeyType, typename ValueType>
 class IteratorImpl_StdMapKey : public IteratorImpl<KeyType>
 {
 public:
-  typedef typename std::map<KeyType,ValueType>::const_iterator map_const_iterator;
+  typedef typename std::map<KeyType,ValueType> map_type;
+  typedef typename map_type::const_iterator map_const_iterator;
   typedef KeyType value_type;
 
 public:
+  IteratorImpl_StdMapKey(const map_type& c);
   IteratorImpl_StdMapKey(
       const map_const_iterator& itBeg,
       const map_const_iterator& itEnd);
@@ -121,15 +124,20 @@ private:
 /**
 \class IteratorImpl_Transform
 \brief Итератор, преобразующий элементы.
+\tparam InputValueType Тип значений базового итератора.
+\tparam OutputValueType Тип выходных значений.
+        Преобразующая функция задаётся в конструкторе как `std::function`,
+        поэтому может быть лямбда-функцией.
 */
-template<typename InputValueType, typename OutputValueType, typename Transformer>
+template<typename InputValueType, typename OutputValueType>
 class IteratorImpl_Transform : public IteratorImpl<OutputValueType> {
  public:
   typedef OutputValueType value_type;
+  typedef std::function<OutputValueType(const InputValueType&)> Transformer;
 
  public:
   IteratorImpl_Transform(IteratorImpl<InputValueType>*,
-                         const Transformer& tr = Transformer());
+                         const Transformer&);
   virtual ~IteratorImpl_Transform();
   void advance() override;
   value_type current() const override;

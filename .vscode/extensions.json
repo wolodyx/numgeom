@@ -2,6 +2,7 @@
   "recommendations": [
     "ms-vscode.cpptools",
     "ms-vscode.cmake-tools",
-    "ozzafar.debugmcpextension"
+    "ozzafar.debugmcpextension",
+    "EditorConfig.EditorConfig"
   ]
 }

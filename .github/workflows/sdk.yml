@@ -7,61 +7,9 @@ permissions:
   contents: write
 
 jobs:
-  sdk-windows:
-    name: SDK (Windows)
-    runs-on: windows-2022
-    env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
-      AWS_ENDPOINT_URL: https://storage.yandexcloud.net
-      AWS_DEFAULT_BUCKET: ${{ secrets.YC_BUCKET_NAME }}
-      AWS_DEFAULT_REGION: ru-central1
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-          submodules: false
-
-      - name: Initialize vcpkg submodule
-        run: git submodule update --init
-
-      - name: Bootstrap vcpkg
-        run: .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
-
-      - name: Install dependencies
-        run: .\vcpkg\vcpkg.exe install --triplet=x64-windows
-
-      - name: Export installed packages to ZIP archive
-        run: |
-          .\vcpkg\vcpkg.exe export --raw --output-dir=. --output=.sdk
-          Compress-Archive -Path ".sdk" -DestinationPath "sdk.zip"
-
-      # - name: Upload SDK to GitHub Release
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   shell: pwsh
-      #   run: |
-      #     $tag = "sdk-windows2022"
-      #     $archive = Get-Item vcpkg-export-*.zip
-      #     gh release delete "$tag" --yes --repo ${{ github.repository }}
-      #     gh release create "$tag" `
-      #       --repo ${{ github.repository }} `
-      #       --title "SDK (Windows)" `
-      #       --notes "Pre-built vcpkg dependencies for Windows-2022 (x64-windows)." `
-      #       --latest=false `
-      #       --verify-tag=false
-      #     gh release upload "$tag" "$($archive.FullName)" --repo ${{ github.repository }} --clobber
-
-      - name: Upload SDK to Yandex Cloud Bucket
-        shell: pwsh
-        run: |
-          $objectKey = "sdk/windows2022"
-          aws s3 cp sdk.zip "s3://${{ secrets.YC_BUCKET_NAME }}/$objectKey" --endpoint-url https://storage.yandexcloud.net
-
-  sdk-ubuntu:
-    name: SDK (Ubuntu)
-    runs-on: ubuntu-24.04
+  sdk-macos:
+    name: SDK (macOS)
+    runs-on: macos-13
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.YC_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.YC_SECRET_ACCESS_KEY }}
@@ -83,61 +31,19 @@ jobs:
 
       - name: Install system dependencies and tools
         run: |
-          sudo apt-get update
-          sudo apt-get -y install \
-            pkg-config            \
-            autoconf              \
-            autoconf-archive      \
-            automake              \
-            libtool               \
-            wayland-protocols     \
-            libwayland-dev        \
-            libwayland-client0    \
-            libxtst-dev           \
-            libxinerama-dev       \
-            libxcursor-dev        \
-            '^libxcb.*-dev'       \
-            libx11-xcb-dev        \
-            libgl1-mesa-dev       \
-            libxrender-dev        \
-            libxi-dev             \
-            libxkbcommon-dev      \
-            libxkbcommon-x11-dev  \
-            libegl1-mesa-dev      \
-            libglu1-mesa-dev      \
-            libsm-dev             \
-            libsystemd-dev        \
-            libarchive-dev        \
-            libxrandr-dev         \
-            libltdl-dev
+          brew install pkg-config autoconf autoconf-archive automake libtool
 
       - name: Install dependencies
-        run: ./vcpkg/vcpkg install --triplet=x64-linux-dynamic
+        run: ./vcpkg/vcpkg install --triplet=x64-mac
 
       - name: Export installed packages to ZIP archive
         run: |
           ./vcpkg/vcpkg export --raw --output-dir=. --output=.sdk
           zip -r sdk.zip .sdk
 
-      # - name: Upload SDK to GitHub Release
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #   shell: bash
-      #   run: |
-      #     tag="sdk-ubuntu24.04"
-      #     archive=$(ls vcpkg-export-*.zip)
-      #     gh release delete "$tag" --yes --repo ${{ github.repository }} || true
-      #     gh release create "$tag" \
-      #       --repo ${{ github.repository }} \
-      #       --title "SDK (Ubuntu)" \
-      #       --notes "Pre-built vcpkg dependencies for Ubuntu-24.04 (x64-linux-dynamic)." \
-      #       --latest=false \
-      #       --verify-tag=false
-      #     gh release upload "$tag" "$archive" --repo ${{ github.repository }} --clobber
-
       - name: Upload SDK to Yandex Cloud Bucket
         shell: bash
         run: |
           archive=sdk.zip
-          objectKey="sdk/ubuntu24.04"
+          objectKey="sdk/macos13"
           aws s3 cp "${archive}" "s3://${{ secrets.YC_BUCKET_NAME }}/${objectKey}" --endpoint-url https://storage.yandexcloud.net
